@@ -4,7 +4,7 @@
 #include "../comm/log.h"
 
 
-// ³õÊ¼»¯
+// åˆå§‹åŒ–
 void ines_mapper_init(ines_mapper_t* p_mapper)
 {
 	if(p_mapper == NULL)
@@ -13,7 +13,7 @@ void ines_mapper_init(ines_mapper_t* p_mapper)
 	memset(p_mapper, 0, sizeof(*p_mapper));
 }
 
-// É¾³ý
+// åˆ é™¤
 void ines_mapper_free(ines_mapper_t* p_mapper)
 {
 	if(p_mapper == NULL)
@@ -36,14 +36,14 @@ void ines_mapper_free(ines_mapper_t* p_mapper)
 
 
 
-// Èí¼þ¸´Î»
+// è½¯ä»¶å¤ä½
 void ines_mapper_reset(ines_mapper_t* p_mapper)
 {
 	ines_host_t*  p_host = mapper2host(p_mapper);
-	//if(p_host->rom.has_sram) // ´Ë±êÖ¾±íÊ¾ÊÇ·ñ´øÓÐRAMµç³Ø. ¼´Ê¹ÎÞµç³Ø£¬Ò²¿ÉÄÜÓÐÀ©Õ¹µÄSRAM¡£Ö»ÊÇ¶ÏµçºóÄÚÈÝÏûÊ§¡£
-	if(p_mapper->custom_sram == 0) // Èç¹û mapper ÐèÒª×Ô¼ºÎ¬»¤SRAM¶ÎµÄ¶ÁÐ´£¬Ôò²»½øÐÐSRAMÉèÖÃ¡£ ±ÈÈç mapper16 Ê¹ÓÃ EEPROM 24c01/02
+	//if(p_host->rom.has_sram) // æ­¤æ ‡å¿—è¡¨ç¤ºæ˜¯å¦å¸¦æœ‰RAMç”µæ± . å³ä½¿æ— ç”µæ± ï¼Œä¹Ÿå¯èƒ½æœ‰æ‰©å±•çš„SRAMã€‚åªæ˜¯æ–­ç”µåŽå†…å®¹æ¶ˆå¤±ã€‚
+	if(p_mapper->custom_sram == 0) // å¦‚æžœ mapper éœ€è¦è‡ªå·±ç»´æŠ¤SRAMæ®µçš„è¯»å†™ï¼Œåˆ™ä¸è¿›è¡ŒSRAMè®¾ç½®ã€‚ æ¯”å¦‚ mapper16 ä½¿ç”¨ EEPROM 24c01/02
 	{
-		// Ä¬ÈÏÖ¸¶¨ $6000~$7fff  Ö¸ÏòÓÃ»§RAM ¹²Ò»¿é£¬8K¿Õ¼ä
+		// é»˜è®¤æŒ‡å®š $6000~$7fff  æŒ‡å‘ç”¨æˆ·RAM å…±ä¸€å—ï¼Œ8Kç©ºé—´
 		ines_set_sram_bank_n(p_host, 3, 0);
 	}
 	ines_ppu_set_mirror_type(&p_host->ppu, p_host->rom.mirror_type);

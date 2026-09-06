@@ -31,11 +31,11 @@ struct _ines_mapper_
 	int  (*savestate)(ines_mapper_t*, FILE*, ines_bool_t);
 };
 
-// ³õÊ¼»¯
+// åˆå§‹åŒ–
 void ines_mapper_init(ines_mapper_t* p_mapper);
-// É¾³ı
+// åˆ é™¤
 void ines_mapper_free(ines_mapper_t* p_mapper);
-// Èí¼ş¸´Î»
+// è½¯ä»¶å¤ä½
 void ines_mapper_reset(ines_mapper_t* p_mapper);
 
 

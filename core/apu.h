@@ -45,13 +45,13 @@ typedef struct _ines_apu_dmc_       ines_apu_dmc_t;
 
 struct _ines_apu_pulse_
 {
-	ines_byte_t   reg_ctrl[4];     // ¿ØÖÆ¼Ä´æÆ÷s
-	ines_byte_t   reg_written[4];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	ines_byte_t   duty_counter;    // ĞòÁĞ¼ÆÊıÆ÷
+	ines_byte_t   reg_ctrl[4];     // æ§åˆ¶å¯„å­˜å™¨s
+	ines_byte_t   reg_written[4];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	ines_byte_t   duty_counter;    // åºåˆ—è®¡æ•°å™¨
 	ines_byte_t   envelope;        // 
 	ines_byte_t   env_delay;
 	ines_byte_t   sweep_delay;
-	ines_word_t   length_counter;  // Òô³¤¼ÆÊıÆ÷
+	ines_word_t   length_counter;  // éŸ³é•¿è®¡æ•°å™¨
 	ines_word_t    period_delay;    // 
 
 	ines_sbyte_t   buffer[MAX_SAMPLE_PER_FRAME];
@@ -59,34 +59,34 @@ struct _ines_apu_pulse_
 
 struct _ines_apu_triangle_
 {
-	ines_byte_t   reg_ctrl[4];     // ¿ØÖÆ¼Ä´æÆ÷
-	ines_byte_t   reg_written[4];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	ines_byte_t   linear_counter;  // ÏßĞÔ¼ÆÊıÆ÷
-	ines_byte_t   phase_counter;   // Èı½Ç½×Ìİ¼ÆÊıÆ÷
-	ines_word_t   length_counter;  // Òô³¤¼ÆÊıÆ÷
-	ines_word_t   period_delay;  // ÖÜÆÚ¼ÆÊıÆ÷
+	ines_byte_t   reg_ctrl[4];     // æ§åˆ¶å¯„å­˜å™¨
+	ines_byte_t   reg_written[4];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	ines_byte_t   linear_counter;  // çº¿æ€§è®¡æ•°å™¨
+	ines_byte_t   phase_counter;   // ä¸‰è§’é˜¶æ¢¯è®¡æ•°å™¨
+	ines_word_t   length_counter;  // éŸ³é•¿è®¡æ•°å™¨
+	ines_word_t   period_delay;  // å‘¨æœŸè®¡æ•°å™¨
 	ines_sbyte_t  buffer[MAX_SAMPLE_PER_FRAME];
 };
 
 struct _ines_apu_noise_
 {
-	ines_byte_t   reg_ctrl[4];     // ¿ØÖÆ¼Ä´æÆ÷
-	ines_byte_t   reg_written[4];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
+	ines_byte_t   reg_ctrl[4];     // æ§åˆ¶å¯„å­˜å™¨
+	ines_byte_t   reg_written[4];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
 	ines_byte_t   envelope;        // 
 	ines_byte_t   env_delay;
-	ines_word_t   length_counter;  // Òô³¤¼ÆÊıÆ÷
-	ines_word_t   shift_register;  // ÒÆÎ»¼Ä´æÆ÷
-	ines_word_t   period_delay;    // ÖÜÆÚ¼ÆÊıÆ÷
+	ines_word_t   length_counter;  // éŸ³é•¿è®¡æ•°å™¨
+	ines_word_t   shift_register;  // ç§»ä½å¯„å­˜å™¨
+	ines_word_t   period_delay;    // å‘¨æœŸè®¡æ•°å™¨
 	ines_sbyte_t  buffer[MAX_SAMPLE_PER_FRAME];
 };
 
 struct _ines_apu_dmc_
 {
-	ines_byte_t   reg_ctrl[4];     // ¿ØÖÆ¼Ä´æÆ÷
-	ines_byte_t   reg_written[4];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	ines_word_t   length_counter;  // Òô³¤¼ÆÊıÆ÷
-	ines_word_t   period;          // ÖÜÆÚ
-	ines_int_t    period_delay;    // ÖÜÆÚ¼ÆÊıÆ÷
+	ines_byte_t   reg_ctrl[4];     // æ§åˆ¶å¯„å­˜å™¨
+	ines_byte_t   reg_written[4];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	ines_word_t   length_counter;  // éŸ³é•¿è®¡æ•°å™¨
+	ines_word_t   period;          // å‘¨æœŸ
+	ines_int_t    period_delay;    // å‘¨æœŸè®¡æ•°å™¨
 	ines_byte_t   is_ntsc;
 	ines_byte_t   mute;
 	ines_byte_t   irq_enable;
@@ -127,17 +127,17 @@ struct _ines_apu_
 	ines_dword_t  out_data_len;
 	ines_int_t    out_volumn;
 
-	float          prev_out;     // ÓÃÓÚÆ½»¬Êä³ö£¨µÍÍ¨ÂË²¨£©
-	float          low_fliter;   // Ö±Á÷·ÖÁ¿ÂË³ı 
+	float          prev_out;     // ç”¨äºå¹³æ»‘è¾“å‡ºï¼ˆä½é€šæ»¤æ³¢ï¼‰
+	float          low_fliter;   // ç›´æµåˆ†é‡æ»¤é™¤ 
 };
 
 #define dmc2apu(dmc)   ( (ines_apu_t*)( (char*) (dmc) - offsetof(ines_apu_t, channel_dmc ) ) )
 
-// ³õÊ¼»¯
+// åˆå§‹åŒ–
 void ines_apu_init(ines_apu_t* p_apu);
-// É¾³ı
+// åˆ é™¤
 void ines_apu_free(ines_apu_t* p_apu);
-// Èí¼ş¸´Î»
+// è½¯ä»¶å¤ä½
 void ines_apu_reset(ines_apu_t* p_apu);
 
 ines_byte_t ines_apu_read(ines_apu_t* p_apu, ines_word_t addr);

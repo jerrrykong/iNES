@@ -154,7 +154,7 @@ static VOID dlgNetPlay_OnStartConnect(HWND hDlg)
 			return;	
 		}
 		
-		SetDlgItemText(hDlg, IDC_LAB_INFO, ISTR("µÈ´ı¿Í»§¶ËµÄÁ¬½Ó..."));
+		SetDlgItemText(hDlg, IDC_LAB_INFO, ISTR("ç­‰å¾…å®¢æˆ·ç«¯çš„è¿æ¥..."));
 		
 	}
 	else
@@ -167,7 +167,7 @@ static VOID dlgNetPlay_OnStartConnect(HWND hDlg)
 			return;	
 		}
 
-		SetDlgItemText(hDlg, IDC_LAB_INFO, ISTR("ÕıÔÚÁ¬½Óµ½·şÎñÆ÷..."));
+		SetDlgItemText(hDlg, IDC_LAB_INFO, ISTR("æ­£åœ¨è¿æ¥åˆ°æœåŠ¡å™¨..."));
 	}
 
 	// timed check 
@@ -206,7 +206,7 @@ static VOID dlgNetPlay_TimedCheck(HWND hDlg)
 		case NET_ST_WAIT_CONN:
 			if(!net_is_connected())
 				return;
-			SetDlgItemText(hDlg, IDC_LAB_INFO, ISTR("Á¬½Ó³É¹¦£¬µÈ´ıÑéÖ¤..."));
+			SetDlgItemText(hDlg, IDC_LAB_INFO, ISTR("è¿æ¥æˆåŠŸï¼Œç­‰å¾…éªŒè¯..."));
 			s_status = NET_ST_WAIT_START;
 			s_status_time = time(NULL);
 			break;
@@ -222,17 +222,17 @@ static VOID dlgNetPlay_TimedCheck(HWND hDlg)
 					net_del_recv_data(sizeof(nst));
 					if( nst.cmd != NET_CMD_START )
 					{
-						dlgNetPlay_ConnectError(hDlg, ISTR("Á¬½Ó´íÎó!"), NULL, 0);
+						dlgNetPlay_ConnectError(hDlg, ISTR("è¿æ¥é”™è¯¯!"), NULL, 0);
 					} 
 					else if( nst.ver != NET_VER )
 					{
 						rsp.code = 1;
-						dlgNetPlay_ConnectError(hDlg, ISTR("°æ±¾²»Æ¥Åä!"), &rsp, sizeof(rsp));
+						dlgNetPlay_ConnectError(hDlg, ISTR("ç‰ˆæœ¬ä¸åŒ¹é…!"), &rsp, sizeof(rsp));
 					}
 					else if( nst.crc32 != s_crc32 )
 					{
 						rsp.code = 2;
-						dlgNetPlay_ConnectError(hDlg, ISTR("ROM²»Æ¥Åä!"),  &rsp, sizeof(rsp));
+						dlgNetPlay_ConnectError(hDlg, ISTR("ROMä¸åŒ¹é…!"),  &rsp, sizeof(rsp));
 					}
 					else
 					{
@@ -247,7 +247,7 @@ static VOID dlgNetPlay_TimedCheck(HWND hDlg)
 			if(s_status_time + 5 < time(NULL))
 			{
 				// check verify timeout
-				dlgNetPlay_ConnectError(hDlg, ISTR("¿Í»§¶ËÑéÖ¤³¬Ê±!"), NULL, 0);
+				dlgNetPlay_ConnectError(hDlg, ISTR("å®¢æˆ·ç«¯éªŒè¯è¶…æ—¶!"), NULL, 0);
 				break;
 			}
 			break;
@@ -277,7 +277,7 @@ static VOID dlgNetPlay_TimedCheck(HWND hDlg)
 				net_send(&nst, sizeof(nst));
 
 			}
-			SetDlgItemText(hDlg, IDC_LAB_INFO, ISTR("Á¬½Ó³É¹¦£¬µÈ´ıÑéÖ¤..."));
+			SetDlgItemText(hDlg, IDC_LAB_INFO, ISTR("è¿æ¥æˆåŠŸï¼Œç­‰å¾…éªŒè¯..."));
 			s_status = NET_ST_WAIT_START;
 			s_status_time = time(NULL);
 			break;
@@ -291,7 +291,7 @@ static VOID dlgNetPlay_TimedCheck(HWND hDlg)
 					net_del_recv_data(sizeof(rsp));
 					if( rsp.cmd != NET_CMD_START_RSP )
 					{
-						dlgNetPlay_ConnectError(hDlg, ISTR("Á¬½Ó´íÎó!"), NULL, 0);
+						dlgNetPlay_ConnectError(hDlg, ISTR("è¿æ¥é”™è¯¯!"), NULL, 0);
 					} 
 					else if(rsp.code == 0)
 					{
@@ -301,15 +301,15 @@ static VOID dlgNetPlay_TimedCheck(HWND hDlg)
 					}
 					else if( rsp.code  == 1 )
 					{
-						dlgNetPlay_ConnectError(hDlg, ISTR("°æ±¾²»Æ¥Åä!"), NULL, 0);
+						dlgNetPlay_ConnectError(hDlg, ISTR("ç‰ˆæœ¬ä¸åŒ¹é…!"), NULL, 0);
 					}
 					else if( rsp.code == 2 )
 					{
-						dlgNetPlay_ConnectError(hDlg, ISTR("ROM²»Æ¥Åä!"), NULL, 0);
+						dlgNetPlay_ConnectError(hDlg, ISTR("ROMä¸åŒ¹é…!"), NULL, 0);
 					}
 					else
 					{
-						dlgNetPlay_ConnectError(hDlg, ISTR("Á¬½Ó´íÎó!"), NULL, 0);
+						dlgNetPlay_ConnectError(hDlg, ISTR("è¿æ¥é”™è¯¯!"), NULL, 0);
 					}
 					break;
 				}
@@ -317,7 +317,7 @@ static VOID dlgNetPlay_TimedCheck(HWND hDlg)
 			if(s_status_time + 5 < time(NULL))
 			{
 				// check verify timeout
-				dlgNetPlay_ConnectError(hDlg, ISTR("¿Í»§¶ËÑéÖ¤³¬Ê±!"), NULL, 0);
+				dlgNetPlay_ConnectError(hDlg, ISTR("å®¢æˆ·ç«¯éªŒè¯è¶…æ—¶!"), NULL, 0);
 				break;
 			}
 			break;

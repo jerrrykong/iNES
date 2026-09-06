@@ -65,7 +65,7 @@ static ines_int64_t  get_cur_time_us()
 	struct _timeb timebuffer;
 	LARGE_INTEGER   lf, lc;
 
-// ¼ÆËã¸ü¸ß¾«¶ÈµÄÊ±¼ä
+// è®¡ç®—æ›´é«˜ç²¾åº¦çš„æ—¶é—´
 	static  ines_int64_t    g_time_base_us = 0;
 	static  ines_int64_t    g_time_base_counter = 0;
 	static  ines_int64_t    g_time_base_freq = 0;
@@ -106,7 +106,7 @@ static void do_sleep(ines_int64_t  us)
 }
 
 
-// Èç¹ûÊÇwindows Ôò´«ÈëµÄ×Ö·û´®Òª´Óutf8×ª»»µ½ascii»òÕßunicode
+// å¦‚æœæ˜¯windows åˆ™ä¼ å…¥çš„å­—ç¬¦ä¸²è¦ä»utf8è½¬æ¢åˆ°asciiæˆ–è€…unicode
 #ifdef WIN32
 static ines_char_t g_tbuffer_1[1024];
 static ines_char_t g_tbuffer_2[1024];
@@ -165,14 +165,14 @@ static int nes_proc(void* ud)
 		frame_us = (ines_int64_t)(g_host.setting.frame_rate * 1000000.0);
 		audio_us = (ines_int64_t)(g_audio_total_bytes * (1000000.0/44100.0)) + g_start_frame_time - g_last_frame_time;
 
-		// Èç¹û
+		// å¦‚æœ
 		if(audio_us < 0)
 			frame_us -= frame_us >> 2;
 		else if(audio_us > (frame_us >> 1))
 			frame_us += frame_us >> 2;
 
 
-		// ¼ÆËãÊ±¼ä
+		// è®¡ç®—æ—¶é—´
 		while(1)
 		{
 			cur_us = get_cur_time_us();
@@ -201,7 +201,7 @@ static int nes_proc(void* ud)
 
 		g_last_frame_time = cur_us;
 
-		// ¶ÁÈ¡ÊäÈë
+		// è¯»å–è¾“å…¥
 		ines_mutex_lock(&g_mutex_input);
 		main_key_state = g_main_key_state;
 		second_key_state = g_second_key_state;
@@ -211,7 +211,7 @@ static int nes_proc(void* ud)
 		audio_volumn = g_volumn;
 		ines_mutex_unlock(&g_mutex_input);
 
-		// Êä³ö
+		// è¾“å‡º
 		render_buffer = g_render_buffer[g_render_idx];
 		audio_buffer = g_audio_buffer_run;
 		audio_buffer_len = sizeof(g_audio_buffer_run);
@@ -376,7 +376,7 @@ DLLEXPORT  int ines_start(int is_ntsc, const char*  rom_file, const char* ram_fi
 
 	ines_strncpy(g_ram_file, _ram, sizeof(g_ram_file)/sizeof(g_ram_file[0]));
 
-	g_running = 1; // ÏÈÉèÖÃ¡£·ÀÖ¹Ïß³ÌÖ±½Ó¼´³öÏÈĞŞ¸ÄÁËrunning±êÖ¾
+	g_running = 1; // å…ˆè®¾ç½®ã€‚é˜²æ­¢çº¿ç¨‹ç›´æ¥å³å‡ºå…ˆä¿®æ”¹äº†runningæ ‡å¿—
 	g_stop_flag = 0;
 
 	g_frame_count = 0;
@@ -567,7 +567,7 @@ DLLEXPORT  int ines_save(const char* save_file)
 
 #if 0  // {{{
 
-#pragma pack(push, 1) // ĞèÒªºÍC#¶¨Òå¶ÔÆë
+#pragma pack(push, 1) // éœ€è¦å’ŒC#å®šä¹‰å¯¹é½
 
 typedef struct _ines_running_context_   ines_running_context_t;
 

@@ -1,0 +1,11 @@
+# 源码已统一转换为 UTF-8(无 BOM) + LF 换行, 这里阻止 Git 在检出时
+# 再自动转回 CRLF, 保证仓库内始终为 LF。
+* text=auto eol=lf
+
+# 二进制资源不参与换行/编码转换
+*.ico  binary
+*.nes  binary
+*.xlsx binary
+*.aps  binary
+*.png  binary
+*.bmp  binary

@@ -111,9 +111,9 @@ struct _ines_host_
 #define NES_AUDIO_BYTES_PER_SECOND   (NES_AUDIO_SAMPLE_RATE * (NES_AUDIO_SAMPLE_BITS / 8) * NES_AUDIO_CHANNEL)
 
 
-#define NES_BANK_WRITE_ABLE        0x01         // ¿ÉĞ´µÄÄÚ´æ¿é
-#define NES_BANK_WRITE_PROTECTED   0x02         // Ğ´Èë±£»¤µÄÄÚ´æ¿é
-#define NES_BANK_READ_PROTECTED    0x04         // ½ûÖ¹¶ÁÈ¡µÄÄÚ´æ¿é
+#define NES_BANK_WRITE_ABLE        0x01         // å¯å†™çš„å†…å­˜å—
+#define NES_BANK_WRITE_PROTECTED   0x02         // å†™å…¥ä¿æŠ¤çš„å†…å­˜å—
+#define NES_BANK_READ_PROTECTED    0x04         // ç¦æ­¢è¯»å–çš„å†…å­˜å—
 
 #define NES_BANK_CAN_WRITE(b)     ( ( (b)&(NES_BANK_WRITE_ABLE|NES_BANK_WRITE_PROTECTED) )  == NES_BANK_WRITE_ABLE )
 #define NES_BANK_CAN_READ(b)     ( ( (b)&(NES_BANK_READ_PROTECTED) )  == 0 )
@@ -125,13 +125,13 @@ struct _ines_host_
 
 
 
-// ³õÊ¼»¯
+// åˆå§‹åŒ–
 void ines_host_init(ines_host_t* p_host, int is_ntsc);
-// É¾³ı
+// åˆ é™¤
 void ines_host_free(ines_host_t* p_host);
-// ¼ÓÔØROMÎÄ¼ş
+// åŠ è½½ROMæ–‡ä»¶
 ines_bool_t ines_host_load_rom(ines_host_t* p_host, ines_cstr_t strNesFileName, ines_cstr_t strRAMFileName);
-// Èí¼ş¸´Î»
+// è½¯ä»¶å¤ä½
 void ines_host_reset(ines_host_t* p_host);
 
 
@@ -139,7 +139,7 @@ void ines_host_init_setting(ines_host_t* p_host, ines_int_t is_ntsc);
 
 ines_int_t ines_host_doframe(ines_host_t* p_host, ines_byte_t* p_screen);
 
-// ×ÜÏß¶ÁĞ´£¨2000hÒÔÉÏ¿Õ¼ä£¬CPUÄÚ²¿RAMµÄ¶ÁĞ´²»Í¨¹ı´Ë½Ó¿Ú
+// æ€»çº¿è¯»å†™ï¼ˆ2000hä»¥ä¸Šç©ºé—´ï¼ŒCPUå†…éƒ¨RAMçš„è¯»å†™ä¸é€šè¿‡æ­¤æ¥å£
 ines_byte_t  ines_host_read(ines_host_t* p_host, ines_word_t addr);
 void ines_host_write(ines_host_t* p_host, ines_word_t addr, ines_byte_t  val);
 void ines_host_write_sram_raw(ines_host_t* p_host, ines_word_t addr, ines_byte_t  val);

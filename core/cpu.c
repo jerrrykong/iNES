@@ -123,11 +123,11 @@ void cpu_Jam(ines_cpu_t* p_cpu)
 #define _INT_pending_     (_CPU_->INT_pending)
 #define _RAM_   (_CPU_->RAM)
 #define _STACK_   (_CPU_->RAM+0x100)
-#define _TA_     temp_addr     // ±£´æÁÙÊ±µØÖ·µÄ±äÁ¿ uint32
-#define _TBA_    temp_baddr    // ±£´æÁÙÊ±µØÖ·µÄ±äÁ¿ uint8
-#define _TB_     temp_byte     // ±£´æÁÙÊ±×Ö½ÚµÄ±äÁ¿ uint8
-#define _TD_     temp_data     // ±£´æÁÙÊ±ÊýÖµµÄ±äÁ¿ uint32
-#define _TBD_    temp_bdata    // ±£´æÁÙÊ±ÊýÖµµÄ±äÁ¿ uint8
+#define _TA_     temp_addr     // ä¿å­˜ä¸´æ—¶åœ°å€çš„å˜é‡ uint32
+#define _TBA_    temp_baddr    // ä¿å­˜ä¸´æ—¶åœ°å€çš„å˜é‡ uint8
+#define _TB_     temp_byte     // ä¿å­˜ä¸´æ—¶å­—èŠ‚çš„å˜é‡ uint8
+#define _TD_     temp_data     // ä¿å­˜ä¸´æ—¶æ•°å€¼çš„å˜é‡ uint32
+#define _TBD_    temp_bdata    // ä¿å­˜ä¸´æ—¶æ•°å€¼çš„å˜é‡ uint8
 
 #define DECL_LOCAL_VARS()   \
 	ines_byte_t  temp_byte, temp_baddr, temp_bdata;  ines_dword_t   temp_addr, temp_data; 
@@ -151,11 +151,11 @@ void cpu_Jam(ines_cpu_t* p_cpu)
 #define _apu_next_irq_    (_CPU_->apu_next_irq)
 #define _RAM_     (RAM)
 #define _STACK_   (STACK)
-#define _TA_     temp_addr     // ±£´æÁÙÊ±µØÖ·µÄ±äÁ¿ uint32
-#define _TBA_    temp_baddr    // ±£´æÁÙÊ±µØÖ·µÄ±äÁ¿ uint8
-#define _TB_     temp_byte     // ±£´æÁÙÊ±×Ö½ÚµÄ±äÁ¿ uint8
-#define _TD_     temp_data     // ±£´æÁÙÊ±ÊýÖµµÄ±äÁ¿ uint32
-#define _TBD_    temp_bdata    // ±£´æÁÙÊ±ÊýÖµµÄ±äÁ¿ uint8
+#define _TA_     temp_addr     // ä¿å­˜ä¸´æ—¶åœ°å€çš„å˜é‡ uint32
+#define _TBA_    temp_baddr    // ä¿å­˜ä¸´æ—¶åœ°å€çš„å˜é‡ uint8
+#define _TB_     temp_byte     // ä¿å­˜ä¸´æ—¶å­—èŠ‚çš„å˜é‡ uint8
+#define _TD_     temp_data     // ä¿å­˜ä¸´æ—¶æ•°å€¼çš„å˜é‡ uint32
+#define _TBD_    temp_bdata    // ä¿å­˜ä¸´æ—¶æ•°å€¼çš„å˜é‡ uint8
 
 #define DECL_LOCAL_VARS()   \
 	ines_byte_t  temp_byte, temp_baddr, temp_bdata;  ines_dword_t   temp_addr, temp_data; \
@@ -1269,13 +1269,13 @@ static ines_byte_t read_byte(ines_cpu_t* p_cpu, ines_word_t  addr)
 	switch(bn)
 	{
 	case 0:  // 0~ 0x1fff
-		// ¶ÁÈ¡CPUµÄÄÚ²¿RAM   ¹²2K
+		// è¯»å–CPUçš„å†…éƒ¨RAM   å…±2K
 		b = p_cpu->RAM[addr&0x7ff];
 		break;
 	case 1:  // low regs
 	case 2:  // high regs
 	case 3:  /* 0x6000-0x7fff */  /* SRAM  with battery */
-		// ÏòÍâ²¿×ÜÏßÇëÇó¶ÁÈ¡
+		// å‘å¤–éƒ¨æ€»çº¿è¯·æ±‚è¯»å–
 		b = ines_host_read(cpu2host(p_cpu), addr);
 		break;
 	case 4:  /* 0x8000-0x9fff */  /* PROM Block 0 */
@@ -1302,13 +1302,13 @@ static void write_byte(ines_cpu_t* p_cpu, ines_word_t  addr, ines_byte_t val)
 	switch(bn)
 	{
 	case 0:  // cpu inner ram
-		// Ð´ÈëCPUµÄÄÚ²¿RAM
+		// å†™å…¥CPUçš„å†…éƒ¨RAM
 		//INES_LOG(LOG_DBG,MOD_CPU, "WRITE_CPU_RAM($%04X)=$%02X.\n", addr, val);
 		p_cpu->RAM[addr&0x7ff] = val; 
 		break;
 	case 1:  // low regs
 	case 2:  // high regs
-		// Ð´ÇëÇóµ½Íâ²¿×ÜÏß
+		// å†™è¯·æ±‚åˆ°å¤–éƒ¨æ€»çº¿
 		ines_host_write(cpu2host(p_cpu), addr, val);
 		break;
 	case 3:  // save ram in game card
@@ -1324,7 +1324,7 @@ static void write_byte(ines_cpu_t* p_cpu, ines_word_t  addr, ines_byte_t val)
 		}
 		else
 		{
-			// Ð´ÇëÇóµ½Íâ²¿×ÜÏß
+			// å†™è¯·æ±‚åˆ°å¤–éƒ¨æ€»çº¿
 			ines_host_write(cpu2host(p_cpu), addr, val);
 		}
 		break;
@@ -1339,19 +1339,19 @@ static void write_byte(ines_cpu_t* p_cpu, ines_word_t  addr, ines_byte_t val)
 	write_byte( (p_cpu), (addr)+1), (ines_byte_t)( (val) >> 8) ) ); }
 
 
-// ³õÊ¼»¯
+// åˆå§‹åŒ–
 void ines_cpu_init(ines_cpu_t* p_cpu)
 {
 	// nothing
 }
 
-// É¾³ý
+// åˆ é™¤
 void ines_cpu_free(ines_cpu_t* p_cpu)
 {
 	// nothing
 }
 
-// Èí¼þ¸´Î»
+// è½¯ä»¶å¤ä½
 void ines_cpu_reset(ines_cpu_t* p_cpu)
 {
 	if(p_cpu == NULL)
@@ -1362,11 +1362,11 @@ void ines_cpu_reset(ines_cpu_t* p_cpu)
 	p_cpu->reg_SP = 0xff;
 	p_cpu->reg_P = R_FLAG|Z_FLAG|I_FLAG;
 	p_cpu->INT_pending = 0;
-	p_cpu->burn_cycles = 0; // RESET_CYCLES;// ¸´Î»ÐèÒª6¸öÊ±ÖÓÍ¬ÆÚ
+	p_cpu->burn_cycles = 0; // RESET_CYCLES;// å¤ä½éœ€è¦6ä¸ªæ—¶é’ŸåŒæœŸ
 	p_cpu->jammed = ines_false;
 	p_cpu->total_cycles = 0; 
 	p_cpu->apu_next_irq = 0;
-	p_cpu->reg_PC = read_word(p_cpu, RESET_VECTOR); // ¸´Î»µÄÈë¿Ú
+	p_cpu->reg_PC = read_word(p_cpu, RESET_VECTOR); // å¤ä½çš„å…¥å£
 	INES_LOG(LOG_NTY, MOD_CPU, ISTR("CPU Reset to $%04X!\n"), p_cpu->reg_PC);
 }
 
@@ -1406,7 +1406,7 @@ void ines_cpu_NMI(ines_cpu_t* p_cpu)
 	//DECL_LOCAL_VARS();
 	if(!_JAMMED_)
 	{
-		//if(!CHKI())  // ²»¿ÉÆÁ±Î
+		//if(!CHKI())  // ä¸å¯å±è”½
 		{
 			//NMI_PROC();
 			//p_cpu->burn_cycles += INT_CYCLES;

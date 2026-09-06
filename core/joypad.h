@@ -30,7 +30,7 @@ struct _ines_joypad_ {
 	ines_dword_t    joypad_bits[JOYPAD_NUM];
 	ines_byte_t     shift_num[JOYPAD_NUM];
 	ines_bool_t     input_brush;
-	//ines_int_t      flash_count; // 用于连发频率控制
+	//ines_int_t      flash_count; // 鐢ㄤ簬杩炲彂棰戠巼鎺у埗
 	//ines_bool_t     flash_switch;
 };
 

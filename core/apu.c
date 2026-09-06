@@ -8,7 +8,7 @@
 
 #define CPUCYCLE2SAMPLENUM(cycle)   (ines_int_t)( (cycle) * (44100.0f/1789772.5f))
 
-/* Òô³¤¼Ä´æÆ÷Ğ´ÈëÖµ -> Òô³¤¼ÆÊıÆ÷³õÖµ×ª»»±í  */
+/* éŸ³é•¿å¯„å­˜å™¨å†™å…¥å€¼ -> éŸ³é•¿è®¡æ•°å™¨åˆå€¼è½¬æ¢è¡¨  */
 static const ines_byte_t length_table [0x20] = {
 	0x0A, 0xFE, 0x14, 0x02, 0x28, 0x04, 0x50, 0x06,
 	0xA0, 0x08, 0x3C, 0x0A, 0x0E, 0x0C, 0x1A, 0x0E, 
@@ -16,14 +16,14 @@ static const ines_byte_t length_table [0x20] = {
 	0xC0, 0x18, 0x48, 0x1A, 0x10, 0x1C, 0x20, 0x1E
 };
 
-/* ÔëÉù·¢ÉúÆ÷µÄÖÜÆÚ 0~0xf¶ÔÓ¦µÄtimer×°ÈëÖµ */
+/* å™ªå£°å‘ç”Ÿå™¨çš„å‘¨æœŸ 0~0xfå¯¹åº”çš„timerè£…å…¥å€¼ */
 static const ines_int_t noise_period_table [16] = {
 	0x004, 0x008, 0x010, 0x020, 0x040, 0x060, 0x080, 0x0A0,
 	0x0CA, 0x0FE, 0x17C, 0x1FC, 0x2FA, 0x3F8, 0x7F2, 0xFE4
 };
 
 
-/* ·½²¨Í¨µÀµÄĞòÁĞÄ£Ê½ */
+/* æ–¹æ³¢é€šé“çš„åºåˆ—æ¨¡å¼ */
 static const ines_byte_t   pulse_duty[4] = {
 	0x02, /*  0 1 0 0 0 0 0 0  duty=0 */
 	0x06, /*  0 1 1 0 0 0 0 0  duty=1 */
@@ -37,7 +37,7 @@ static const ines_sbyte_t   triangle_volume[0x20] = {
 	-1,-3,-5,-7,-9,-11,-13,-15,-15,-13,-11,-9,-7,-5,-3,-1,
 };
 
-/* DMCÍ¨µÀµÄ¼ÆÊıÆ÷×°ÈëÖµ±í */ 
+/* DMCé€šé“çš„è®¡æ•°å™¨è£…å…¥å€¼è¡¨ */ 
 static const ines_int_t  dmc_period_table[2][16] = {
 	{0x1ac, 0x17c, 0x154, 0x140, 0x11e, 0x0fe, 0x0e2, 0x0d6, // NTSC
 	0x0be, 0x0a0, 0x08e, 0x080, 0x06a, 0x054, 0x048, 0x036},
@@ -86,7 +86,7 @@ static void irq_changed(ines_apu_t* p_apu);
 
 
 
-// ³õÊ¼»¯
+// åˆå§‹åŒ–
 void ines_apu_init(ines_apu_t* p_apu)
 {
 	int n;
@@ -103,13 +103,13 @@ void ines_apu_init(ines_apu_t* p_apu)
 	}
 }
 
-// É¾³ı
+// åˆ é™¤
 void ines_apu_free(ines_apu_t* p_apu)
 {
 	
 }
 
-// Èí¼ş¸´Î»
+// è½¯ä»¶å¤ä½
 void ines_apu_reset(ines_apu_t* p_apu)
 {
 	p_apu->reg_frame_mode = 0;
@@ -599,10 +599,10 @@ static void pulse_run(ines_apu_pulse_t* pulse, ines_int_t  from, ines_int_t  to)
 	ines_int_t   out_from, out_to;
 	ines_int_t   delay;
 
-	// ÒôÁ¿Öµ È¡¾öÓÚÊÇ·ñÎª¹Ì¶¨ÒôÁ¿£¨Reg 0 Bit 4£©
-	// Èç¹ûReg 0 Bit 4 ÉèÖÃÎª1£¬±íÊ¾¹Ì¶¨ÒôÁ¿£¬Ôò RegµÄ0-3 Î»±íÊ¾ÒôÁ¿Öµ£¨0-15£©£¬·ñÔòÊ¹ÓÃÒôÁ¿Ë¥¼õµ¥ÔªµÄÊä³öÖµ£¬£¨0-15£©
+	// éŸ³é‡å€¼ å–å†³äºæ˜¯å¦ä¸ºå›ºå®šéŸ³é‡ï¼ˆReg 0 Bit 4ï¼‰
+	// å¦‚æœReg 0 Bit 4 è®¾ç½®ä¸º1ï¼Œè¡¨ç¤ºå›ºå®šéŸ³é‡ï¼Œåˆ™ Regçš„0-3 ä½è¡¨ç¤ºéŸ³é‡å€¼ï¼ˆ0-15ï¼‰ï¼Œå¦åˆ™ä½¿ç”¨éŸ³é‡è¡°å‡å•å…ƒçš„è¾“å‡ºå€¼ï¼Œï¼ˆ0-15ï¼‰
 	volume = pulse->length_counter == 0 ? 0 : pulse->reg_ctrl[0] & 0x10 ? pulse->reg_ctrl[0] & 0x0f : pulse->envelope;
-	// ÆµÂÊ¼ÆÊıÆ÷µÄ³õÖµÓÉReg 2£¬Reg 3 µÄµÍ3Î»¶¨¡£¹²11Î»¡£ ¼ÆÊıÆ÷µÄÊ±ÖÓÖ±½ÓÎªAPUµÄÖÜÆÚÊ±ÖÓ¡£ÎªCPUÆµÂÊµÄÒ»°ë
+	// é¢‘ç‡è®¡æ•°å™¨çš„åˆå€¼ç”±Reg 2ï¼ŒReg 3 çš„ä½3ä½å®šã€‚å…±11ä½ã€‚ è®¡æ•°å™¨çš„æ—¶é’Ÿç›´æ¥ä¸ºAPUçš„å‘¨æœŸæ—¶é’Ÿã€‚ä¸ºCPUé¢‘ç‡çš„ä¸€åŠ
 	period = ((ines_int_t)(pulse->reg_ctrl[3]&0x07)<<8) | (pulse->reg_ctrl[2]);
 
 	// two cpu cycle tick one apu cycle
@@ -624,7 +624,7 @@ static void pulse_run(ines_apu_pulse_t* pulse, ines_int_t  from, ines_int_t  to)
 
 	if(volume == 0 || period < 8 || period + offset >= 0x800)
 	{
-		// Í¨µÀ¾²ÒôÊ±£ºÖ±½ÓÌî³ä0¸öÏàÓ¦µÄÖÜÆÚ
+		// é€šé“é™éŸ³æ—¶ï¼šç›´æ¥å¡«å……0ä¸ªç›¸åº”çš„å‘¨æœŸ
 		if(from < to)
 		{
 			out_from = CPUCYCLE2SAMPLENUM(from);
@@ -646,11 +646,11 @@ static void pulse_run(ines_apu_pulse_t* pulse, ines_int_t  from, ines_int_t  to)
 	}
 	else
 	{
-		// ·½²¨ĞòÁĞ£¬ÓĞ4ÖÖ £¬ Reg 0 µÄ×î¸ßÁ½Î»¾ö¶¨¡£·Ö±ğ²úÉú²»Í¬µã¿Õ±ÈµÄ·½²¨Êä³ö 
+		// æ–¹æ³¢åºåˆ—ï¼Œæœ‰4ç§ ï¼Œ Reg 0 çš„æœ€é«˜ä¸¤ä½å†³å®šã€‚åˆ†åˆ«äº§ç”Ÿä¸åŒç‚¹ç©ºæ¯”çš„æ–¹æ³¢è¾“å‡º 
 		duty = pulse_duty[(pulse->reg_ctrl[0] >> 6) & 0x03];
 
-		// Êä³öÒôÁ¿ÓÉĞòÁĞÑùÊ½¾ö¶¨£¬0 Êä³ö¸ºÒôÁ¿£¬1 Êä³öÕıµÄÒôÁ¿¡£
-		// ĞòÁĞ¼ÆÊıÆ÷£¬ ÓÉÆµÂÊ¶¨Ê±Æ÷Çı¶¯¡£0~7 ¹²8¸öÖµ¡£¾ö¶¨ÁËµ±Ç°ÎªĞòÁĞÑùÊ½µÚ¼¸Bit
+		// è¾“å‡ºéŸ³é‡ç”±åºåˆ—æ ·å¼å†³å®šï¼Œ0 è¾“å‡ºè´ŸéŸ³é‡ï¼Œ1 è¾“å‡ºæ­£çš„éŸ³é‡ã€‚
+		// åºåˆ—è®¡æ•°å™¨ï¼Œ ç”±é¢‘ç‡å®šæ—¶å™¨é©±åŠ¨ã€‚0~7 å…±8ä¸ªå€¼ã€‚å†³å®šäº†å½“å‰ä¸ºåºåˆ—æ ·å¼ç¬¬å‡ Bit
 		amp = ((duty >> pulse->duty_counter) & 0x01) ? (ines_sbyte_t)volume : -(ines_sbyte_t)volume;
 
 
@@ -680,7 +680,7 @@ static void pulse_run(ines_apu_pulse_t* pulse, ines_int_t  from, ines_int_t  to)
 			if(from <= to)
 			{
 				delay = time_period;
-				// ĞòÁĞÏÂÒ»¸öBit¡£
+				// åºåˆ—ä¸‹ä¸€ä¸ªBitã€‚
 				pulse->duty_counter = (pulse->duty_counter + 1) & 0x07;
 				amp = ((duty >> pulse->duty_counter) & 0x01) ? (ines_sbyte_t)volume : -(ines_sbyte_t)volume;
 			}
@@ -693,7 +693,7 @@ static void pulse_run(ines_apu_pulse_t* pulse, ines_int_t  from, ines_int_t  to)
 	pulse->period_delay = delay; 
 }
 
-// Òô³¤¼ÆÊıÆ÷Ê±ÖÓ
+// éŸ³é•¿è®¡æ•°å™¨æ—¶é’Ÿ
 static void pulse_clock_length(ines_apu_pulse_t* pulse)
 {
 	if ( pulse->length_counter > 0 && !(pulse->reg_ctrl[0] & 0x20) )
@@ -701,7 +701,7 @@ static void pulse_clock_length(ines_apu_pulse_t* pulse)
 	
 }
 
-// É¨Æµ¼ÆÊıÆ÷Ê±ÖÓ
+// æ‰«é¢‘è®¡æ•°å™¨æ—¶é’Ÿ
 static void pulse_clock_sweep(ines_apu_pulse_t* pulse, ines_byte_t neg_adj)
 {
 	ines_int_t     period;
@@ -711,22 +711,22 @@ static void pulse_clock_sweep(ines_apu_pulse_t* pulse, ines_byte_t neg_adj)
 
 	if(pulse->sweep_delay == 0)
 	{
-		// ĞèÒªÖØĞÂ×°ÈëÉ¨Æµ¼ÆÊıÆ÷
+		// éœ€è¦é‡æ–°è£…å…¥æ‰«é¢‘è®¡æ•°å™¨
 		pulse->reg_written[1] = 1;
 		sweep = pulse->reg_ctrl[1];
-		// ¶¨Ê±Æ÷ÖÜÆÚ
+		// å®šæ—¶å™¨å‘¨æœŸ
 		period = ((ines_int_t)(pulse->reg_ctrl[3]&0x07)<<8) | (pulse->reg_ctrl[2]);
-		// É¨ÆµÓÒÒÆÁ¿
+		// æ‰«é¢‘å³ç§»é‡
 		shift = sweep & 0x7; 
 
 		if( (sweep & 0x80) && period > 8 && shift > 0)
 		{
-			// É¨Æµ±»¼¤»î
+			// æ‰«é¢‘è¢«æ¿€æ´»
 			offset = period >> shift;
 
 			if(sweep & 0x08)
 			{
-				// ¼õÉÙ
+				// å‡å°‘
 				offset = -offset - neg_adj;
 			}
 			if(period + offset < 0x800)
@@ -751,7 +751,7 @@ static void pulse_clock_sweep(ines_apu_pulse_t* pulse, ines_byte_t neg_adj)
 	}
 }
 
-// ÒôÁ¿Ë¥¼õ¼ÆÊıÆ÷Ê±ÖÓ
+// éŸ³é‡è¡°å‡è®¡æ•°å™¨æ—¶é’Ÿ
 static void pulse_clock_envelope(ines_apu_pulse_t* pulse)
 {
 	//ines_byte_t  period;
@@ -759,22 +759,22 @@ static void pulse_clock_envelope(ines_apu_pulse_t* pulse)
 
 	if(pulse->reg_written[3])
 	{
-		// Ğ´ÈëÒô³¤¼Ä´æÆ÷£¬´¥·¢ÒôÁ¿Ë¥¼õËÙ¶È¼ÆÊıÆ÷ÖØĞÂ×°Èë
+		// å†™å…¥éŸ³é•¿å¯„å­˜å™¨ï¼Œè§¦å‘éŸ³é‡è¡°å‡é€Ÿåº¦è®¡æ•°å™¨é‡æ–°è£…å…¥
 		pulse->reg_written[3] = 0;
 		pulse->env_delay = pulse->reg_ctrl[0] & 0x0f;
 		pulse->envelope = 0xf;
 	}
 	else if(pulse->env_delay > 0) 
 	{
-		// ÒôÁ¿Ë¥¼õËÙ¶È¼ÆÊıÆ÷ÏòÏÂ¼ÆÊı
+		// éŸ³é‡è¡°å‡é€Ÿåº¦è®¡æ•°å™¨å‘ä¸‹è®¡æ•°
 		pulse->env_delay--;
 	}
 	else
 	{
-		// ÖØĞÂ×°ÈëÒôÁ¿Ë¥¼õËÙ¶È¼ÆÊıÆ÷
+		// é‡æ–°è£…å…¥éŸ³é‡è¡°å‡é€Ÿåº¦è®¡æ•°å™¨
 		pulse->env_delay = pulse->reg_ctrl[0] & 0x0f;
-		// Ë¥¼õÑ­»·Ê¹ÄÜÎª1£¨¼Ä´æÆ÷0µÄBIT5£©»òÕßË¥¼õÒôÁ¿Ã»µ½0.ÔòÒôÁ¿Ë¥¼õÒ»¡£
-		// Èç¹ûË¥¼õÑ­»·Ê¹ÄÜÎª0£¬ÔòÒôÁ¿Ë¥¼õµ½0ºó»áÒ»Ö±Í£Ö¹ÔÚ0£¬ÕâÑùÉùµÀÔò¾²Òô¡£
+		// è¡°å‡å¾ªç¯ä½¿èƒ½ä¸º1ï¼ˆå¯„å­˜å™¨0çš„BIT5ï¼‰æˆ–è€…è¡°å‡éŸ³é‡æ²¡åˆ°0.åˆ™éŸ³é‡è¡°å‡ä¸€ã€‚
+		// å¦‚æœè¡°å‡å¾ªç¯ä½¿èƒ½ä¸º0ï¼Œåˆ™éŸ³é‡è¡°å‡åˆ°0åä¼šä¸€ç›´åœæ­¢åœ¨0ï¼Œè¿™æ ·å£°é“åˆ™é™éŸ³ã€‚
 		if(pulse->envelope > 0 || (pulse->reg_ctrl[0] & 0x20) ) 
 		{
 			pulse->envelope = (pulse->envelope - 1) & 0xf;
@@ -820,7 +820,7 @@ static void triangle_run(ines_apu_triangle_t* triangle, ines_int_t  from, ines_i
 
 	if(triangle->length_counter == 0 || triangle->linear_counter == 0 || period < 3)
 	{
-		// Í¨µÀ¾²ÒôÊ±£ºÖ±½ÓÌî³ä0¸öÏàÓ¦µÄÖÜÆÚ
+		// é€šé“é™éŸ³æ—¶ï¼šç›´æ¥å¡«å……0ä¸ªç›¸åº”çš„å‘¨æœŸ
 		out_from = CPUCYCLE2SAMPLENUM(from);
 		out_to = CPUCYCLE2SAMPLENUM(to);
 		if(out_from < out_to)
@@ -913,7 +913,7 @@ static void noise_reset(ines_apu_noise_t* noise)
 	noise->reg_written[2] = 1;
 	noise->reg_written[3] = 1;
 
-	noise->shift_register = 1;  // ³õÊ¼×°Èë1
+	noise->shift_register = 1;  // åˆå§‹è£…å…¥1
 	noise->period_delay = 0;
 	noise->envelope = 0;
 	noise->env_delay = 0;
@@ -933,13 +933,13 @@ static void noise_run(ines_apu_noise_t* noise, ines_int_t  from, ines_int_t  to)
 	ines_int_t     delay;
 
 
-	// ÒôÁ¿Öµ È¡¾öÓÚÊÇ·ñÎª¹Ì¶¨ÒôÁ¿£¨Reg 0 Bit 4£©
-	// Èç¹ûReg 0 Bit 4 ÉèÖÃÎª1£¬±íÊ¾¹Ì¶¨ÒôÁ¿£¬Ôò RegµÄ0-3 Î»±íÊ¾ÒôÁ¿Öµ£¨0-15£©£¬·ñÔòÊ¹ÓÃÒôÁ¿Ë¥¼õµ¥ÔªµÄÊä³öÖµ£¬£¨0-15£©
+	// éŸ³é‡å€¼ å–å†³äºæ˜¯å¦ä¸ºå›ºå®šéŸ³é‡ï¼ˆReg 0 Bit 4ï¼‰
+	// å¦‚æœReg 0 Bit 4 è®¾ç½®ä¸º1ï¼Œè¡¨ç¤ºå›ºå®šéŸ³é‡ï¼Œåˆ™ Regçš„0-3 ä½è¡¨ç¤ºéŸ³é‡å€¼ï¼ˆ0-15ï¼‰ï¼Œå¦åˆ™ä½¿ç”¨éŸ³é‡è¡°å‡å•å…ƒçš„è¾“å‡ºå€¼ï¼Œï¼ˆ0-15ï¼‰
 	volume = noise->length_counter == 0 ? 0 : noise->reg_ctrl[0] & 0x10 ? noise->reg_ctrl[0] & 0x0f : noise->envelope;
-	// ÆµÂÊ¼ÆÊıÆ÷µÄ³õÖµÓÉReg 2 µÄµÍ4Î»¶¨¡£Í¨¹ıÒ»¸ö¹ÌµÄ±í¸ñÀ´×ª»»³É¼ÆÊıÆ÷×°ÈëÖµ
+	// é¢‘ç‡è®¡æ•°å™¨çš„åˆå€¼ç”±Reg 2 çš„ä½4ä½å®šã€‚é€šè¿‡ä¸€ä¸ªå›ºçš„è¡¨æ ¼æ¥è½¬æ¢æˆè®¡æ•°å™¨è£…å…¥å€¼
 	period = (ines_int_t)(noise_period_table[noise->reg_ctrl[2] & 0x0f]);
 
-	// ¶àÒ»¸öÖÜÆÚÊÇÒòÎª¼ÆÊıÆ÷¼ÆÊıµ½0ºó²»»áÁ¢¿ÌÖØĞÂ×°Èë³õÊ¼Öµ£¬ĞèÒªµÈµ½ÏÂÒ»¸öAPUÖÜÆÚ²Å»áÖØ×°×°Èë¡£ËùÒÔ»á¶àÔËĞĞÒ»¸öAPUÖÜÆÚ
+	// å¤šä¸€ä¸ªå‘¨æœŸæ˜¯å› ä¸ºè®¡æ•°å™¨è®¡æ•°åˆ°0åä¸ä¼šç«‹åˆ»é‡æ–°è£…å…¥åˆå§‹å€¼ï¼Œéœ€è¦ç­‰åˆ°ä¸‹ä¸€ä¸ªAPUå‘¨æœŸæ‰ä¼šé‡è£…è£…å…¥ã€‚æ‰€ä»¥ä¼šå¤šè¿è¡Œä¸€ä¸ªAPUå‘¨æœŸ
 	time_period = (period + 1) << 1;
 
 	delay = noise->period_delay;
@@ -951,7 +951,7 @@ static void noise_run(ines_apu_noise_t* noise, ines_int_t  from, ines_int_t  to)
 	{
 		if(from < to)
 		{
-			// Í¨µÀ¾²ÒôÊ±£ºÖ±½ÓÌî³ä0¸öÏàÓ¦µÄÖÜÆÚ
+			// é€šé“é™éŸ³æ—¶ï¼šç›´æ¥å¡«å……0ä¸ªç›¸åº”çš„å‘¨æœŸ
 			out_from = CPUCYCLE2SAMPLENUM(from);
 			out_to = CPUCYCLE2SAMPLENUM(to);
 			if(out_from < out_to)
@@ -970,8 +970,8 @@ static void noise_run(ines_apu_noise_t* noise, ines_int_t  from, ines_int_t  to)
 	}
 	else
 	{
-		// Êä³öÒôÁ¿ÓÉĞòÁĞÑùÊ½¾ö¶¨£¬0 Êä³ö¸ºÒôÁ¿£¬1 Êä³öÕıµÄÒôÁ¿¡£
-		// ĞòÁĞ¼ÆÊıÆ÷£¬ ÓÉÆµÂÊ¶¨Ê±Æ÷Çı¶¯¡£0~7 ¹²8¸öÖµ¡£¾ö¶¨ÁËµ±Ç°ÎªĞòÁĞÑùÊ½µÚ¼¸Bit
+		// è¾“å‡ºéŸ³é‡ç”±åºåˆ—æ ·å¼å†³å®šï¼Œ0 è¾“å‡ºè´ŸéŸ³é‡ï¼Œ1 è¾“å‡ºæ­£çš„éŸ³é‡ã€‚
+		// åºåˆ—è®¡æ•°å™¨ï¼Œ ç”±é¢‘ç‡å®šæ—¶å™¨é©±åŠ¨ã€‚0~7 å…±8ä¸ªå€¼ã€‚å†³å®šäº†å½“å‰ä¸ºåºåˆ—æ ·å¼ç¬¬å‡ Bit
 		amp = (noise->shift_register & 0x01) ? (ines_sbyte_t)volume : -(ines_sbyte_t)volume;
 		tap = (noise->reg_ctrl[2] & 0x80) ? 8 : 13;
 
@@ -990,7 +990,7 @@ static void noise_run(ines_apu_noise_t* noise, ines_int_t  from, ines_int_t  to)
 
 			if(out_from < out_to)
 				INES_LOG(LOG_TRA, MOD_APU, ISTR("APU_NOISE_RUN: (%p) Fill sample [%d]->[%d] = %d\n"), noise, out_from, out_to, amp);
-			// Êä³öµ±Ç°ĞòÁĞ
+			// è¾“å‡ºå½“å‰åºåˆ—
 			while(out_from < out_to)
 			{
 				assert(out_from >= 0 && out_from < MAX_SAMPLE_PER_FRAME);
@@ -999,12 +999,12 @@ static void noise_run(ines_apu_noise_t* noise, ines_int_t  from, ines_int_t  to)
 			}
 			out_from = out_to;
 
-			// ¼ÆËãÏÂÒ»¸öĞòÁĞµÄÖÜÆÚ¡£
+			// è®¡ç®—ä¸‹ä¸€ä¸ªåºåˆ—çš„å‘¨æœŸã€‚
 			if(  from <= to ) 
 			{
-				// ÖØĞÂ×°Èë¶¨Ê±Æ÷Öµ
+				// é‡æ–°è£…å…¥å®šæ—¶å™¨å€¼
 				delay = time_period; 
-				// ĞòÁĞÏÂÒ»¸öBit¡£
+				// åºåˆ—ä¸‹ä¸€ä¸ªBitã€‚
 				feedback = (noise->shift_register<<tap)^(noise->shift_register<<14);
 				noise->shift_register = (noise->shift_register >> 1) | (feedback & 0x4000);
 				
@@ -1029,22 +1029,22 @@ static void noise_clock_envelope(ines_apu_noise_t* noise)
 {
 	if(noise->reg_written[3])
 	{
-		// Ğ´ÈëÒô³¤¼Ä´æÆ÷£¬´¥·¢ÒôÁ¿Ë¥¼õËÙ¶È¼ÆÊıÆ÷ÖØĞÂ×°Èë
+		// å†™å…¥éŸ³é•¿å¯„å­˜å™¨ï¼Œè§¦å‘éŸ³é‡è¡°å‡é€Ÿåº¦è®¡æ•°å™¨é‡æ–°è£…å…¥
 		noise->reg_written[3] = 0;
 		noise->env_delay = noise->reg_ctrl[0] & 0x0f;
 		noise->envelope = 0xf;
 	}
 	else if(noise->env_delay > 0) 
 	{
-		// ÒôÁ¿Ë¥¼õËÙ¶È¼ÆÊıÆ÷ÏòÏÂ¼ÆÊı
+		// éŸ³é‡è¡°å‡é€Ÿåº¦è®¡æ•°å™¨å‘ä¸‹è®¡æ•°
 		noise->env_delay--;
 	}
 	else
 	{
-		// ÖØĞÂ×°ÈëÒôÁ¿Ë¥¼õËÙ¶È¼ÆÊıÆ÷
+		// é‡æ–°è£…å…¥éŸ³é‡è¡°å‡é€Ÿåº¦è®¡æ•°å™¨
 		noise->env_delay = noise->reg_ctrl[0] & 0x0f;
-		// Ë¥¼õÑ­»·Ê¹ÄÜÎª1£¨¼Ä´æÆ÷0µÄBIT5£©»òÕßË¥¼õÒôÁ¿Ã»µ½0.ÔòÒôÁ¿Ë¥¼õÒ»¡£
-		// Èç¹ûË¥¼õÑ­»·Ê¹ÄÜÎª0£¬ÔòÒôÁ¿Ë¥¼õµ½0ºó»áÒ»Ö±Í£Ö¹ÔÚ0£¬ÕâÑùÉùµÀÔò¾²Òô¡£
+		// è¡°å‡å¾ªç¯ä½¿èƒ½ä¸º1ï¼ˆå¯„å­˜å™¨0çš„BIT5ï¼‰æˆ–è€…è¡°å‡éŸ³é‡æ²¡åˆ°0.åˆ™éŸ³é‡è¡°å‡ä¸€ã€‚
+		// å¦‚æœè¡°å‡å¾ªç¯ä½¿èƒ½ä¸º0ï¼Œåˆ™éŸ³é‡è¡°å‡åˆ°0åä¼šä¸€ç›´åœæ­¢åœ¨0ï¼Œè¿™æ ·å£°é“åˆ™é™éŸ³ã€‚
 		if(noise->envelope > 0 || (noise->reg_ctrl[0] & 0x20) ) 
 		{
 			noise->envelope = (noise->envelope - 1) & 0xf;
@@ -1301,7 +1301,7 @@ struct _ines_state_apu_data_
 	ines_int64_t        frame_start_cpu_cycles;
 	/* 32 - 39 : 8 bytes */
 	ines_int_t          last_cycles;
-	ines_int_t          prev_out_x1000;  // ÓÃÓÚÆ½»¬Êä³ö£¨µÍÍ¨ÂË²¨£©
+	ines_int_t          prev_out_x1000;  // ç”¨äºå¹³æ»‘è¾“å‡ºï¼ˆä½é€šæ»¤æ³¢ï¼‰
 };
 /* total: 40 bytes */
 typedef struct _ines_state_apu_data_   ines_state_apu_data_t;
@@ -1310,14 +1310,14 @@ typedef struct _ines_state_apu_data_   ines_state_apu_data_t;
 struct _ines_state_apu_pulse_data_
 {
 	/* 8 */
-	ines_byte_t   reg_ctrl[4];     // ¿ØÖÆ¼Ä´æÆ÷s
-	ines_byte_t   reg_written[4];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
+	ines_byte_t   reg_ctrl[4];     // æ§åˆ¶å¯„å­˜å™¨s
+	ines_byte_t   reg_written[4];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
 	/* 8 */
 	ines_byte_t   envelope;        // 
 	ines_byte_t   env_delay;
-	ines_byte_t   duty_counter;    // ĞòÁĞ¼ÆÊıÆ÷
+	ines_byte_t   duty_counter;    // åºåˆ—è®¡æ•°å™¨
 	ines_byte_t   sweep_delay;
-	ines_word_t   length_counter;  // Òô³¤¼ÆÊıÆ÷
+	ines_word_t   length_counter;  // éŸ³é•¿è®¡æ•°å™¨
 	ines_word_t   period_delay;    // 
 };
 typedef struct _ines_state_apu_pulse_data_   ines_state_apu_pulse_data_t;
@@ -1326,15 +1326,15 @@ typedef struct _ines_state_apu_pulse_data_   ines_state_apu_pulse_data_t;
 struct _ines_state_apu_triangle_data_
 {
 	/* 8 */
-	ines_byte_t   reg_ctrl[4];     // ¿ØÖÆ¼Ä´æÆ÷
-	ines_byte_t   reg_written[4];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
+	ines_byte_t   reg_ctrl[4];     // æ§åˆ¶å¯„å­˜å™¨
+	ines_byte_t   reg_written[4];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
 	/* 8 */
-	ines_byte_t   linear_counter;  // ÏßĞÔ¼ÆÊıÆ÷
-	ines_byte_t   phase_counter;   // Èı½Ç½×Ìİ¼ÆÊıÆ÷
+	ines_byte_t   linear_counter;  // çº¿æ€§è®¡æ•°å™¨
+	ines_byte_t   phase_counter;   // ä¸‰è§’é˜¶æ¢¯è®¡æ•°å™¨
 	ines_byte_t   reserved1; 
 	ines_byte_t   reserved2; 
-	ines_word_t   length_counter;  // Òô³¤¼ÆÊıÆ÷
-	ines_word_t   period_delay;  // ÖÜÆÚ¼ÆÊıÆ÷
+	ines_word_t   length_counter;  // éŸ³é•¿è®¡æ•°å™¨
+	ines_word_t   period_delay;  // å‘¨æœŸè®¡æ•°å™¨
 
 };
 
@@ -1343,14 +1343,14 @@ typedef struct _ines_state_apu_triangle_data_    ines_state_apu_triangle_data_t;
 struct _ines_state_apu_noise_data_
 {
 	/* 8 */
-	ines_byte_t   reg_ctrl[4];     // ¿ØÖÆ¼Ä´æÆ÷
-	ines_byte_t   reg_written[4];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
+	ines_byte_t   reg_ctrl[4];     // æ§åˆ¶å¯„å­˜å™¨
+	ines_byte_t   reg_written[4];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
 	/* 8 */
 	ines_byte_t   envelope;        // 
 	ines_byte_t   env_delay;
-	ines_word_t   length_counter;  // Òô³¤¼ÆÊıÆ÷
-	ines_word_t   shift_register;  // ÒÆÎ»¼Ä´æÆ÷
-	ines_word_t   period_delay;    // ÖÜÆÚ¼ÆÊıÆ÷
+	ines_word_t   length_counter;  // éŸ³é•¿è®¡æ•°å™¨
+	ines_word_t   shift_register;  // ç§»ä½å¯„å­˜å™¨
+	ines_word_t   period_delay;    // å‘¨æœŸè®¡æ•°å™¨
 };
 
 typedef struct _ines_state_apu_noise_data_    ines_state_apu_noise_data_t;
@@ -1358,12 +1358,12 @@ typedef struct _ines_state_apu_noise_data_    ines_state_apu_noise_data_t;
 struct _ines_state_apu_dmc_data_
 {
 	/* 8 */
-	ines_byte_t   reg_ctrl[4];     // ¿ØÖÆ¼Ä´æÆ÷
-	ines_byte_t   reg_written[4];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
+	ines_byte_t   reg_ctrl[4];     // æ§åˆ¶å¯„å­˜å™¨
+	ines_byte_t   reg_written[4];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
 	/* 8 */
-	ines_word_t   length_counter;  // Òô³¤¼ÆÊıÆ÷
-	ines_word_t   period;          // ÖÜÆÚ
-	ines_int_t    period_delay;    // ÖÜÆÚ¼ÆÊıÆ÷
+	ines_word_t   length_counter;  // éŸ³é•¿è®¡æ•°å™¨
+	ines_word_t   period;          // å‘¨æœŸ
+	ines_int_t    period_delay;    // å‘¨æœŸè®¡æ•°å™¨
 	/* 8 */
 	//ines_byte_t   is_ntsc;
 	//ines_byte_t   mute;
@@ -1389,19 +1389,19 @@ ines_int_t pulse_save_state(ines_apu_pulse_t* pulse, FILE* fSave)
 {
 	ines_state_apu_pulse_data_t   data;
 	memset(&data, 0, sizeof(data));
-	data.reg_ctrl[0] = pulse->reg_ctrl[0];     // ¿ØÖÆ¼Ä´æÆ÷s
-	data.reg_ctrl[1] = pulse->reg_ctrl[1];     // ¿ØÖÆ¼Ä´æÆ÷s
-	data.reg_ctrl[2] = pulse->reg_ctrl[2];     // ¿ØÖÆ¼Ä´æÆ÷s
-	data.reg_ctrl[3] = pulse->reg_ctrl[3];     // ¿ØÖÆ¼Ä´æÆ÷s
-	data.reg_written[0] = pulse->reg_written[0];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	data.reg_written[1] = pulse->reg_written[1];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	data.reg_written[2] = pulse->reg_written[2];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	data.reg_written[3] = pulse->reg_written[3];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	data.duty_counter = pulse->duty_counter;    // ĞòÁĞ¼ÆÊıÆ÷
+	data.reg_ctrl[0] = pulse->reg_ctrl[0];     // æ§åˆ¶å¯„å­˜å™¨s
+	data.reg_ctrl[1] = pulse->reg_ctrl[1];     // æ§åˆ¶å¯„å­˜å™¨s
+	data.reg_ctrl[2] = pulse->reg_ctrl[2];     // æ§åˆ¶å¯„å­˜å™¨s
+	data.reg_ctrl[3] = pulse->reg_ctrl[3];     // æ§åˆ¶å¯„å­˜å™¨s
+	data.reg_written[0] = pulse->reg_written[0];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	data.reg_written[1] = pulse->reg_written[1];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	data.reg_written[2] = pulse->reg_written[2];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	data.reg_written[3] = pulse->reg_written[3];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	data.duty_counter = pulse->duty_counter;    // åºåˆ—è®¡æ•°å™¨
 	data.envelope = pulse->duty_counter;        // 
 	data.env_delay = pulse->env_delay;
 	data.sweep_delay = pulse->sweep_delay;
-	data.length_counter = pulse->length_counter;  // Òô³¤¼ÆÊıÆ÷
+	data.length_counter = pulse->length_counter;  // éŸ³é•¿è®¡æ•°å™¨
 	data.period_delay = pulse->period_delay;    // 
 	fwrite(&data, sizeof(data), 1, fSave);
 
@@ -1414,19 +1414,19 @@ ines_int_t pulse_load_state(ines_apu_pulse_t* pulse, FILE* fSave)
 	if(1 != fread(&data, sizeof(data), 1, fSave))
 		return -1;
 	
-	pulse->reg_ctrl[0] = data.reg_ctrl[0];     // ¿ØÖÆ¼Ä´æÆ÷s
-	pulse->reg_ctrl[1] = data.reg_ctrl[1];     // ¿ØÖÆ¼Ä´æÆ÷s
-	pulse->reg_ctrl[2] = data.reg_ctrl[2];     // ¿ØÖÆ¼Ä´æÆ÷s
-	pulse->reg_ctrl[3] = data.reg_ctrl[3];     // ¿ØÖÆ¼Ä´æÆ÷s
-	pulse->reg_written[0] = data.reg_written[0];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	pulse->reg_written[1] = data.reg_written[1];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	pulse->reg_written[2] = data.reg_written[2];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	pulse->reg_written[3] = data.reg_written[3];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	pulse->duty_counter = data.duty_counter;    // ĞòÁĞ¼ÆÊıÆ÷
+	pulse->reg_ctrl[0] = data.reg_ctrl[0];     // æ§åˆ¶å¯„å­˜å™¨s
+	pulse->reg_ctrl[1] = data.reg_ctrl[1];     // æ§åˆ¶å¯„å­˜å™¨s
+	pulse->reg_ctrl[2] = data.reg_ctrl[2];     // æ§åˆ¶å¯„å­˜å™¨s
+	pulse->reg_ctrl[3] = data.reg_ctrl[3];     // æ§åˆ¶å¯„å­˜å™¨s
+	pulse->reg_written[0] = data.reg_written[0];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	pulse->reg_written[1] = data.reg_written[1];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	pulse->reg_written[2] = data.reg_written[2];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	pulse->reg_written[3] = data.reg_written[3];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	pulse->duty_counter = data.duty_counter;    // åºåˆ—è®¡æ•°å™¨
 	pulse->duty_counter = data.envelope;        // 
 	pulse->env_delay = data.env_delay;
 	pulse->sweep_delay = data.sweep_delay;
-	pulse->length_counter = data.length_counter;  // Òô³¤¼ÆÊıÆ÷
+	pulse->length_counter = data.length_counter;  // éŸ³é•¿è®¡æ•°å™¨
 	pulse->period_delay = data.period_delay;    // 
 
 	return 0;
@@ -1437,18 +1437,18 @@ ines_int_t triangle_save_state(ines_apu_triangle_t* triangle, FILE* fSave)
 {
 	ines_state_apu_triangle_data_t   data;
 	memset(&data, 0, sizeof(data));
-	data.reg_ctrl[0] = triangle->reg_ctrl[0];     // ¿ØÖÆ¼Ä´æÆ÷
-	data.reg_ctrl[1] = triangle->reg_ctrl[1];     // ¿ØÖÆ¼Ä´æÆ÷
-	data.reg_ctrl[2] = triangle->reg_ctrl[2];     // ¿ØÖÆ¼Ä´æÆ÷
-	data.reg_ctrl[3] = triangle->reg_ctrl[3];     // ¿ØÖÆ¼Ä´æÆ÷
-	data.reg_written[0] = triangle->reg_written[0];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	data.reg_written[1] = triangle->reg_written[1];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	data.reg_written[2] = triangle->reg_written[2];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	data.reg_written[3] = triangle->reg_written[3];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	data.linear_counter = triangle->linear_counter;  // ÏßĞÔ¼ÆÊıÆ÷
-	data.phase_counter = triangle->phase_counter;   // Èı½Ç½×Ìİ¼ÆÊıÆ÷
-	data.length_counter = triangle->length_counter;  // Òô³¤¼ÆÊıÆ÷
-	data.period_delay = triangle->period_delay;  // ÖÜÆÚ¼ÆÊıÆ÷
+	data.reg_ctrl[0] = triangle->reg_ctrl[0];     // æ§åˆ¶å¯„å­˜å™¨
+	data.reg_ctrl[1] = triangle->reg_ctrl[1];     // æ§åˆ¶å¯„å­˜å™¨
+	data.reg_ctrl[2] = triangle->reg_ctrl[2];     // æ§åˆ¶å¯„å­˜å™¨
+	data.reg_ctrl[3] = triangle->reg_ctrl[3];     // æ§åˆ¶å¯„å­˜å™¨
+	data.reg_written[0] = triangle->reg_written[0];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	data.reg_written[1] = triangle->reg_written[1];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	data.reg_written[2] = triangle->reg_written[2];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	data.reg_written[3] = triangle->reg_written[3];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	data.linear_counter = triangle->linear_counter;  // çº¿æ€§è®¡æ•°å™¨
+	data.phase_counter = triangle->phase_counter;   // ä¸‰è§’é˜¶æ¢¯è®¡æ•°å™¨
+	data.length_counter = triangle->length_counter;  // éŸ³é•¿è®¡æ•°å™¨
+	data.period_delay = triangle->period_delay;  // å‘¨æœŸè®¡æ•°å™¨
 	fwrite(&data, sizeof(data), 1, fSave);
 
 	return 0;
@@ -1461,18 +1461,18 @@ ines_int_t triangle_load_state(ines_apu_triangle_t* triangle, FILE* fSave)
 	if(1 != fread(&data, sizeof(data), 1, fSave))
 		return -1;
 
-	triangle->reg_ctrl[0] = data.reg_ctrl[0];     // ¿ØÖÆ¼Ä´æÆ÷
-	triangle->reg_ctrl[1] = data.reg_ctrl[1];     // ¿ØÖÆ¼Ä´æÆ÷
-	triangle->reg_ctrl[2] = data.reg_ctrl[2];     // ¿ØÖÆ¼Ä´æÆ÷
-	triangle->reg_ctrl[3] = data.reg_ctrl[3];     // ¿ØÖÆ¼Ä´æÆ÷
-	triangle->reg_written[0] = data.reg_written[0];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	triangle->reg_written[1] = data.reg_written[1];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	triangle->reg_written[2] = data.reg_written[2];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	triangle->reg_written[3] = data.reg_written[3];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	triangle->linear_counter = data.linear_counter;  // ÏßĞÔ¼ÆÊıÆ÷
-	triangle->phase_counter = data.phase_counter;   // Èı½Ç½×Ìİ¼ÆÊıÆ÷
-	triangle->length_counter = data.length_counter;  // Òô³¤¼ÆÊıÆ÷
-	triangle->period_delay = data.period_delay;  // ÖÜÆÚ¼ÆÊıÆ÷
+	triangle->reg_ctrl[0] = data.reg_ctrl[0];     // æ§åˆ¶å¯„å­˜å™¨
+	triangle->reg_ctrl[1] = data.reg_ctrl[1];     // æ§åˆ¶å¯„å­˜å™¨
+	triangle->reg_ctrl[2] = data.reg_ctrl[2];     // æ§åˆ¶å¯„å­˜å™¨
+	triangle->reg_ctrl[3] = data.reg_ctrl[3];     // æ§åˆ¶å¯„å­˜å™¨
+	triangle->reg_written[0] = data.reg_written[0];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	triangle->reg_written[1] = data.reg_written[1];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	triangle->reg_written[2] = data.reg_written[2];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	triangle->reg_written[3] = data.reg_written[3];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	triangle->linear_counter = data.linear_counter;  // çº¿æ€§è®¡æ•°å™¨
+	triangle->phase_counter = data.phase_counter;   // ä¸‰è§’é˜¶æ¢¯è®¡æ•°å™¨
+	triangle->length_counter = data.length_counter;  // éŸ³é•¿è®¡æ•°å™¨
+	triangle->period_delay = data.period_delay;  // å‘¨æœŸè®¡æ•°å™¨
 
 	return 0;
 }
@@ -1481,19 +1481,19 @@ ines_int_t noise_save_state(ines_apu_noise_t* noise, FILE* fSave)
 {
 	ines_state_apu_noise_data_t  data;
 	memset(&data, 0, sizeof(data));
-	data.reg_ctrl[0] = noise->reg_ctrl[0];     // ¿ØÖÆ¼Ä´æÆ÷
-	data.reg_ctrl[1] = noise->reg_ctrl[1];     // ¿ØÖÆ¼Ä´æÆ÷
-	data.reg_ctrl[2] = noise->reg_ctrl[2];     // ¿ØÖÆ¼Ä´æÆ÷
-	data.reg_ctrl[3] = noise->reg_ctrl[3];     // ¿ØÖÆ¼Ä´æÆ÷
-	data.reg_written[0] = noise->reg_written[0];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	data.reg_written[1] = noise->reg_written[1];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	data.reg_written[2] = noise->reg_written[2];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	data.reg_written[3] = noise->reg_written[3];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
+	data.reg_ctrl[0] = noise->reg_ctrl[0];     // æ§åˆ¶å¯„å­˜å™¨
+	data.reg_ctrl[1] = noise->reg_ctrl[1];     // æ§åˆ¶å¯„å­˜å™¨
+	data.reg_ctrl[2] = noise->reg_ctrl[2];     // æ§åˆ¶å¯„å­˜å™¨
+	data.reg_ctrl[3] = noise->reg_ctrl[3];     // æ§åˆ¶å¯„å­˜å™¨
+	data.reg_written[0] = noise->reg_written[0];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	data.reg_written[1] = noise->reg_written[1];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	data.reg_written[2] = noise->reg_written[2];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	data.reg_written[3] = noise->reg_written[3];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
 	data.envelope = noise->envelope;        // 
 	data.env_delay = noise->env_delay;
-	data.length_counter = noise->length_counter;  // Òô³¤¼ÆÊıÆ÷
-	data.shift_register = noise->shift_register;  // ÒÆÎ»¼Ä´æÆ÷
-	data.period_delay = noise->period_delay;    // ÖÜÆÚ¼ÆÊıÆ÷
+	data.length_counter = noise->length_counter;  // éŸ³é•¿è®¡æ•°å™¨
+	data.shift_register = noise->shift_register;  // ç§»ä½å¯„å­˜å™¨
+	data.period_delay = noise->period_delay;    // å‘¨æœŸè®¡æ•°å™¨
 	fwrite(&data, sizeof(data), 1, fSave);
 
 	return 0;
@@ -1505,19 +1505,19 @@ ines_int_t noise_load_state(ines_apu_noise_t* noise, FILE* fSave)
 	if(1 != fread(&data, sizeof(data), 1, fSave))
 		return -1;
 
-	noise->reg_ctrl[0] = data.reg_ctrl[0];     // ¿ØÖÆ¼Ä´æÆ÷
-	noise->reg_ctrl[1] = data.reg_ctrl[1];     // ¿ØÖÆ¼Ä´æÆ÷
-	noise->reg_ctrl[2] = data.reg_ctrl[2];     // ¿ØÖÆ¼Ä´æÆ÷
-	noise->reg_ctrl[3] = data.reg_ctrl[3];     // ¿ØÖÆ¼Ä´æÆ÷
-	noise->reg_written[0] = data.reg_written[0];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	noise->reg_written[1] = data.reg_written[1];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	noise->reg_written[2] = data.reg_written[2];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	noise->reg_written[3] = data.reg_written[3];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
+	noise->reg_ctrl[0] = data.reg_ctrl[0];     // æ§åˆ¶å¯„å­˜å™¨
+	noise->reg_ctrl[1] = data.reg_ctrl[1];     // æ§åˆ¶å¯„å­˜å™¨
+	noise->reg_ctrl[2] = data.reg_ctrl[2];     // æ§åˆ¶å¯„å­˜å™¨
+	noise->reg_ctrl[3] = data.reg_ctrl[3];     // æ§åˆ¶å¯„å­˜å™¨
+	noise->reg_written[0] = data.reg_written[0];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	noise->reg_written[1] = data.reg_written[1];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	noise->reg_written[2] = data.reg_written[2];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	noise->reg_written[3] = data.reg_written[3];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
 	noise->envelope = data.envelope;        // 
 	noise->env_delay = data.env_delay;
-	noise->length_counter = data.length_counter;  // Òô³¤¼ÆÊıÆ÷
-	noise->shift_register = data.shift_register;  // ÒÆÎ»¼Ä´æÆ÷
-	noise->period_delay = data.period_delay;    // ÖÜÆÚ¼ÆÊıÆ÷
+	noise->length_counter = data.length_counter;  // éŸ³é•¿è®¡æ•°å™¨
+	noise->shift_register = data.shift_register;  // ç§»ä½å¯„å­˜å™¨
+	noise->period_delay = data.period_delay;    // å‘¨æœŸè®¡æ•°å™¨
 
 	return 0;
 }
@@ -1527,17 +1527,17 @@ ines_int_t dmc_save_state(ines_apu_dmc_t* dmc, FILE* fSave)
 	ines_state_apu_dmc_data_t  data;
 	memset(&data, 0, sizeof(data));
 
-	data.reg_ctrl[0] = dmc->reg_ctrl[0];     // ¿ØÖÆ¼Ä´æÆ÷
-	data.reg_ctrl[1] = dmc->reg_ctrl[1];     // ¿ØÖÆ¼Ä´æÆ÷
-	data.reg_ctrl[2] = dmc->reg_ctrl[2];     // ¿ØÖÆ¼Ä´æÆ÷
-	data.reg_ctrl[3] = dmc->reg_ctrl[3];     // ¿ØÖÆ¼Ä´æÆ÷
-	data.reg_written[0] = dmc->reg_written[0];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	data.reg_written[1] = dmc->reg_written[1];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	data.reg_written[2] = dmc->reg_written[2];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	data.reg_written[3] = dmc->reg_written[3];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	data.length_counter = dmc->length_counter;  // Òô³¤¼ÆÊıÆ÷
-	data.period = dmc->period;          // ÖÜÆÚ
-	data.period_delay = dmc->period_delay;    // ÖÜÆÚ¼ÆÊıÆ÷
+	data.reg_ctrl[0] = dmc->reg_ctrl[0];     // æ§åˆ¶å¯„å­˜å™¨
+	data.reg_ctrl[1] = dmc->reg_ctrl[1];     // æ§åˆ¶å¯„å­˜å™¨
+	data.reg_ctrl[2] = dmc->reg_ctrl[2];     // æ§åˆ¶å¯„å­˜å™¨
+	data.reg_ctrl[3] = dmc->reg_ctrl[3];     // æ§åˆ¶å¯„å­˜å™¨
+	data.reg_written[0] = dmc->reg_written[0];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	data.reg_written[1] = dmc->reg_written[1];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	data.reg_written[2] = dmc->reg_written[2];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	data.reg_written[3] = dmc->reg_written[3];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	data.length_counter = dmc->length_counter;  // éŸ³é•¿è®¡æ•°å™¨
+	data.period = dmc->period;          // å‘¨æœŸ
+	data.period_delay = dmc->period_delay;    // å‘¨æœŸè®¡æ•°å™¨
 	data.next_irq = dmc->next_irq;
 	//data.is_ntsc = dmc->is_ntsc;
 	//data.mute = dmc->mute;
@@ -1562,17 +1562,17 @@ ines_int_t dmc_load_state(ines_apu_dmc_t* dmc, FILE* fSave)
 	if(1 != fread(&data, sizeof(data), 1, fSave))
 		return -1;
 
-	dmc->reg_ctrl[0] = data.reg_ctrl[0];     // ¿ØÖÆ¼Ä´æÆ÷
-	dmc->reg_ctrl[1] = data.reg_ctrl[1];     // ¿ØÖÆ¼Ä´æÆ÷
-	dmc->reg_ctrl[2] = data.reg_ctrl[2];     // ¿ØÖÆ¼Ä´æÆ÷
-	dmc->reg_ctrl[3] = data.reg_ctrl[3];     // ¿ØÖÆ¼Ä´æÆ÷
-	dmc->reg_written[0] = data.reg_written[0];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	dmc->reg_written[1] = data.reg_written[1];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	dmc->reg_written[2] = data.reg_written[2];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	dmc->reg_written[3] = data.reg_written[3];  // ¿ØÖÆ¼Ä´æÆ÷Ğ´Èë±ê¼Ç
-	dmc->length_counter = data.length_counter;  // Òô³¤¼ÆÊıÆ÷
-	dmc->period = data.period;          // ÖÜÆÚ
-	dmc->period_delay = data.period_delay;    // ÖÜÆÚ¼ÆÊıÆ÷
+	dmc->reg_ctrl[0] = data.reg_ctrl[0];     // æ§åˆ¶å¯„å­˜å™¨
+	dmc->reg_ctrl[1] = data.reg_ctrl[1];     // æ§åˆ¶å¯„å­˜å™¨
+	dmc->reg_ctrl[2] = data.reg_ctrl[2];     // æ§åˆ¶å¯„å­˜å™¨
+	dmc->reg_ctrl[3] = data.reg_ctrl[3];     // æ§åˆ¶å¯„å­˜å™¨
+	dmc->reg_written[0] = data.reg_written[0];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	dmc->reg_written[1] = data.reg_written[1];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	dmc->reg_written[2] = data.reg_written[2];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	dmc->reg_written[3] = data.reg_written[3];  // æ§åˆ¶å¯„å­˜å™¨å†™å…¥æ ‡è®°
+	dmc->length_counter = data.length_counter;  // éŸ³é•¿è®¡æ•°å™¨
+	dmc->period = data.period;          // å‘¨æœŸ
+	dmc->period_delay = data.period_delay;    // å‘¨æœŸè®¡æ•°å™¨
 	dmc->next_irq = data.next_irq;
 	dmc->is_ntsc = (data.flags & 0x01) ? 1 : 0;
 	dmc->mute = (data.flags & 0x02) ? 1 : 0;
@@ -1603,7 +1603,7 @@ ines_int_t ines_apu_save_state(ines_apu_t* p_apu, FILE* fSave)
 	data.frame_delay = p_apu->frame_delay;
 	data.frame_start_cpu_cycles = p_apu->frame_start_cpu_cycles;
 	data.last_cycles = p_apu->last_cycles;
-	data.prev_out_x1000 = (ines_int_t)(p_apu->prev_out * 1000);  // ÓÃÓÚÆ½»¬Êä³ö£¨µÍÍ¨ÂË²¨£©
+	data.prev_out_x1000 = (ines_int_t)(p_apu->prev_out * 1000);  // ç”¨äºå¹³æ»‘è¾“å‡ºï¼ˆä½é€šæ»¤æ³¢ï¼‰
 
 
 	fwrite(&data, sizeof(data), 1, fSave);
@@ -1639,7 +1639,7 @@ ines_int_t ines_apu_load_state(ines_apu_t* p_apu, FILE* fSave)
 	p_apu->frame_delay = data.frame_delay;
 	p_apu->frame_start_cpu_cycles = data.frame_start_cpu_cycles;
 	p_apu->last_cycles = data.last_cycles;
-	p_apu->prev_out = data.prev_out_x1000 / 1000.0f;  // ÓÃÓÚÆ½»¬Êä³ö£¨µÍÍ¨ÂË²¨£©
+	p_apu->prev_out = data.prev_out_x1000 / 1000.0f;  // ç”¨äºå¹³æ»‘è¾“å‡ºï¼ˆä½é€šæ»¤æ³¢ï¼‰
 
 
 	if (0 != pulse_load_state(&p_apu->channel_pulse1, fSave) ||

@@ -502,7 +502,7 @@ static BOOL wVMemory_OnCreate(HWND hWnd, LPCREATESTRUCT  lpCreateStruct)
 
 	//hMenu = LoadMenu(GetModuleHandle(NULL), MAKEINTRESOURCE(IDC_MEMORY_VIEW));
 	// SetMenu(hWnd, hMenu);
-	//AppendMenu(hMenu, MF_STRING, 0x1001, _T("³ÌĞòÄÚ´æ"))
+	//AppendMenu(hMenu, MF_STRING, 0x1001, _T("ç¨‹åºå†…å­˜"))
 
 
 	SetTimer(hWnd, 1, 50, NULL);

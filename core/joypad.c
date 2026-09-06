@@ -62,8 +62,8 @@ void ines_joypad_update_bits(ines_joypad_t* p_joypad, ines_int_t man_key_state, 
 	p_joypad->joypad_bits[1] = second_key_state;
 	if(p_joypad->flash_switch == 0)
 	{
-		UPDATE_BIT_WITH_KEY(p_joypad->joypad_bits[0], JOYPAD_KEY_A, 'S');  // 连发A
-		UPDATE_BIT_WITH_KEY(p_joypad->joypad_bits[0], JOYPAD_KEY_B, 'A');  // 连发B
+		UPDATE_BIT_WITH_KEY(p_joypad->joypad_bits[0], JOYPAD_KEY_A, 'S');  // 杩炲彂A
+		UPDATE_BIT_WITH_KEY(p_joypad->joypad_bits[0], JOYPAD_KEY_B, 'A');  // 杩炲彂B
 	}
 	UPDATE_BIT_WITH_KEY(p_joypad->joypad_bits[0], JOYPAD_KEY_A, 'X');
 	UPDATE_BIT_WITH_KEY(p_joypad->joypad_bits[0], JOYPAD_KEY_B, 'Z');

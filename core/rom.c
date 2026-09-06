@@ -75,7 +75,7 @@ ines_bool_t ines_rom_load_from_file(ines_rom_t*  p_rom, ines_cstr_t strFileName)
 	INES_LOG(LOG_INF, MOD_ROM, ISTR("open nes file `%s`...\n"), strFileName);
 
 
-	// ´ò¿ªÎÄ¼ş
+	// æ‰“å¼€æ–‡ä»¶
 	pfnes = _tfopen(strFileName, ISTR("rb")); 
 
 	if(pfnes == NULL)
@@ -107,7 +107,7 @@ ines_bool_t ines_rom_load_from_file(ines_rom_t*  p_rom, ines_cstr_t strFileName)
 		return ines_false;
 	}
 
-	//  ÔÊĞíÃ»ÓĞVROM£¬¶ø½øĞĞ¶¯Ì¬Ğ´Èë
+	//  å…è®¸æ²¡æœ‰VROMï¼Œè€Œè¿›è¡ŒåŠ¨æ€å†™å…¥
 /*	if(header.VROM_block_num == 0 )
 	{
 		INES_LOG(LOG_ERR, MOD_ROM, ISTR("open nes file `%s` failed: invalid file VROM block number.\n"), strFileName);
@@ -118,7 +118,7 @@ ines_bool_t ines_rom_load_from_file(ines_rom_t*  p_rom, ines_cstr_t strFileName)
 		header.PROM_block_num, header.VROM_block_num, header.flag1, header.flag2);
 
 
-	// ÓĞ½ğÊÖÖ¸Êı¾İ 512 ×Ö½Ú
+	// æœ‰é‡‘æ‰‹æŒ‡æ•°æ® 512 å­—èŠ‚
 	if(header.flag1 & 0x04)
 	{
 		sz = fread(&trainer, 1, INES_TRAINER_BLOCK_SIZE, pfnes);

@@ -8,20 +8,20 @@
 
 #define VRAM(p_ppu, addr)   ( (p_ppu)->mem_bank[ (addr) >> 10 ][ (addr) & 0x3ff ] )
 
-// ³õÊ¼»¯
+// åˆå§‹åŒ–
 void ines_ppu_init(ines_ppu_t* p_ppu)
 {
 	
 }
 
-// É¾³ı
+// åˆ é™¤
 void ines_ppu_free(ines_ppu_t* p_ppu)
 {
 
 
 }
 
-// Èí¼ş¸´Î»
+// è½¯ä»¶å¤ä½
 void ines_ppu_reset(ines_ppu_t* p_ppu)
 {
 	p_ppu->reg_ctrl_1 = 0;
@@ -49,7 +49,7 @@ void ines_ppu_reset(ines_ppu_t* p_ppu)
 	memset(p_ppu->pattern_type, 0, sizeof(p_ppu->pattern_type));
 	memset(p_ppu->pattern_table_used, 0, sizeof(p_ppu->pattern_table_used));
 
-	// reset banks . ÏÈ²»½øĞĞ³õÊ¼»¯£¬µÈmapper³õÊ¼»¯ºó£¬Èç¹ûÃ»ÓĞÉèÖÃpattern¿éÔò×Ô¶¯Ê¹ÓÃRAM·½Ê½
+	// reset banks . å…ˆä¸è¿›è¡Œåˆå§‹åŒ–ï¼Œç­‰mapperåˆå§‹åŒ–åï¼Œå¦‚æœæ²¡æœ‰è®¾ç½®patternå—åˆ™è‡ªåŠ¨ä½¿ç”¨RAMæ–¹å¼
 	p_ppu->mem_bank[0x00] = NULL; //p_ppu->pattern_table + (0x00 << 10);
 	p_ppu->mem_bank[0x01] = NULL; //p_ppu->pattern_table + (0x01 << 10);
 	p_ppu->mem_bank[0x02] = NULL; //p_ppu->pattern_table + (0x02 << 10);
@@ -353,8 +353,8 @@ static void render_spr(ines_ppu_t* p_ppu, ines_byte_t* p_line,  ines_byte_t* sol
 // case p_line is NULL indicated don't draw really
 void ines_ppu_render_line(ines_ppu_t* p_ppu, ines_byte_t* p_line)
 {
-	ines_byte_t     solid_flags[SCREEN_WIDTH];   // ²âÊÔµ±Ç°ĞĞÄ³¸öµãÊÇ·ñÒÑ»æÖÆ±³¾°£¬»òÕß ºóÌ¨¾«Áé£¬»òÕßÇ°Ì¨¾«Áé¡£
-	ines_byte_t     dummy_line[SCREEN_WIDTH];   // Èç¹û²»Êä³ö£¬ÔòÊ¹ÓÃÒ»¸ö¼ÙµÄÊä³ö»º³å¡£
+	ines_byte_t     solid_flags[SCREEN_WIDTH];   // æµ‹è¯•å½“å‰è¡ŒæŸä¸ªç‚¹æ˜¯å¦å·²ç»˜åˆ¶èƒŒæ™¯ï¼Œæˆ–è€… åå°ç²¾çµï¼Œæˆ–è€…å‰å°ç²¾çµã€‚
+	ines_byte_t     dummy_line[SCREEN_WIDTH];   // å¦‚æœä¸è¾“å‡ºï¼Œåˆ™ä½¿ç”¨ä¸€ä¸ªå‡çš„è¾“å‡ºç¼“å†²ã€‚
 
 
 	//INES_LOG(LOG_DBG, MOD_PPU, ISTR("ines_ppu_render_line: #%d"), p_ppu-> current_line);
@@ -553,13 +553,13 @@ static void render_spr(ines_ppu_t* p_ppu, ines_byte_t* p_line,  ines_byte_t* sol
 		if(spr_y > p_ppu->current_line || spr_y + spr_height <= p_ppu->current_line)
 			continue;
 	
-		// ¾«Áé
+		// ç²¾çµ
 		spr_num++;
 
-		// ÊÇ·ñ»æÖÆ³¬¹ı8¸ö¾«ÁéÃ¿ĞĞ
+		// æ˜¯å¦ç»˜åˆ¶è¶…è¿‡8ä¸ªç²¾çµæ¯è¡Œ
 		// if(spr_num > 8 && !setting.draw_all_sprite_than_8) continue; 
 
-		// ´¹Ö±·­×ª
+		// å‚ç›´ç¿»è½¬
 		if(0 == (spr[2] & 0x80))
 			y = p_ppu->current_line - spr_y;
 		else
@@ -612,11 +612,11 @@ static void render_spr(ines_ppu_t* p_ppu, ines_byte_t* p_line,  ines_byte_t* sol
 				start_x = (8-spr_x);
 		}
 
-		// ÏÈ¼ÆËãÏñËØµÄÎ»ÖÃ
+		// å…ˆè®¡ç®—åƒç´ çš„ä½ç½®
 		p = p_line + spr_x + start_x;
 		pf = solid_flags + spr_x + start_x;
 
-		// Ë®Æ½·­×ª
+		// æ°´å¹³ç¿»è½¬
 		if(0 == (spr[2] & 0x40))
 		{
 			x_inc = 1;
@@ -653,7 +653,7 @@ static void render_spr(ines_ppu_t* p_ppu, ines_byte_t* p_line,  ines_byte_t* sol
 						}
 					}
 
-					if(prio )  // ºóÌ¨¾«Áé¡£¿Õ°×µÄµØ·½²Å¿ÉÒÔ»æÖÆ
+					if(prio )  // åå°ç²¾çµã€‚ç©ºç™½çš„åœ°æ–¹æ‰å¯ä»¥ç»˜åˆ¶
 					{
 						*pf |= SPR_WHITE_MASK;
 						if( (*pf & BG_WHITE_MASK) == 0)
@@ -667,7 +667,7 @@ static void render_spr(ines_ppu_t* p_ppu, ines_byte_t* p_line,  ines_byte_t* sol
 					}
 					else
 					{
-						if( (*pf & SPR_WHITE_MASK) == 0) // Ç°Ì¨¾«Áé£¬
+						if( (*pf & SPR_WHITE_MASK) == 0) // å‰å°ç²¾çµï¼Œ
 						{
 							*pf |= SPR_WHITE_MASK;
 							if(p_ppu->reg_ctrl_2 & PPU_SINGCOLOR)

@@ -230,10 +230,10 @@ ines_cstr_t ines_get_ctime_u()
 	_ftime( &timebuffer );
 	tv.tv_sec  = (long)timebuffer.time;
 	tv.tv_usec = timebuffer.millitm;
-#define MTRP   ISTR("%03d")   // Ö§³ÖºÁÃë¼¶µÄ ×¢ÒâÕâÀïµÄtv_usec ÊÇºÁÃë,²»ÊÇÎ¢Ãë
+#define MTRP   ISTR("%03d")   // æ”¯æŒæ¯«ç§’çº§çš„ æ³¨æ„è¿™é‡Œçš„tv_usec æ˜¯æ¯«ç§’,ä¸æ˜¯å¾®ç§’
 #elif defined linux
 	gettimeofday(&tv, NULL);
-#define MTRP   ISTR("%06ld")    // Ö§³ÖÎ¢Ãë¼¶
+#define MTRP   ISTR("%06ld")    // æ”¯æŒå¾®ç§’çº§
 #endif
 	tsec = tv.tv_sec;
 	tm = localtime(&tsec);
@@ -279,7 +279,7 @@ void ines_log(ines_log_level_t level, ines_log_module_t module, ines_cstr_t strF
 		len += ines_snprintf(strBuffer+len, count_of(strBuffer)-len, ISTR("%s"), module);
 	}
 
-	// log text (ÁôÒ»¸ö×Ö·û)
+	// log text (ç•™ä¸€ä¸ªå­—ç¬¦)
 	len += ines_vsnprintf(strBuffer+len, count_of(strBuffer)-len-1, strFmt, vl);
 
 

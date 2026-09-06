@@ -53,23 +53,23 @@ struct _ines_cpu_
 	ines_byte_t       reg_P;
 	ines_byte_t       reg_SP;
 	ines_word_t       reg_PC;
-	ines_byte_t*      mem_bank[8];         // ÄÚ´æ·Ö¿éÓ³Éä£¬Ç°3¿éÎŞĞ§
-	ines_byte_t       bank_writeable[8];   // ÄÚ´æ·Ö¿éÊÇ·ñ¿ÉĞ´
-	ines_byte_t       RAM[0x800]; // ¿Õ¼ä 0~2000H£¬ ¾µÏñ3´Î
+	ines_byte_t*      mem_bank[8];         // å†…å­˜åˆ†å—æ˜ å°„ï¼Œå‰3å—æ— æ•ˆ
+	ines_byte_t       bank_writeable[8];   // å†…å­˜åˆ†å—æ˜¯å¦å¯å†™
+	ines_byte_t       RAM[0x800]; // ç©ºé—´ 0~2000Hï¼Œ é•œåƒ3æ¬¡
 	ines_int64_t      total_cycles;
 	ines_int_t        burn_cycles;
 	ines_bool_t       jammed;
 	ines_byte_t       INT_pending; 
 	ines_int_t        apu_next_irq;
-	ines_byte_t       dead_mem[0x2000]; // ³õÊ¼
+	ines_byte_t       dead_mem[0x2000]; // åˆå§‹
 };
 
 
-// ³õÊ¼»¯
+// åˆå§‹åŒ–
 void ines_cpu_init(ines_cpu_t* p_cpu);
-// É¾³ı
+// åˆ é™¤
 void ines_cpu_free(ines_cpu_t* p_cpu);
-// Èí¼ş¸´Î»
+// è½¯ä»¶å¤ä½
 void ines_cpu_reset(ines_cpu_t* p_cpu);
 
 ines_int_t  ines_cpu_exec(ines_cpu_t* p_cpu, ines_int_t cycles);

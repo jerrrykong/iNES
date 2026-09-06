@@ -5,7 +5,7 @@
 
 
 
-// ³õÊ¼»¯
+// åˆå§‹åŒ–
 void ines_host_init(ines_host_t* p_host, int is_ntsc)
 {
 	if(p_host == NULL)
@@ -24,7 +24,7 @@ void ines_host_init(ines_host_t* p_host, int is_ntsc)
 
 }
 
-// É¾³ı
+// åˆ é™¤
 void ines_host_free(ines_host_t* p_host)
 {
 	if(p_host == NULL)
@@ -40,7 +40,7 @@ void ines_host_free(ines_host_t* p_host)
 	p_host->status = NES_STATUS_OFF;
 }
 
-// ¼ÓÔØROMÎÄ¼ş
+// åŠ è½½ROMæ–‡ä»¶
 ines_bool_t ines_host_load_rom(ines_host_t* p_host, ines_cstr_t strNesFileName, ines_cstr_t strRAMFileName)
 {
 	ines_bool_t ret;
@@ -62,7 +62,7 @@ ines_bool_t ines_host_load_rom(ines_host_t* p_host, ines_cstr_t strNesFileName, 
 		return ines_false;
 
 
-	// Çå¿Õ£¬ºóÃæĞèÒª´ÓÎÄ¼ş¶ÁÈ¡
+	// æ¸…ç©ºï¼Œåé¢éœ€è¦ä»æ–‡ä»¶è¯»å–
 	memset(p_host->SRAM, 0, sizeof(p_host->SRAM));
 
 	// LOAD SaveSRAM;
@@ -72,13 +72,13 @@ ines_bool_t ines_host_load_rom(ines_host_t* p_host, ines_cstr_t strNesFileName, 
 		ines_host_load_sram(p_host, strRAMFileName);
 	}
 
-	// Èç¹ûÓĞtrainer, ÔòĞ´Èë 0x7000,
+	// å¦‚æœæœ‰trainer, åˆ™å†™å…¥ 0x7000,
 	if(p_host->rom.has_trainer)
 	{
 		memcpy(p_host->SRAM + 0x1000, p_host->rom.trainer_data, sizeof(p_host->rom.trainer_data));
 	}
 
-	// ¼ÆËãµØÖ·ÑÚÂë
+	// è®¡ç®—åœ°å€æ©ç 
 	p_host->prom_8k_num = p_host->rom.PROM_block_num * 2;
 	p_host->vrom_1k_num = p_host->rom.VROM_block_num * 8;
 	p_host->prom_8k_mask = addr_mask(p_host->prom_8k_num);
@@ -97,7 +97,7 @@ ines_bool_t ines_host_load_rom(ines_host_t* p_host, ines_cstr_t strNesFileName, 
 	return ines_true;
 }
 
-// Èí¼ş¸´Î»
+// è½¯ä»¶å¤ä½
 void ines_host_reset(ines_host_t* p_host)
 {
 	if(p_host == NULL || p_host->status == NES_STATUS_OFF)
@@ -109,7 +109,7 @@ void ines_host_reset(ines_host_t* p_host)
 
 	ines_rom_reset(&p_host->rom);
 	
-	// Ç°3¿é8KµØÖ·¿Õ¼ä¶¼ÓĞ·ÖÅäÌØÊâÓÃÍ¾¡£
+	// å‰3å—8Kåœ°å€ç©ºé—´éƒ½æœ‰åˆ†é…ç‰¹æ®Šç”¨é€”ã€‚
 	p_host->cpu.mem_bank[0] = NULL;
 	p_host->cpu.mem_bank[1] = NULL;
 	p_host->cpu.mem_bank[2] = NULL;
@@ -148,7 +148,7 @@ void ines_host_reset(ines_host_t* p_host)
 	p_host->base_cycles = 0;
 	p_host->cpu_cycles = 0;
 
-	// ±£³Ö×´Ì¬
+	// ä¿æŒçŠ¶æ€
 	//p_host->status = NES_STATUS_RUNNING;
 	p_host->frame_count = 0;
 }
@@ -269,7 +269,7 @@ ines_int_t ines_host_doframe(ines_host_t* p_host, ines_byte_t* p_screen)
 
 
 
-// ×ÜÏß¶ÁĞ´£¨2000hÒÔÉÏ¿Õ¼ä£¬CPUÄÚ²¿RAMµÄ¶ÁĞ´²»Í¨¹ı´Ë½Ó¿Ú
+// æ€»çº¿è¯»å†™ï¼ˆ2000hä»¥ä¸Šç©ºé—´ï¼ŒCPUå†…éƒ¨RAMçš„è¯»å†™ä¸é€šè¿‡æ­¤æ¥å£
 ines_byte_t  ines_host_read(ines_host_t* p_host, ines_word_t addr)
 {
 	if(p_host == NULL)
@@ -602,7 +602,7 @@ void ines_set_prom_bank_4(ines_host_t* p_host, ines_word_t b4, ines_word_t b5, i
 	p_host->cpu.mem_bank[5] = p_host->rom.pPROMs + (b5 << 13);
 	p_host->cpu.mem_bank[6] = p_host->rom.pPROMs + (b6 << 13);
 	p_host->cpu.mem_bank[7] = p_host->rom.pPROMs + (b7 << 13);
-	p_host->cpu.bank_writeable[4] &= ~NES_BANK_WRITE_ABLE;  // Ö¸³ö´Ë¿éÄÚ´æÎªÖ»¶Á
+	p_host->cpu.bank_writeable[4] &= ~NES_BANK_WRITE_ABLE;  // æŒ‡å‡ºæ­¤å—å†…å­˜ä¸ºåªè¯»
 	p_host->cpu.bank_writeable[5] &= ~NES_BANK_WRITE_ABLE;
 	p_host->cpu.bank_writeable[6] &= ~NES_BANK_WRITE_ABLE;
 	p_host->cpu.bank_writeable[7] &= ~NES_BANK_WRITE_ABLE;
@@ -616,12 +616,12 @@ void ines_set_prom_bank_5(ines_host_t* p_host, ines_word_t b3, ines_word_t b4, i
 	ines_validate_prom_bank(5, b5);
 	ines_validate_prom_bank(6, b6);
 	ines_validate_prom_bank(7, b7);
-	p_host->cpu.mem_bank[3] = p_host->rom.pPROMs + (b3 << 13); // ÕâÀïRAM²»¿ÉĞ´
+	p_host->cpu.mem_bank[3] = p_host->rom.pPROMs + (b3 << 13); // è¿™é‡ŒRAMä¸å¯å†™
 	p_host->cpu.mem_bank[4] = p_host->rom.pPROMs + (b4 << 13);
 	p_host->cpu.mem_bank[5] = p_host->rom.pPROMs + (b5 << 13);
 	p_host->cpu.mem_bank[6] = p_host->rom.pPROMs + (b6 << 13);
 	p_host->cpu.mem_bank[7] = p_host->rom.pPROMs + (b7 << 13);
-	p_host->cpu.bank_writeable[3] &= ~NES_BANK_WRITE_ABLE;   // Ö¸³ö´Ë¿éÄÚ´æÎªÖ»¶Á
+	p_host->cpu.bank_writeable[3] &= ~NES_BANK_WRITE_ABLE;   // æŒ‡å‡ºæ­¤å—å†…å­˜ä¸ºåªè¯»
 	p_host->cpu.bank_writeable[4] &= ~NES_BANK_WRITE_ABLE;
 	p_host->cpu.bank_writeable[5] &= ~NES_BANK_WRITE_ABLE;
 	p_host->cpu.bank_writeable[6] &= ~NES_BANK_WRITE_ABLE;
@@ -635,7 +635,7 @@ void ines_set_prom_bank_n(ines_host_t* p_host, ines_word_t n, ines_word_t bn)
 	ines_assert(3 <= n && n <= 7);
 	ines_validate_prom_bank(n, bn);
 	p_host->cpu.mem_bank[n] = p_host->rom.pPROMs + (bn << 13);
-	p_host->cpu.bank_writeable[n] &= ~NES_BANK_WRITE_ABLE;   // Ö¸³ö´Ë¿éÄÚ´æÎªÖ»¶Á
+	p_host->cpu.bank_writeable[n] &= ~NES_BANK_WRITE_ABLE;   // æŒ‡å‡ºæ­¤å—å†…å­˜ä¸ºåªè¯»
 
 }
 
@@ -645,8 +645,8 @@ void ines_set_sram_bank_n(ines_host_t* p_host, ines_word_t n, ines_word_t bn)
 	// sram bank n 3~6, bn=0~7
 	ines_assert(3 <= n && n <= 6);
 	ines_validate_sram_bank(n, bn);
-	p_host->cpu.mem_bank[n] = p_host->SRAM + (bn<<13); // ÕâÀïRAM¿ÉĞ´
-	p_host->cpu.bank_writeable[n] |= NES_BANK_WRITE_ABLE;   // Ö¸³ö´Ë¿éÄÚ´æÎª¿ÉĞ´Èë
+	p_host->cpu.mem_bank[n] = p_host->SRAM + (bn<<13); // è¿™é‡ŒRAMå¯å†™
+	p_host->cpu.bank_writeable[n] |= NES_BANK_WRITE_ABLE;   // æŒ‡å‡ºæ­¤å—å†…å­˜ä¸ºå¯å†™å…¥
 	p_host->SRAM_used[bn] = 1;  // indicated which 8K SRAM is used. 
 }
 

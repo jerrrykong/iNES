@@ -1,4 +1,4 @@
-// iNES.cpp : ¶¨ÒåÓ¦ÓÃ³ÌĞòµÄÈë¿Úµã¡£
+// iNES.cpp : å®šä¹‰åº”ç”¨ç¨‹åºçš„å…¥å£ç‚¹ã€‚
 //
 
 #include "stdafx.h"
@@ -16,7 +16,7 @@
 #include "dlgNetPlay.h"
 #include "../comm/net.h"
 
-// Ä£ÄâÆ÷È«¾Ö±äÁ¿
+// æ¨¡æ‹Ÿå™¨å…¨å±€å˜é‡
 ines_host_t   host;
 
 int channel_enabled[5] = {1,1,1,1,1};
@@ -45,7 +45,7 @@ RGBQUAD rgbQuard[MAX_COLORS] =
 };
 
 
-// standard ascii 5x7 font    ×İÏòÈ¡Ä£
+// standard ascii 5x7 font    çºµå‘å–æ¨¡
 // defines ascii characters 0x20-0x7f (32-127)
 ines_byte_t code_ascii_5x7[] = {
 	0x00, 0x00, 0x00, 0x00, 0x00,// ' '
@@ -149,8 +149,8 @@ ines_byte_t code_ascii_5x7[] = {
 ines_byte_t     screen_buffer[2][SCREEN_IMAGE_BYTES];
 ines_byte_t     bmp_info_buffer[sizeof(BITMAPINFOHEADER) + sizeof(RGBQUAD) * MAX_COLORS];
 BITMAPINFO*     bmp_info = (BITMAPINFO*)bmp_info_buffer;
-ines_byte_t*    screen_front = screen_buffer[0];    // µ±Ç°ÕıÔÚÏÔÊ¾µÄBMP
-ines_byte_t*    screen_back = screen_buffer[1];     // ºóÌ¨ÕıÔÚäÖÈ¾µÄBUFFFER
+ines_byte_t*    screen_front = screen_buffer[0];    // å½“å‰æ­£åœ¨æ˜¾ç¤ºçš„BMP
+ines_byte_t*    screen_back = screen_buffer[1];     // åå°æ­£åœ¨æ¸²æŸ“çš„BUFFFER
 ines_int_t      nes_cpu_rate;
 extern ines_int_t      nes_cpu_trace_ops;
 ines_int_t      screen_scale = 200; // % percent
@@ -160,7 +160,7 @@ ines_int_t      key_flash_count = 0; // up to n frames
 ines_int_t      main_key_state = 0;
 ines_int_t      second_key_state = 0;
 ines_int_t      ctrl_key_state = 0;
-ines_char_t     lastest_open_files[10][1024]; // ×î½ü´ò¿ªµÄ10¸öÎÄ¼ş
+ines_char_t     lastest_open_files[10][1024]; // æœ€è¿‘æ‰“å¼€çš„10ä¸ªæ–‡ä»¶
 
 HWND   hMainWnd = NULL;
 
@@ -184,13 +184,13 @@ DWORD   dwFrameLastTime = 0;
 ines_int_t   pause_flag = 0;
 
 ines_int_t   is_net_play = 0;
-// ÍøÂçÓÎÏ·Ê±»º³åµÄÖ¡Êı
+// ç½‘ç»œæ¸¸æˆæ—¶ç¼“å†²çš„å¸§æ•°
 ines_int_t   net_cache_num = 4;
 
 #define NET_CACHE_MAX_SIZE    10
-// »º³åÇø£¬  31~24: CMD, 23~16: unused; 15~8: second joypad state, 7~0: main joypad state.
+// ç¼“å†²åŒºï¼Œ  31~24: CMD, 23~16: unused; 15~8: second joypad state, 7~0: main joypad state.
 ines_dword_t   net_cache[NET_CACHE_MAX_SIZE];
-// µ±Ç°»º³åµÄÖ¡Êı
+// å½“å‰ç¼“å†²çš„å¸§æ•°
 ines_int_t   net_cache_size = 0;
 
 
@@ -205,7 +205,7 @@ typedef struct _WaveOutBuffer {
 
 
 #define MAX_BUF_NUM   10
-WAVEOUTBUFFER   wvBuffer[MAX_BUF_NUM]; // Ë«»º³å
+WAVEOUTBUFFER   wvBuffer[MAX_BUF_NUM]; // åŒç¼“å†²
 int             wvPlayingNum = 0;
 
 int             audio_cache_num = 4;
@@ -215,18 +215,18 @@ HWAVEOUT    hwvOut = NULL;
 
 WAVEOUTBUFFER* cur_wave_buffer = NULL;
 
-// È«¾Ö±äÁ¿:
-HINSTANCE hInst;								// µ±Ç°ÊµÀı
-TCHAR szTitle[MAX_LOADSTRING];					// ±êÌâÀ¸ÎÄ±¾
-TCHAR szWindowClass[MAX_LOADSTRING];			// Ö÷´°¿ÚÀàÃû
+// å…¨å±€å˜é‡:
+HINSTANCE hInst;								// å½“å‰å®ä¾‹
+TCHAR szTitle[MAX_LOADSTRING];					// æ ‡é¢˜æ æ–‡æœ¬
+TCHAR szWindowClass[MAX_LOADSTRING];			// ä¸»çª—å£ç±»å
 
-TCHAR szROMFilePath[INES_MAX_PATH]; // ×°ÔØµÄROMÎÄ¼şÂ·¾¶
-TCHAR szROMTitle[INES_MAX_PATH]; // ROM µÄ±êÌâ
-TCHAR szRAMFilePath[INES_MAX_PATH]; // ¹ØÁªµÄ RAMÎÄ¼şµÄÂ·¾¶
+TCHAR szROMFilePath[INES_MAX_PATH]; // è£…è½½çš„ROMæ–‡ä»¶è·¯å¾„
+TCHAR szROMTitle[INES_MAX_PATH]; // ROM çš„æ ‡é¢˜
+TCHAR szRAMFilePath[INES_MAX_PATH]; // å…³è”çš„ RAMæ–‡ä»¶çš„è·¯å¾„
 
 TCHAR szPrivateProfilePath[INES_MAX_PATH];
 
-// ´Ë´úÂëÄ£¿éÖĞ°üº¬µÄº¯ÊıµÄÇ°ÏòÉùÃ÷:
+// æ­¤ä»£ç æ¨¡å—ä¸­åŒ…å«çš„å‡½æ•°çš„å‰å‘å£°æ˜:
 ATOM				MyRegisterClass(HINSTANCE hInstance);
 BOOL				InitInstance(HINSTANCE, int);
 LRESULT CALLBACK	WndProc(HWND, UINT, WPARAM, LPARAM);
@@ -324,28 +324,28 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
 	UNREFERENCED_PARAMETER(hPrevInstance);
 	UNREFERENCED_PARAMETER(lpCmdLine);
 
- 	// TODO: ÔÚ´Ë·ÅÖÃ´úÂë¡£
+ 	// TODO: åœ¨æ­¤æ”¾ç½®ä»£ç ã€‚
 	_tsetlocale(LC_CTYPE, _T(""));
 
 	ines_set_log_stamp_func(GetNESCPUCycles);
 
-	// ³õÊ¼»¯È«¾Ö×Ö·û´®
+	// åˆå§‹åŒ–å…¨å±€å­—ç¬¦ä¸²
 	LoadString(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
 	LoadString(hInstance, IDC_INES, szWindowClass, MAX_LOADSTRING);
 
 
 	getRelativeFilePath(szPrivateProfilePath, count_of(szPrivateProfilePath), ISTR("config.ini"));
 
-	// ¼ÓÔØÅäÖÃ
+	// åŠ è½½é…ç½®
 	audio_volume = GetConfigInt(ISTR("audio"), ISTR("volume"), 80);
 	audio_mute   = GetConfigInt(ISTR("audio"), ISTR("mute"), 0);
 
-	// ×î½ü´ò¿ªµÄÎÄ¼ş
+	// æœ€è¿‘æ‰“å¼€çš„æ–‡ä»¶
 	LoadHistories();
 
 	MyRegisterClass(hInstance);
 
-	// Ö´ĞĞÓ¦ÓÃ³ÌĞò³õÊ¼»¯:
+	// æ‰§è¡Œåº”ç”¨ç¨‹åºåˆå§‹åŒ–:
 	if (!InitInstance (hInstance, nCmdShow))
 	{
 		return FALSE;
@@ -372,7 +372,7 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
 
 	hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_INES));
 
-	// Ö÷ÏûÏ¢Ñ­»·:
+	// ä¸»æ¶ˆæ¯å¾ªç¯:
 	while ( TRUE )
 	{
 		if(PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
@@ -408,17 +408,17 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
 
 
 //
-//  º¯Êı: MyRegisterClass()
+//  å‡½æ•°: MyRegisterClass()
 //
-//  Ä¿µÄ: ×¢²á´°¿ÚÀà¡£
+//  ç›®çš„: æ³¨å†Œçª—å£ç±»ã€‚
 //
-//  ×¢ÊÍ:
+//  æ³¨é‡Š:
 //
-//    ½öµ±Ï£Íû
-//    ´Ë´úÂëÓëÌí¼Óµ½ Windows 95 ÖĞµÄ¡°RegisterClassEx¡±
-//    º¯ÊıÖ®Ç°µÄ Win32 ÏµÍ³¼æÈİÊ±£¬²ÅĞèÒª´Ëº¯Êı¼°ÆäÓÃ·¨¡£µ÷ÓÃ´Ëº¯ÊıÊ®·ÖÖØÒª£¬
-//    ÕâÑùÓ¦ÓÃ³ÌĞò¾Í¿ÉÒÔ»ñµÃ¹ØÁªµÄ
-//    ¡°¸ñÊ½ÕıÈ·µÄ¡±Ğ¡Í¼±ê¡£
+//    ä»…å½“å¸Œæœ›
+//    æ­¤ä»£ç ä¸æ·»åŠ åˆ° Windows 95 ä¸­çš„â€œRegisterClassExâ€
+//    å‡½æ•°ä¹‹å‰çš„ Win32 ç³»ç»Ÿå…¼å®¹æ—¶ï¼Œæ‰éœ€è¦æ­¤å‡½æ•°åŠå…¶ç”¨æ³•ã€‚è°ƒç”¨æ­¤å‡½æ•°ååˆ†é‡è¦ï¼Œ
+//    è¿™æ ·åº”ç”¨ç¨‹åºå°±å¯ä»¥è·å¾—å…³è”çš„
+//    â€œæ ¼å¼æ­£ç¡®çš„â€å°å›¾æ ‡ã€‚
 //
 ATOM MyRegisterClass(HINSTANCE hInstance)
 {
@@ -442,14 +442,14 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 }
 
 //
-//   º¯Êı: InitInstance(HINSTANCE, int)
+//   å‡½æ•°: InitInstance(HINSTANCE, int)
 //
-//   Ä¿µÄ: ±£´æÊµÀı¾ä±ú²¢´´½¨Ö÷´°¿Ú
+//   ç›®çš„: ä¿å­˜å®ä¾‹å¥æŸ„å¹¶åˆ›å»ºä¸»çª—å£
 //
-//   ×¢ÊÍ:
+//   æ³¨é‡Š:
 //
-//        ÔÚ´Ëº¯ÊıÖĞ£¬ÎÒÃÇÔÚÈ«¾Ö±äÁ¿ÖĞ±£´æÊµÀı¾ä±ú²¢0
-//        ´´½¨ºÍÏÔÊ¾Ö÷³ÌĞò´°¿Ú¡£
+//        åœ¨æ­¤å‡½æ•°ä¸­ï¼Œæˆ‘ä»¬åœ¨å…¨å±€å˜é‡ä¸­ä¿å­˜å®ä¾‹å¥æŸ„å¹¶0
+//        åˆ›å»ºå’Œæ˜¾ç¤ºä¸»ç¨‹åºçª—å£ã€‚
 //
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 {
@@ -459,7 +459,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
    WAVEFORMATEX   wfmt;
    int i, x, y;
 
-   hInst = hInstance; // ½«ÊµÀı¾ä±ú´æ´¢ÔÚÈ«¾Ö±äÁ¿ÖĞ
+   hInst = hInstance; // å°†å®ä¾‹å¥æŸ„å­˜å‚¨åœ¨å…¨å±€å˜é‡ä¸­
 
    INES_LOG(LOG_NTY, MOD_SYS, ISTR("=========================================================\n"));
 #ifdef _DEBUG
@@ -592,13 +592,13 @@ VOID Cleanup()
 }
 
 //
-//  º¯Êı: WndProc(HWND, UINT, WPARAM, LPARAM)
+//  å‡½æ•°: WndProc(HWND, UINT, WPARAM, LPARAM)
 //
-//  Ä¿µÄ: ´¦ÀíÖ÷´°¿ÚµÄÏûÏ¢¡£
+//  ç›®çš„: å¤„ç†ä¸»çª—å£çš„æ¶ˆæ¯ã€‚
 //
-//  WM_COMMAND	- ´¦ÀíÓ¦ÓÃ³ÌĞò²Ëµ¥
-//  WM_PAINT	- »æÖÆÖ÷´°¿Ú
-//  WM_DESTROY	- ·¢ËÍÍË³öÏûÏ¢²¢·µ»Ø
+//  WM_COMMAND	- å¤„ç†åº”ç”¨ç¨‹åºèœå•
+//  WM_PAINT	- ç»˜åˆ¶ä¸»çª—å£
+//  WM_DESTROY	- å‘é€é€€å‡ºæ¶ˆæ¯å¹¶è¿”å›
 //
 //
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -610,7 +610,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	switch (message)
 	{
 	case WM_CREATE:
-		// ½ÓÊÜÍÏ·ÅÎÄ¼şÖ±½Ó´ò¿ª
+		// æ¥å—æ‹–æ”¾æ–‡ä»¶ç›´æ¥æ‰“å¼€
 		DragAcceptFiles(hWnd, TRUE);
 		break;
 	case WM_DROPFILES:
@@ -622,7 +622,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_COMMAND:
 		wmId    = LOWORD(wParam);
 		wmEvent = HIWORD(wParam);
-		// ·ÖÎö²Ëµ¥Ñ¡Ôñ:
+		// åˆ†æèœå•é€‰æ‹©:
 		switch (wmId)
 		{
 		case IDM_ABOUT:
@@ -631,7 +631,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		case IDM_EXIT:
 			DestroyWindow(hWnd);
 			break;
-		case IDM_OPEN:   // ÔØÈëROMÎÄ¼ş
+		case IDM_OPEN:   // è½½å…¥ROMæ–‡ä»¶
 			OnMenuOpen();
 			break;
 		case IDM_CLOSE:
@@ -647,13 +647,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 					memset(net_cache, 0, sizeof(net_cache));
 					net_cache_size = net_cache_num;
 
-					// Ó²¼ş¸´Î»
+					// ç¡¬ä»¶å¤ä½
 					OnMenuHardReset();
 				}
 			}
 			else
 			{
-				MessageBox(hWnd, ISTR("ÇëÏÈÔØÈëÒ»¸öROM¡£"), szTitle, MB_OK|MB_ICONWARNING);
+				MessageBox(hWnd, ISTR("è¯·å…ˆè½½å…¥ä¸€ä¸ªROMã€‚"), szTitle, MB_OK|MB_ICONWARNING);
 			}
 			break;
 		case IDM_RECENT_FILES+0:
@@ -669,7 +669,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			NesOpenFile(lastest_open_files[wmId - IDM_RECENT_FILES]);
 			break;
 		case IDM_SOFTRESET:
-			// ·ÇÖ÷»ú²»ÄÜ¸´Î»
+			// éä¸»æœºä¸èƒ½å¤ä½
 			if(is_net_play)
 			{
 				ctrl_key_state = NET_CTRL_CODE_SOFTRESET;
@@ -680,7 +680,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			}
 			break;
 		case IDM_HARDRESET:
-			// ·ÇÖ÷»ú²»ÄÜ¸´Î»
+			// éä¸»æœºä¸èƒ½å¤ä½
 			if(is_net_play)
 			{
 				ctrl_key_state = NET_CTRL_CODE_HARDRESET;
@@ -874,7 +874,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		OnMove(hWnd, (int)(short) LOWORD(lParam), (int)(short) HIWORD(lParam));
 	case WM_PAINT:
 		hdc = BeginPaint(hWnd, &ps);
-		// TODO: ÔÚ´ËÌí¼ÓÈÎÒâ»æÍ¼´úÂë...
+		// TODO: åœ¨æ­¤æ·»åŠ ä»»æ„ç»˜å›¾ä»£ç ...
 		OnPaint(hWnd, hdc);
 		EndPaint(hWnd, &ps);
 		break;
@@ -898,7 +898,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	return 0;
 }
 
-// ¡°¹ØÓÚ¡±¿òµÄÏûÏ¢´¦Àí³ÌĞò¡£
+// â€œå…³äºâ€æ¡†çš„æ¶ˆæ¯å¤„ç†ç¨‹åºã€‚
 INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	UNREFERENCED_PARAMETER(lParam);
@@ -1051,7 +1051,7 @@ VOID OnIdle()
 	}
 
 
-	// ¹Ø»ú×´Ì¬£¬Ã»ÓĞ¼ÓÔØROM,  »òÕßÔİÍ£ÖĞ
+	// å…³æœºçŠ¶æ€ï¼Œæ²¡æœ‰åŠ è½½ROM,  æˆ–è€…æš‚åœä¸­
 	if(host.status == NES_STATUS_OFF || pause_flag == NES_STATUS_PAUSE)
 	{
 		Sleep(10);
@@ -1085,10 +1085,10 @@ VOID OnIdle()
 
 	if(is_net_play)
 	{
-		// Èç¹ûÍøÂç»º³å¿ÕÁË,ÔòµÈ´ı
+		// å¦‚æœç½‘ç»œç¼“å†²ç©ºäº†,åˆ™ç­‰å¾…
 		if(net_cache_size == 0)
 		{
-			// ÍøÂç¿¨
+			// ç½‘ç»œå¡
 			return;
 		}
 	}
@@ -1099,7 +1099,7 @@ VOID OnIdle()
 
 	dwFrameLastTime = dwCurTimeMS;
 
-	// Ë¢ĞÂÒôÆµ»º´æÇø
+	// åˆ·æ–°éŸ³é¢‘ç¼“å­˜åŒº
 	GetFreeAudioBuffer(); 
 	dblFrameTimeAdj = 0.0;
 
@@ -1176,8 +1176,8 @@ VOID OnIdle()
 
 		if(key_flash_count < key_flash_freq / 2)
 		{
-			UPDATE_BIT_WITH_KEY(main_key_state, JOYPAD_KEY_A, 'S');  // Á¬·¢A
-			UPDATE_BIT_WITH_KEY(main_key_state, JOYPAD_KEY_B, 'A');  // Á¬·¢B
+			UPDATE_BIT_WITH_KEY(main_key_state, JOYPAD_KEY_A, 'S');  // è¿å‘A
+			UPDATE_BIT_WITH_KEY(main_key_state, JOYPAD_KEY_B, 'A');  // è¿å‘B
 		}
 		UPDATE_BIT_WITH_KEY(main_key_state, JOYPAD_KEY_A, 'X');
 		UPDATE_BIT_WITH_KEY(main_key_state, JOYPAD_KEY_B, 'Z');
@@ -1267,7 +1267,7 @@ VOID OnIdle()
 	if(is_net_play)
 	{
 		ines_dword_t  cache_joypad;
-		// ¸üĞÂÊäÈë
+		// æ›´æ–°è¾“å…¥
 		cache_add_mine(main_key_state, ctrl_key_state);
 
 		send_frame(main_key_state, ctrl_key_state);
@@ -1326,7 +1326,7 @@ VOID OnIdle()
 	ines_sprintf(strDisp, ISTR("CPU: %03d%%"), nes_cpu_rate);
 	
 	DrawTextToBitmap(screen_back, SCREEN_WIDTH,SCREEN_HEIGHT, strDisp, 8,8,32);
-	// ½»»»»æÍ¼»º´æÇø
+	// äº¤æ¢ç»˜å›¾ç¼“å­˜åŒº
 
 
 	if(pause_flag == NES_STATUS_FRAME_STEP)
@@ -1526,7 +1526,7 @@ static VOID UpdateMenuRecentFiles(HMENU  hMenu, UINT nPos)
 	
 	if(n>0)
 	{
-		// É¾³ı
+		// åˆ é™¤
 		while(TRUE)
 		{
 			UINT nID = GetMenuItemID(hMenu, nPos + n);
@@ -1821,7 +1821,7 @@ VOID OnMenuSoftReset()
 
 	ines_host_reset(&host);
 
-	// È¡ÏûÔİÍ£
+	// å–æ¶ˆæš‚åœ
 	pause_flag = 0;
 
 	UpdateTitle();	
@@ -1837,7 +1837,7 @@ VOID OnMenuHardReset()
 	{
 		ines_host_reset(&host);
 
-		// È¡ÏûÔİÍ£
+		// å–æ¶ˆæš‚åœ
 		pause_flag = 0;
 
 		UpdateTitle();
@@ -2014,7 +2014,7 @@ void SaveHistories()
 void  AddHistoryFile(ines_cstr_t  file)
 {
 	int i;
-	// Èç¹ûÓĞÏàÍ¬ÎÄ¼şÃû£¬ÔòÉ¾³ıÖ®
+	// å¦‚æœæœ‰ç›¸åŒæ–‡ä»¶åï¼Œåˆ™åˆ é™¤ä¹‹
 	for(i = 0; i < count_of(lastest_open_files); i++)
 	{
 		if(0 == ines_strcmp(file, lastest_open_files[i] ))
@@ -2025,7 +2025,7 @@ void  AddHistoryFile(ines_cstr_t  file)
 
 	if(i>0)
 	{
-		// Èç¹ûi>=10.ÔòÃ»ÓĞÏàÍ¬µÄ£¬ÌÔÌ­×îºóÒ»Ìõ
+		// å¦‚æœi>=10.åˆ™æ²¡æœ‰ç›¸åŒçš„ï¼Œæ·˜æ±°æœ€åä¸€æ¡
 		while(--i>=0)
 		{
 			if (i+1 < count_of(lastest_open_files))
@@ -2126,10 +2126,10 @@ VOID OnMenuSaveState(int index)
 	TCHAR   szPath[INES_MAX_PATH];
 	getStatePath(index, szPath, count_of(szPath));
 
-	// ¸²¸ÇÌáĞÑ 
-	if(GetSaveStateTime(index) != 0 && IDOK != MessageBox(hMainWnd, ISTR("¸Ã´æµµÒÑ¾­´æÔÚ£¬ÊÇ·ñ¸²¸Ç£¿"), szTitle, MB_OKCANCEL|MB_ICONWARNING))
+	// è¦†ç›–æé†’ 
+	if(GetSaveStateTime(index) != 0 && IDOK != MessageBox(hMainWnd, ISTR("è¯¥å­˜æ¡£å·²ç»å­˜åœ¨ï¼Œæ˜¯å¦è¦†ç›–ï¼Ÿ"), szTitle, MB_OKCANCEL|MB_ICONWARNING))
 	{
-		return; // ÖÕÖ¹
+		return; // ç»ˆæ­¢
 	}
 
 	fSave = _tfopen(szPath, ISTR("wb"));
@@ -2160,7 +2160,7 @@ VOID OnMenuLoadState(int index)
 	if(host.status == NES_STATUS_OFF)
 		return;
 
-	// Á¬ÍøÓÎÏ·²»ÄÜ¼ÓÔØ½ø¶È
+	// è¿ç½‘æ¸¸æˆä¸èƒ½åŠ è½½è¿›åº¦
 	if(is_net_play)
 		return;
 
@@ -2207,12 +2207,12 @@ VOID UpdateMenuSaveState(HMENU hMenu, UINT nPos, int index)
 	if(host.status == NES_STATUS_OFF)
 	{
 		bEnable = FALSE;
-		ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d ´æµµ (¿Õ) %s"), index, pszAccel);
+		ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d å­˜æ¡£ (ç©º) %s"), index, pszAccel);
 	}else{
 		time_t t = GetSaveStateTime(index);
 		if(t == 0)
 		{
-			ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d ´æµµ (¿Õ) %s"), index, pszAccel);
+			ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d å­˜æ¡£ (ç©º) %s"), index, pszAccel);
 			bEnable = TRUE;
 		}
 		else
@@ -2221,11 +2221,11 @@ VOID UpdateMenuSaveState(HMENU hMenu, UINT nPos, int index)
 			struct  tm* lt = localtime(&tt);
 			if(lt == NULL)
 			{
-				ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d ´æµµ (\?\?) %s"), index, pszAccel);				
+				ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d å­˜æ¡£ (\?\?) %s"), index, pszAccel);				
 			}
 			else
 			{
-				ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d ´æµµ (%04d/%02d/%02d %02d:%02d:%02d) %s"),
+				ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d å­˜æ¡£ (%04d/%02d/%02d %02d:%02d:%02d) %s"),
 					index, lt->tm_year+1900, lt->tm_mon+1, lt->tm_mday, lt->tm_hour, lt->tm_min, lt->tm_sec, pszAccel);				
 			}
 			bEnable = TRUE;
@@ -2258,12 +2258,12 @@ VOID UpdateMenuLoadState(HMENU hMenu, UINT nPos, int index)
 	if(host.status == NES_STATUS_OFF)
 	{
 		bEnable = FALSE;
-		ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d ´æµµ (¿Õ) %s"), index, pszAccel);
+		ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d å­˜æ¡£ (ç©º) %s"), index, pszAccel);
 	}else{
 		time_t t = GetSaveStateTime(index);
 		if(t == 0)
 		{
-			ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d ´æµµ (¿Õ) %s"), index, pszAccel);
+			ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d å­˜æ¡£ (ç©º) %s"), index, pszAccel);
 			bEnable = FALSE;
 		}
 		else
@@ -2272,11 +2272,11 @@ VOID UpdateMenuLoadState(HMENU hMenu, UINT nPos, int index)
 			struct  tm* lt = localtime(&tt);
 			if(lt == NULL)
 			{
-				ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d ´æµµ (\?\?) %s"), index, pszAccel);				
+				ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d å­˜æ¡£ (\?\?) %s"), index, pszAccel);				
 			}
 			else
 			{
-				ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d ´æµµ (%04d/%02d/%02d %02d:%02d:%02d) %s"),
+				ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d å­˜æ¡£ (%04d/%02d/%02d %02d:%02d:%02d) %s"),
 					index, lt->tm_year+1900, lt->tm_mon+1, lt->tm_mday, lt->tm_hour, lt->tm_min, lt->tm_sec, pszAccel);				
 			}
 			bEnable = TRUE;
@@ -2363,7 +2363,7 @@ void cache_add_other(ines_byte_t joypad, ines_byte_t  ctrl)
 
 void cache_add_mine(ines_byte_t joypad, ines_byte_t  ctrl)
 {
-	// ÓÀÔ¶ÔÚ¹Ì¶¨µÄ»º³åÖ¡
+	// æ°¸è¿œåœ¨å›ºå®šçš„ç¼“å†²å¸§
 	net_cache[net_cache_num] |= joypad;
 	net_cache[net_cache_num] |= ctrl * 0x1000000;
 }

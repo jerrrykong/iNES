@@ -18,12 +18,13 @@
 #undef APSTUDIO_READONLY_SYMBOLS
 
 /////////////////////////////////////////////////////////////////////////////
-// ����(�л����񹲺͹�) resources
+// 中文(中华人民共和国) resources
 
 #if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_CHS)
 #ifdef _WIN32
 LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
-#pragma code_page(936)
+// 本文件已转换为 UTF-8(无 BOM), 资源编译器需按 65001 读取, 否则中文乱码
+#pragma code_page(65001)
 #endif //_WIN32
 
 /////////////////////////////////////////////////////////////////////////////
@@ -43,42 +44,42 @@ IDI_SMALL               ICON                    "small.ico"
 
 IDC_INES MENU 
 BEGIN
-    POPUP "�ļ�(&F)"
+    POPUP "文件(&F)"
     BEGIN
-        MENUITEM "����ROM(&O)...\tCtrl+O",        IDM_OPEN
-        MENUITEM "ж��ROM(&U)\tCtrl+U",           IDM_CLOSE
+        MENUITEM "载入ROM(&O)...\tCtrl+O",        IDM_OPEN
+        MENUITEM "卸载ROM(&U)\tCtrl+U",           IDM_CLOSE
         MENUITEM SEPARATOR
-        MENUITEM "������ս",                        IDM_NET_PLAY
+        MENUITEM "联网对战",                        IDM_NET_PLAY
         MENUITEM SEPARATOR
-        MENUITEM "����ļ�",                        32990, INACTIVE
+        MENUITEM "最近文件",                        32990, INACTIVE
         MENUITEM SEPARATOR
-        MENUITEM "�˳�(&X)\tAtl+Q",               IDM_EXIT
+        MENUITEM "退出(&X)\tAtl+Q",               IDM_EXIT
     END
-    POPUP "����(&C)"
+    POPUP "控制(&C)"
     BEGIN
-        MENUITEM "�����ϵ�(&R)\tCtrl+F1",           IDM_HARDRESET
-        MENUITEM "������λ(&S)\tF1",                IDM_SOFTRESET
+        MENUITEM "重新上电(&R)\tCtrl+F1",           IDM_HARDRESET
+        MENUITEM "软件复位(&S)\tF1",                IDM_SOFTRESET
         MENUITEM SEPARATOR
-        MENUITEM "��ͣ(&P)\tP",                   IDM_PAUSE
-        MENUITEM "��ִ֡��(&T)\tSpace",             IDM_FRAME_STEP
+        MENUITEM "暂停(&P)\tP",                   IDM_PAUSE
+        MENUITEM "单帧执行(&T)\tSpace",             IDM_FRAME_STEP
         MENUITEM SEPARATOR
-        MENUITEM "ȫ��(&F)\tF12",                 IDM_FULL_SCREEN
-        POPUP "����(&X)"
+        MENUITEM "全屏(&F)\tF12",                 IDM_FULL_SCREEN
+        POPUP "缩放(&X)"
         BEGIN
             MENUITEM "x 1\tF5",                     IDM_ZOOM_X1
             MENUITEM "x 2\tF6",                     IDM_ZOOM_X2
             MENUITEM "x 3\tF7",                     IDM_ZOOM_X3
             MENUITEM "x 4\tF8",                     IDM_ZOOM_X4
         END
-        POPUP "����(&C)"
+        POPUP "比例(&C)"
         BEGIN
-            MENUITEM "ԭʼ����",                        IDM_SCALE_ORIG
-            MENUITEM "4��3",                         IDM_SCALE_4x3
-            MENUITEM "16��9",                        IDM_SCALE_16x9
+            MENUITEM "原始比例",                        IDM_SCALE_ORIG
+            MENUITEM "4：3",                         IDM_SCALE_4x3
+            MENUITEM "16：9",                        IDM_SCALE_16x9
         END
         MENUITEM SEPARATOR
-        MENUITEM "����(&M)\tF9",                  IDM_MUTE
-        POPUP "����(&V)"
+        MENUITEM "静音(&M)\tF9",                  IDM_MUTE
+        POPUP "音量(&V)"
         BEGIN
             MENUITEM "100%",                        IDM_VOLUMN_100
             MENUITEM "80%",                         IDM_VOLUMN_80
@@ -88,48 +89,48 @@ BEGIN
             MENUITEM "0%",                          IDM_VOLUMN_0
         END
         MENUITEM SEPARATOR
-        POPUP "��ʱ�浵(&V)"
+        POPUP "即时存档(&V)"
         BEGIN
-            MENUITEM "�浵 0\tCtrl+0",                IDM_SAVE_STATE_0
-            MENUITEM "�浵 1\tCtrl+1",                IDM_SAVE_STATE_1
-            MENUITEM "�浵 2\tCtrl+2",                IDM_SAVE_STATE_2
-            MENUITEM "�浵 3\tCtrl+3",                IDM_SAVE_STATE_3
-            MENUITEM "�浵 4\tCtrl+4",                IDM_SAVE_STATE_4
-            MENUITEM "�浵 5\tCtrl+5",                IDM_SAVE_STATE_5
-            MENUITEM "�浵 6\tCtrl+6",                IDM_SAVE_STATE_6
-            MENUITEM "�浵 7\tCtrl+7",                IDM_SAVE_STATE_7
-            MENUITEM "�浵 8\tCtrl+8",                IDM_SAVE_STATE_8
-            MENUITEM "�浵 9\tCtrl+9",                IDM_SAVE_STATE_9
+            MENUITEM "存档 0\tCtrl+0",                IDM_SAVE_STATE_0
+            MENUITEM "存档 1\tCtrl+1",                IDM_SAVE_STATE_1
+            MENUITEM "存档 2\tCtrl+2",                IDM_SAVE_STATE_2
+            MENUITEM "存档 3\tCtrl+3",                IDM_SAVE_STATE_3
+            MENUITEM "存档 4\tCtrl+4",                IDM_SAVE_STATE_4
+            MENUITEM "存档 5\tCtrl+5",                IDM_SAVE_STATE_5
+            MENUITEM "存档 6\tCtrl+6",                IDM_SAVE_STATE_6
+            MENUITEM "存档 7\tCtrl+7",                IDM_SAVE_STATE_7
+            MENUITEM "存档 8\tCtrl+8",                IDM_SAVE_STATE_8
+            MENUITEM "存档 9\tCtrl+9",                IDM_SAVE_STATE_9
         END
-        POPUP "����浵(&L)"
+        POPUP "载入存档(&L)"
         BEGIN
-            MENUITEM "�浵 0\tCtrl+Shift+0",          IDM_LOAD_STATE_0
-            MENUITEM "�浵 1\tCtrl+Shift+1",          IDM_LOAD_STATE_1
-            MENUITEM "�浵 2\tCtrl+Shift+2",          IDM_LOAD_STATE_2
-            MENUITEM "�浵 3\tCtrl+Shift+3",          IDM_LOAD_STATE_3
-            MENUITEM "�浵 4\tCtrl+Shift+4",          IDM_LOAD_STATE_4
-            MENUITEM "�浵 5\tCtrl+Shift+5",          IDM_LOAD_STATE_5
-            MENUITEM "�浵 6\tCtrl+Shift+6",          IDM_LOAD_STATE_6
-            MENUITEM "�浵 7\tCtrl+Shift+7",          IDM_LOAD_STATE_7
-            MENUITEM "�浵 8\tCtrl+Shift+8",          IDM_LOAD_STATE_8
-            MENUITEM "�浵 9\tCtrl+Shift+9",          IDM_LOAD_STATE_9
+            MENUITEM "存档 0\tCtrl+Shift+0",          IDM_LOAD_STATE_0
+            MENUITEM "存档 1\tCtrl+Shift+1",          IDM_LOAD_STATE_1
+            MENUITEM "存档 2\tCtrl+Shift+2",          IDM_LOAD_STATE_2
+            MENUITEM "存档 3\tCtrl+Shift+3",          IDM_LOAD_STATE_3
+            MENUITEM "存档 4\tCtrl+Shift+4",          IDM_LOAD_STATE_4
+            MENUITEM "存档 5\tCtrl+Shift+5",          IDM_LOAD_STATE_5
+            MENUITEM "存档 6\tCtrl+Shift+6",          IDM_LOAD_STATE_6
+            MENUITEM "存档 7\tCtrl+Shift+7",          IDM_LOAD_STATE_7
+            MENUITEM "存档 8\tCtrl+Shift+8",          IDM_LOAD_STATE_8
+            MENUITEM "存档 9\tCtrl+Shift+9",          IDM_LOAD_STATE_9
         END
         MENUITEM SEPARATOR
-        MENUITEM "��ͼ(S)\tF12",                  IDM_SNAPSHOT
+        MENUITEM "截图(S)\tF12",                  IDM_SNAPSHOT
     END
-    POPUP "����(&T)"
+    POPUP "工具(&T)"
     BEGIN
-        MENUITEM "ѡ��(&O)...",                   IDM_OPTIONS
+        MENUITEM "选项(&O)...",                   IDM_OPTIONS
         MENUITEM SEPARATOR
-        MENUITEM "ͼ�β鿴(&I)...",                 IDM_VIEW_PT
-        MENUITEM "����鿴(&N),,,",                 IDM_VIEW_NT
-        MENUITEM "��ɫ��鿴(&P)...",                IDM_VIEW_PAL
-        MENUITEM "�����ڴ�鿴(&M)...",               IDM_VIEW_MEMORY
-        MENUITEM "ͼ���ڴ�鿴(&V)...",               IDM_VIEW_VMEMORY
-        MENUITEM "�����ڴ�鿴(&S)...",               IDM_VIEW_SPMEMORY
-        MENUITEM "�Ĵ���(&R)...",                  IDM_VIEW_REG
+        MENUITEM "图形查看(&I)...",                 IDM_VIEW_PT
+        MENUITEM "卷轴查看(&N),,,",                 IDM_VIEW_NT
+        MENUITEM "调色板查看(&P)...",                IDM_VIEW_PAL
+        MENUITEM "程序内存查看(&M)...",               IDM_VIEW_MEMORY
+        MENUITEM "图案内存查看(&V)...",               IDM_VIEW_VMEMORY
+        MENUITEM "精灵内存查看(&S)...",               IDM_VIEW_SPMEMORY
+        MENUITEM "寄存器(&R)...",                  IDM_VIEW_REG
         MENUITEM SEPARATOR
-        POPUP "��־(&L)"
+        POPUP "日志(&L)"
         BEGIN
             MENUITEM "&1 - TRACE",                  IDM_LOG_TRACE
             MENUITEM "&2 - DEBUG",                  IDM_LOG_DEBUG
@@ -141,11 +142,11 @@ BEGIN
             MENUITEM SEPARATOR
             MENUITEM "&C - CPU TRACE",              IDM_CPU_TRACE
         END
-        MENUITEM "������(&D)...",                  IDM_DEBUGGER
+        MENUITEM "调试器(&D)...",                  IDM_DEBUGGER
     END
-    POPUP "����(&H)"
+    POPUP "帮助(&H)"
     BEGIN
-        MENUITEM "����(&A) ...",                  IDM_ABOUT
+        MENUITEM "关于(&A) ...",                  IDM_ABOUT
     END
 END
 
@@ -153,9 +154,9 @@ IDC_POPUP MENU
 BEGIN
     POPUP "MEMORY"
     BEGIN
-        MENUITEM "�����ڴ�",                        ID_MEMORY_CPU
-        MENUITEM "ͼ���ڴ�",                        ID_MEMORY_PPU
-        MENUITEM "�����ڴ�",                        ID_MEMORY_SPRIT
+        MENUITEM "程序内存",                        ID_MEMORY_CPU
+        MENUITEM "图像内存",                        ID_MEMORY_PPU
+        MENUITEM "精灵内存",                        ID_MEMORY_SPRIT
     END
 END
 
@@ -192,32 +193,32 @@ END
 
 IDD_ABOUTBOX DIALOGEX 0, 0, 170, 62
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "���� iNES"
+CAPTION "关于 iNES"
 FONT 9, "MS Shell Dlg", 0, 0, 0x1
 BEGIN
     ICON            128,IDC_STATIC,14,14,21,20
-    LTEXT           "iNES��1.0 ��",IDC_STATIC,42,14,114,8,SS_NOPREFIX
+    LTEXT           "iNES，1.0 版",IDC_STATIC,42,14,114,8,SS_NOPREFIX
     LTEXT           "Copyright (C) 2015",IDC_STATIC,42,26,114,8
-    DEFPUSHBUTTON   "ȷ��",IDOK,113,41,50,14,WS_GROUP
+    DEFPUSHBUTTON   "确定",IDOK,113,41,50,14,WS_GROUP
 END
 
 IDD_NETPLAY DIALOGEX 0, 0, 315, 138
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "�����ս"
+CAPTION "网络对战"
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-    GROUPBOX        "����Ϊ",IDC_STATIC,23,8,262,31
-    CONTROL         "������",IDC_RAD_SERVER,"Button",BS_AUTORADIOBUTTON | WS_GROUP,31,22,40,10
-    CONTROL         "�ͻ���",IDC_RAD_CLIENT,"Button",BS_AUTORADIOBUTTON,150,22,40,10
-    LTEXT           "��ַ",IDC_STATIC,24,44,37,14
+    GROUPBOX        "运行为",IDC_STATIC,23,8,262,31
+    CONTROL         "服务器",IDC_RAD_SERVER,"Button",BS_AUTORADIOBUTTON | WS_GROUP,31,22,40,10
+    CONTROL         "客户机",IDC_RAD_CLIENT,"Button",BS_AUTORADIOBUTTON,150,22,40,10
+    LTEXT           "地址",IDC_STATIC,24,44,37,14
     EDITTEXT        IDC_EDT_IP,69,44,112,14,ES_AUTOHSCROLL
-    LTEXT           "�˿�",IDC_STATIC,196,44,21,14
+    LTEXT           "端口",IDC_STATIC,196,44,21,14
     EDITTEXT        IDC_EDT_PORT,235,44,44,14,ES_AUTOHSCROLL
-    LTEXT           "����֡��",IDC_STATIC,21,65,41,14
+    LTEXT           "缓冲帧数",IDC_STATIC,21,65,41,14
     COMBOBOX        IDC_CMB_CACHE,67,65,114,89,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    LTEXT           "��ʾ��Ϣ...",IDC_LAB_INFO,18,95,279,14
-    DEFPUSHBUTTON   "��ʼ",IDOK,205,117,50,14
-    PUSHBUTTON      "ȡ��",IDCANCEL,258,117,50,14
+    LTEXT           "提示信息...",IDC_LAB_INFO,18,95,279,14
+    DEFPUSHBUTTON   "开始",IDOK,205,117,50,14
+    PUSHBUTTON      "取消",IDCANCEL,258,117,50,14
 END
 
 
@@ -287,36 +288,36 @@ END
 STRINGTABLE 
 BEGIN
     IDS_APP_TITLE           "iNES"
-    IDS_STATUS_OFF          "δ����"
-    IDS_STATUS_RUNNING      "������"
-    IDS_STATUS_PAUSE        "��ͣ"
-    IDS_STATUS_FRAME_STEP   "��֡"
-    IDS_WND_MEMORY_TITLE    "�ڴ�鿴��"
+    IDS_STATUS_OFF          "未运行"
+    IDS_STATUS_RUNNING      "运行中"
+    IDS_STATUS_PAUSE        "暂停"
+    IDS_STATUS_FRAME_STEP   "逐帧"
+    IDS_WND_MEMORY_TITLE    "内存查看器"
     IDC_INES                "INES"
-    IDS_WND_VMEMORY_TITLE   "ͼ���ڴ�鿴��"
-    IDS_WND_SPMEMORY_TITLE  "�����ڴ�鿴��"
+    IDS_WND_VMEMORY_TITLE   "图形内存查看器"
+    IDS_WND_SPMEMORY_TITLE  "精灵内存查看器"
 END
 
 STRINGTABLE 
 BEGIN
-    IDM_OPEN                "��NES�ļ�"
+    IDM_OPEN                "打开NES文件"
 END
 
 STRINGTABLE 
 BEGIN
-    IDS_ERR_FILE_FORMAT     "����ȷ���ļ���ʽ"
-    IDS_ERR_UNSUPPORT_MAPPER_ID "��֧�ֵ�ӳ��ģʽ��%1��"
-    IDS_ERR_ILLEGAL_INSTRUCTION "�Ƿ�ָ�� %1"
+    IDS_ERR_FILE_FORMAT     "不正确的文件格式"
+    IDS_ERR_UNSUPPORT_MAPPER_ID "不支持的映射模式【%1】"
+    IDS_ERR_ILLEGAL_INSTRUCTION "非法指令 %1"
 END
 
 STRINGTABLE 
 BEGIN
-    IDS_WND_NT_TITLE        "����鿴��"
-    IDS_WND_PT_TITLE        "ͼ�β鿴��"
-    IDS_WND_PAL_TITLE       "ɫ�̲鿴��"
+    IDS_WND_NT_TITLE        "卷轴查看器"
+    IDS_WND_PT_TITLE        "图形查看器"
+    IDS_WND_PAL_TITLE       "色盘查看器"
 END
 
-#endif    // ����(�л����񹲺͹�) resources
+#endif    // 中文(中华人民共和国) resources
 /////////////////////////////////////////////////////////////////////////////
 
 

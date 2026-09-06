@@ -23,7 +23,8 @@ static void mapper24_reset(ines_mapper_t* p_mapper)
 
 static void mapper24_writehigh(ines_mapper_t* p_mapper, ines_word_t addr, ines_byte_t  val)
 {
-	ines_host_t*  p_host = mapper2host(p_mapper);	(void)p_host;
+	ines_host_t*  p_host = mapper2host(p_mapper);
+	(void)p_host;
 }
 
 ines_bool_t  mapper24_create(ines_mapper_t* p_mapper)

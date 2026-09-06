@@ -44,7 +44,7 @@ static void mapper5_reset(ines_mapper_t*  p_mapper)
 	ines_int_t   n;
 
 
-	ines_set_sram_bank_n(p_host, 3, 0); // ÉèÖÃÄ¬ÈÏSRAM¿é
+	ines_set_sram_bank_n(p_host, 3, 0); // è®¾ç½®é»˜è®¤SRAMå—
 	ines_set_prom_bank_4(p_host, prom_8k_num - 1, prom_8k_num - 1, prom_8k_num - 1, prom_8k_num - 1);
 	ines_set_vrom_bank_8(p_host, 0, 1, 2, 3, 4, 5, 6, 7);
 
@@ -308,9 +308,9 @@ static void mapper5_writelow(ines_mapper_t*  p_mapper, ines_word_t  addr, ines_b
 		memset(p_host->ppu.name_table + 0x0fc0, 0x40, val);
 		break;
 	case 0x5113:
-		// Ã»ÓÐ¼£Ïó±íÃ÷ÓÐÄÄ¸öNESÓÎÏ·»áÍ¨¹ý¾µÏñµØÖ·À´·ÃÎÊSRAM£¬ËùÒÔ¼´Ê¹Ã»ÓÐÓÎÏ·»á´øÓÐÍêÕûµÄ
-		//  64K SRAM£¬Ò²¿ÉÒÔÍ¨¹ýÖ±½ÓÄ£ÄâÈ«²¿µÄ64KÄÚ´æÀ´Õý³£ÔËÐÐËü¡£Ð´Èë ox5114~0x5117 ÇÐ»»RAMÒ²ÕâÑù´¦Àí¼´¿É¡£
-		//  Ã»±ØÒª¹ØÐÄÓÎÏ·¿¨´øµÄÕæÊµRAMÐ¾Æ¬ÅäÖÃ¡£
+		// æ²¡æœ‰è¿¹è±¡è¡¨æ˜Žæœ‰å“ªä¸ªNESæ¸¸æˆä¼šé€šè¿‡é•œåƒåœ°å€æ¥è®¿é—®SRAMï¼Œæ‰€ä»¥å³ä½¿æ²¡æœ‰æ¸¸æˆä¼šå¸¦æœ‰å®Œæ•´çš„
+		//  64K SRAMï¼Œä¹Ÿå¯ä»¥é€šè¿‡ç›´æŽ¥æ¨¡æ‹Ÿå…¨éƒ¨çš„64Kå†…å­˜æ¥æ­£å¸¸è¿è¡Œå®ƒã€‚å†™å…¥ ox5114~0x5117 åˆ‡æ¢RAMä¹Ÿè¿™æ ·å¤„ç†å³å¯ã€‚
+		//  æ²¡å¿…è¦å…³å¿ƒæ¸¸æˆå¡å¸¦çš„çœŸå®žRAMèŠ¯ç‰‡é…ç½®ã€‚
 		ines_set_sram_bank_n(p_host, 3, val & 0x07);
 		break;
 	case 0x5114:

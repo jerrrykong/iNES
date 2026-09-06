@@ -69,9 +69,9 @@ struct _ines_ppu_
 	ines_byte_t   sp_pal[NES_MAX_PALMEM_SIZE];
 	ines_byte_t   sp_RAM[NES_MAX_SPMEM_SIZE];
 	ines_byte_t*  mem_bank[NES_MAX_VMEM_BANKS];
-	ines_byte_t   reg_ctrl_1;   /* PPU¿ØÖÆ¼Ä´æÆ÷1£¬ $2000, RW,  */
-	ines_byte_t   reg_ctrl_2;   /* PPU¿ØÖÆ¼Ä´æÆ÷2£¬ $2001, RW,  */
-	ines_byte_t   reg_status;   /* PPU×´Ì¬¼Ä´æÆ÷,   $2002, RO,  */
+	ines_byte_t   reg_ctrl_1;   /* PPUæ§åˆ¶å¯„å­˜å™¨1ï¼Œ $2000, RW,  */
+	ines_byte_t   reg_ctrl_2;   /* PPUæ§åˆ¶å¯„å­˜å™¨2ï¼Œ $2001, RW,  */
+	ines_byte_t   reg_status;   /* PPUçŠ¶æ€å¯„å­˜å™¨,   $2002, RO,  */
 	ines_byte_t   reg_spr_addr; /* sprite memory access start addr $2003, WO,   */
 	/* ines_byte_t   reg_spr_data; */ /* sprite memory read write data  $2004, RW,   */
 	//ines_byte_t   reg_screen_offset_x; /* screen offset x  $2005, second write. WO */
@@ -88,11 +88,11 @@ struct _ines_ppu_
 	ines_int_t    current_line;
 };
 
-// ³õÊ¼»¯
+// åˆå§‹åŒ–
 void ines_ppu_init(ines_ppu_t* p_ppu);
-// É¾³ı
+// åˆ é™¤
 void ines_ppu_free(ines_ppu_t* p_ppu);
-// Èí¼ş¸´Î»
+// è½¯ä»¶å¤ä½
 void ines_ppu_reset(ines_ppu_t* p_ppu);
 
 void ines_ppu_set_mirror(ines_ppu_t* p_ppu, ines_byte_t  n0, ines_byte_t  n1, ines_byte_t  n2, ines_byte_t  n3);

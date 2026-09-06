@@ -23,7 +23,8 @@ static void mapper116_reset(ines_mapper_t* p_mapper)
 
 static void mapper116_writehigh(ines_mapper_t* p_mapper, ines_word_t addr, ines_byte_t  val)
 {
-	ines_host_t*  p_host = mapper2host(p_mapper);	(void)p_host;
+	ines_host_t*  p_host = mapper2host(p_mapper);
+	(void)p_host;
 }
 
 ines_bool_t  mapper116_create(ines_mapper_t* p_mapper)
