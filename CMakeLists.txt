@@ -11,9 +11,9 @@
 #   构建产物默认输出到仓库 bin/ 目录(与原 VC 工程一致)
 #
 # 注意事项:
-#   2) 与原始 VC 工程一致: iNES.exe 按 Unicode 字符集编译, inescore 按
+#   1) 与原始 VC 工程一致: iNES.exe 按 Unicode 字符集编译, inescore 按
 #      多字节(MBCS)字符集编译, 因此 core/comm 会被分别编译进两个目标。
-#   3) 本脚本以 Windows/MSVC 为主要目标; UNIX 上仅构建 inescore 共享库
+#   2) 本脚本以 Windows/MSVC 为主要目标; UNIX 上仅构建 inescore 共享库
 #      (对应 Android/jni/Android.mk 的做法, 为尽力支持而未经过充分验证)。
 # =====================================================================
 

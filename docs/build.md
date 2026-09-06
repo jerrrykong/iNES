@@ -1,0 +1,71 @@
+# 构建说明
+
+完整构建步骤见仓库根目录的 [README.md](../README.md)，本文补充工程侧的约定与常见问题。
+
+## 1. 目标与源文件
+
+| CMake 目标 | 类型 | 源文件来源 |
+|---|---|---|
+| `inescore` | 共享库 | `core/apu.c cpu.c joypad.c mapper.c mapper_creator.c nes.c ppu.c rom.c`、`core/mapper/*.c`、`comm/buf.c log.c net.c platform.c thread.c`、`libinescore.c` |
+| `iNES` | Win32 GUI 可执行文件 | 上述 `core` + `comm`（不含 `thread.c`）+ `win32/*.c` + `win32/iNES.rc` |
+
+- `core/mapper/*.c` 用 `file(GLOB ... CONFIGURE_DEPENDS)` 收集：**新增 mapper 文件后无需改 CMakeLists.txt**，重新配置即可纳入构建
+- 新增其它源文件（如新的 `comm/xxx.c`）**需要**手动加入 `CMakeLists.txt` 的对应列表
+
+## 2. 关键编译设置
+
+| 设置 | 值 | 原因 |
+|---|---|---|
+| `CMAKE_GENERATOR_PLATFORM` | `Win32`（可用 `-A x64` 覆盖） | 原 VC 工程为 32 位；必须以**缓存变量**在 `project()` 之前设置，否则不生效 |
+| 字符集 | `iNES`：`UNICODE/_UNICODE`；`inescore`：多字节 | 与原工程一致，因此 `core/comm` 会分别编译进两个目标 |
+| MSVC 选项 | `/W3 /utf-8` | 与 VC 工程告警级别一致；源码为 UTF-8，需显式指定源/执行字符集 |
+| 预定义宏 | `WIN32` `_WIN32` `_WINDOWS` `_CRT_SECURE_NO_WARNINGS` `UNICODE` `_UNICODE`，Debug 附加 `_DEBUG` | 对齐 vcproj；`_WIN32` 同时供 `rc.exe` 使用 |
+| 链接库 | `winmm` `ws2_32` `comdlg32` `comctl32` `shell32`（`inescore` 仅 `ws2_32`） | 对应源码中的 `#pragma comment(lib, ...)` 与 API 使用 |
+
+## 3. 输出目录
+
+统一输出到 `<仓库>/bin`（可用 `-DINES_OUTPUT_DIR` 修改）：
+
+| 配置 | 产物 |
+|---|---|
+| Release | `iNES.exe`、`inescore.dll` |
+| Debug | `iNES_d.exe`、`inescore.dll`（同名，会覆盖 Release 的 dll） |
+
+## 4. 编码与换行的工程约定
+
+| 文件 | 编码 | 换行 | 说明 |
+|---|---|---|---|
+| 所有 `.c` `.h` `.lua` `.mk` `.txt` `.md` | UTF-8 **无 BOM** | LF | 由 `tools/convert_encoding.ps1` 统一 |
+| `win32/iNES.rc` | UTF-8 **带 BOM** | LF | rc.exe 需要 BOM 才能正确识别中文；同时保留 `#pragma code_page(65001)` |
+| `win32/targetver.h` | 纯 ASCII | LF | 被 `rc.exe` 包含，非 ASCII 注释会扰乱其预处理器（曾导致 `RC1022`），文件中已写明原因 |
+| 二进制（`.ico` `.nes` `.xlsx`） | 不转换 | 不转换 | `.gitattributes` 中已声明为 `binary` |
+
+`.gitattributes` 设置 `* text=auto eol=lf`，防止 Git 检出时把 LF 转回 CRLF。
+
+批量转换/校验：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\convert_encoding.ps1 -WhatIf   # 预演
+powershell -ExecutionPolicy Bypass -File tools\convert_encoding.ps1          # 执行
+```
+
+脚本已排除 `bin` `doc` `project` `build` `cmake-build-*` `out` `.git` `.codebuddy` 目录。
+
+## 5. 常见构建问题
+
+| 现象 | 原因 | 处理 |
+|---|---|---|
+| `LNK1207: PDB 格式不兼容` | `bin/` 残留 VC2008 时代的旧格式 `.pdb` | 删除 `bin\*.pdb` 后重新构建 |
+| `RC1022: expected '#endif'` | 被 rc 包含的头文件（如 `targetver.h`）含非 ASCII 注释 | 保持这些头文件为纯 ASCII |
+| `RC2104: undefined keyword or key name` | rc 文件编码/内容被破坏 | 恢复 `win32/iNES.rc` 为正确的 UTF-8 |
+| 平台仍是 x64 | `CMAKE_GENERATOR_PLATFORM` 未生效或被缓存 | 删除构建目录重新配置；或显式 `-A Win32` |
+| `C4819` 中文告警 | 缺 `/utf-8` | 已在 CMake 中统一添加，勿删除 |
+
+## 6. Win64
+
+评估为安全（无内联汇编、无指针/整型互存、`socket_t` 已按平台定义、LLP64 下 `long` 仍为 32 位）。构建后请关注 `C4267 / C4311 / C4312 / C4244` 警告。
+
+```powershell
+cmake -S . -B build-x64 -A x64
+cmake --build build-x64 --config Release
+```
