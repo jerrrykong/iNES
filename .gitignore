@@ -2,3 +2,7 @@ bin/**
 build/**
 win32/iNES.aps
 project/**
+
+# 编辑器 / IDE 目录（不入库）
+.vscode/
+.codebuddy/
