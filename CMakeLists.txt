@@ -24,8 +24,10 @@ cmake_minimum_required(VERSION 3.16)
 # 这里默认沿用, 可用 cmake -A x64 或 -DCMAKE_GENERATOR_PLATFORM=x64 覆盖。
 # 注意: 该变量必须在 project() 之前设置才会生效。
 # ---------------------------------------------------------------------
-if(NOT DEFINED CMAKE_GENERATOR_PLATFORM)
-    set(CMAKE_GENERATOR_PLATFORM "Win32")
+# 必须以缓存变量形式设置: 普通变量会在 project() 内部被消费掉(实测不生效)。
+# 用户可用 cmake -A x64 显式覆盖。
+if(NOT DEFINED CMAKE_GENERATOR_PLATFORM OR "${CMAKE_GENERATOR_PLATFORM}" STREQUAL "")
+    set(CMAKE_GENERATOR_PLATFORM "Win32" CACHE STRING "目标平台(原 VC 工程为 Win32)" FORCE)
 endif()
 
 if(MSVC AND CMAKE_GENERATOR MATCHES "Ninja" AND

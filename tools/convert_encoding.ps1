@@ -39,7 +39,7 @@ $files = @($all | Where-Object {
 })
 Write-Host "selected (by ext)  = $($files.Count)  [$($exts -join ' ')]"
 
-$ascii = 0; $utf8 = 0; $gbkCount = 0; $bom = 0; $converted = 0
+$ascii = 0; $utf8 = 0; $gbkCount = 0; $utf16 = 0; $bom = 0; $converted = 0
 $gbkFiles = @()
 
 foreach ($f in $files) {
@@ -55,10 +55,28 @@ foreach ($f in $files) {
         $body = $bytes
     }
 
-    $isAscii = $true
-    foreach ($b in $body) { if ($b -ge 0x80) { $isAscii = $false; break } }
+    # UTF-16 with BOM (FF FE / FE FF): decode accordingly.
+    # NOTE: mixed-encoding files (UTF-16 head + ASCII tail, as once found in
+    # core/mapper/16.c) are NOT auto-converted here - they must be fixed by hand.
+    $isUtf16 = ($body.Length -ge 2) -and
+               (($body[0] -eq 0xFF -and $body[1] -eq 0xFE) -or
+                ($body[0] -eq 0xFE -and $body[1] -eq 0xFF))
 
-    if ($isAscii) {
+    $isAscii = $false
+    if (-not $isUtf16) {
+        $isAscii = $true
+        foreach ($b in $body) { if ($b -ge 0x80) { $isAscii = $false; break } }
+    }
+
+    if ($isUtf16) {
+        if ($body[0] -eq 0xFE) {
+            $text = [System.Text.Encoding]::BigEndianUnicode.GetString($body)
+        } else {
+            $text = [System.Text.Encoding]::Unicode.GetString($body)
+        }
+        $text = $text.TrimStart([char]0xFEFF)
+        $utf16++
+    } elseif ($isAscii) {
         $text = [System.Text.Encoding]::ASCII.GetString($body)
         $ascii++
     } else {
@@ -98,6 +116,7 @@ Write-Host '========================================='
 Write-Host "pure ASCII         = $ascii"
 Write-Host "already UTF-8      = $utf8"
 Write-Host "converted from GBK = $gbkCount"
+Write-Host "converted from UTF16 = $utf16"
 Write-Host "UTF-8 BOM removed  = $bom"
 Write-Host "files rewritten    = $converted"
 if ($WhatIf) { Write-Host '*** WhatIf mode: no file was modified ***' }
