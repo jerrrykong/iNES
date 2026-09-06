@@ -1,38 +1,28 @@
-
+// ============================================================================
+// Mapper 024 -- Konami VRC6a
+//   PRG 16K+8K; CHR 8 x 1KB; 镜像; IRQ; 扩展音 3 路(寄存器捕获)
+//   A0/A1 直接寻址寄存器(0xX000-0xX003); 无 WRAM
+// ============================================================================
 #include "../../comm/idef.h"
 #include "../../comm/log.h"
 #include "../nes.h"
 #include "../mapper.h"
+#include "vrc.h"
 
 
-
-static void mapper24_reset(ines_mapper_t* p_mapper)
+ines_bool_t mapper24_create(ines_mapper_t* p_mapper)
 {
-	ines_host_t*  p_host = mapper2host(p_mapper);
-	
-	if(p_host->prom_8k_num >= 4)
-		ines_set_prom_bank_4(p_host, 0, 1, 2, 3);
-	else
-		ines_set_prom_bank_4(p_host, 0, 1, 0,1 );
-	
-	if(p_host->vrom_1k_num > 0)
+	INIT_MAPPER_DATA_ST(p_mapper, VRC6_data_t);
+
 	{
-		ines_set_vrom_bank_8(p_host, 0, 1, 2, 3, 4, 5, 6, 7);
+		VRC6_data_t* p = mapper2VRC6data(p_mapper);
+		p->is_vrc6b  = 0;      // VRC6a: A0/A1 直接寻址
 	}
+
+	p_mapper->custom_sram = 1; // VRC6a 不带 WRAM
+	p_mapper->fini      = vrc6_fini;
+	p_mapper->reset     = vrc6_reset;
+	p_mapper->writehigh = vrc6_writehigh;
+	p_mapper->hsync     = vrc6_hsync;
+	return ines_true;
 }
-
-static void mapper24_writehigh(ines_mapper_t* p_mapper, ines_word_t addr, ines_byte_t  val)
-{
-	ines_host_t*  p_host = mapper2host(p_mapper);
-	(void)p_host;
-}
-
-ines_bool_t  mapper24_create(ines_mapper_t* p_mapper)
-{
-	p_mapper->reset = mapper24_reset;
-	p_mapper->writehigh = mapper24_writehigh;
-	return ines_false;
-}
-
-
-

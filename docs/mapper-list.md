@@ -7,9 +7,9 @@
 | 项目 | 数量 |
 |---|---|
 | Mapper 文件总数 | 256（`0.c` ~ `255.c`） |
-| 注册表标注 `implemented` | 17 |
+| 注册表标注 `implemented` | 24 |
 | 另有实质代码但未标注 | 1（Mapper **163**） |
-| 占位桩（未实现） | 238 |
+| 占位桩（未实现） | 231 |
 
 > 判定依据：桩文件统一为 **39 行**，只有 `reset` / `writehigh` 两个空函数且 `create` 返回 `ines_false`；真实实现则行数显著更多、带私有数据或 IRQ，且返回 `ines_true`。
 
@@ -34,7 +34,21 @@
 | 15 | 103 | — | | | ✅ | 100-in-1 类多卡带 |
 | 16 | 240 | `Mapper16` | ✅ | ✅ | ✅ | Bandai FCG，**注册表注明 "no EEPROM"**（串行 EEPROM 未实现） |
 | 18 | 227 | `MMC18` | ✅ | ✅ | ✅ | Jaleco SS88006 |
+| 21 | 31 | `VRC24_data_t` | ✅ | ✅ | ✅ | Konami **VRC4a/c**（VRC 系，逻辑在 `vrc.h` 共享） |
+| 22 | 31 | `VRC24_data_t` | | | ✅ | Konami **VRC2a**：CHR 2KB 粒度、无 IRQ、无 WRAM |
+| 23 | 31 | `VRC24_data_t` | ✅ | ✅ | ✅ | Konami **VRC2b/VRC4f** |
+| 24 | 28 | `VRC6_data_t` | ✅ | ✅ | ✅ | Konami **VRC6a**：含 3 路扩展音寄存器捕获（混音待 APU 扩展） |
+| 25 | 30 | `VRC24_data_t` | ✅ | ✅ | ✅ | Konami **VRC2c/VRC4b/d/e** |
+| 26 | 28 | `VRC6_data_t` | ✅ | ✅ | ✅ | Konami **VRC6b**：A0/A1 交换、带 8K WRAM |
+| 85 | 25 | `VRC7_data_t` | ✅ | ✅ | ✅ | Konami **VRC7**：FM(YM2413) 寄存器仅捕获，未集成 FM 合成 |
 | 163 | 178 | `MMC163` | | ✅ | ❌ | 有完整实现（含 `reset/writehigh/readlow/writelow/hsync/fini`），但注册表未标注 `implemented` |
+
+> **VRC 家族共享实现**：21/22/23/25（VRC2/VRC4）、24/26（VRC6）、85（VRC7）的核心逻辑
+> 集中在 `core/mapper/vrc.h`（547 行）：
+> - 引脚错位由 `reg_mask1/reg_mask2` 统一对齐（每个编号一套掩码）
+> - VRC4/6/7 共用同一个 IRQ 计数器状态机（latch/使能/ack/模式）
+> - VRC6/7 扩展音源寄存器已按芯片布局捕获（`pulse1/pulse2/saw`、`fm_reg[0x40]`），
+>   但 APU 目前没有扩展声道混音接口，故暂不发声，接入后即可复用这些状态
 
 未实现但值得注意的是 **14**、**17**：它们的桩里已有基本的 bank 设置骨架，可以直接作为新实现的起点。
 

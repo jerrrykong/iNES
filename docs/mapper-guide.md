@@ -279,3 +279,49 @@ ines_bool_t  mapperN_create(ines_mapper_t* p_mapper)
 - [ ] Win32 与 x64 两种配置都能编译通过，无新增警告
 - [ ] 至少 2 个使用该 Mapper 的游戏可正常运行
 - [ ] 源码为 UTF-8 无 BOM + LF（见 `docs/coding-style.md`）
+
+## 12. 范例：Konami VRC 家族（21/22/23/25/24/26/85，共享 `vrc.h`）
+
+VRC2/VRC4/VRC6/VRC7 走线变体极多，但核心逻辑只有三套（VRC2/4 一套、VRC6 一套、VRC7 一套）。
+本项目把它们放进共享头 `core/mapper/vrc.h`（静态 inline），7 个 `mapper<N>.c` 各自只做"配置 + 挂回调"，
+是"一个头文件驱动多个编号"的现成范例，后续遇到同族多编号芯片可直接照搬：
+
+```c
+// mapper21.c 主体结构（每个编号文件只有 create 是导出符号）
+#include "../../comm/idef.h"
+#include "../../comm/log.h"
+#include "../nes.h"
+#include "../mapper.h"
+#include "vrc.h"
+
+ines_bool_t mapper21_create(ines_mapper_t* p_mapper)
+{
+    INIT_MAPPER_DATA_ST(p_mapper, VRC24_data_t);
+    VRC24_data_t* p = mapper2VRC24data(p_mapper);
+    p->is_vrc2   = 0;      // 芯片族配置：VRC2a=1（CHR 2KB 粒度、无 IRQ）
+    p->reg_mask1 = 0x42;    // 引脚错位掩码 → 寄存器偏移 bit0
+    p->reg_mask2 = 0x84;    // 引脚错位掩码 → 寄存器偏移 bit1
+    p_mapper->fini      = vrc24_fini;
+    p_mapper->reset     = vrc24_reset;
+    p_mapper->writehigh = vrc24_writehigh;
+    p_mapper->hsync     = vrc24_hsync;   // 无 IRQ 硬件的编号(VRC2a)不挂 hsync
+    return ines_true;
+}
+```
+
+要点：
+
+- **差异参数化，而不是复制代码**：族内差异被折叠成几个配置位——
+  `reg_mask1/reg_mask2`（地址线错位）、`is_vrc2`（CHR 粒度/有无 IRQ）、`is_vrc6b`（A0/A1 交换）。
+- **CPU 周期驱动型 IRQ**：VRC 计数器按 CPU 周期（或 341 dots/线）递增，而宿主只在每个 `hsync`
+  回调一次。`vrc.h` 的 `vrc_irq_tick()` 用 `host->cpu.total_cycles` 的真实增量做**批处理推进**，
+  把差值折算成剩余量（`rem`），只引入"线内触发时刻"的量化误差、不漂移。实现周期性计数器时优先考虑这种"增量对账"写法。
+- **扩展音源 = 状态捕获**：VRC6（3 路 PSG）与 VRC7（YM2413 FM）的音频寄存器在 `writehigh` 里原样存进
+  `p_data`（如 `fm_reg[0x40]`），但 APU 尚无扩展声道混音接口，因此**不合成声音**。接入混音后这些状态可直接复用。
+- **`custom_sram` 语义（重要）**：`mapper.c` 在 `reset` 里对 `custom_sram == 0` 的 mapper 统一挂 8K 默认 RAM
+  到 `$6000-$7FFF`（`ines_set_sram_bank_n`）。因此：
+  - 卡带**带 WRAM/电池存档**且无自定义逻辑 → 保持 `custom_sram = 0`（默认 RAM 即 WRAM，可存档）；
+  - 卡带**没有 WRAM**，又不想让 `$6000` 出现多余 RAM → 设 `custom_sram = 1` 且**不挂** `readlow/writelow`
+    （此时 `$6000` 读回 `addr>>8`、写被丢弃，等效无 RAM）；
+  - mapper 需要**自己维护** `$6000`（EEPROM 等）→ 设 `custom_sram = 1` 并实现 `readlow/writelow`。
+- 音频寄存器等"写后即忘"的状态若没有消耗方，也要按芯片布局保留一份镜像，便于将来扩展且省去改寄存器解码。

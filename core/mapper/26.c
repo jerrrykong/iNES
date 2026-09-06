@@ -1,38 +1,28 @@
-
+// ============================================================================
+// Mapper 026 -- Konami VRC6b
+//   PRG 16K+8K; CHR 8 x 1KB; 镜像; IRQ; 扩展音 3 路(寄存器捕获)
+//   A0/A1 交换寻址 (VRC6b); 带 8K WRAM @$6000 (battery 依 iNES 头)
+// ============================================================================
 #include "../../comm/idef.h"
 #include "../../comm/log.h"
 #include "../nes.h"
 #include "../mapper.h"
+#include "vrc.h"
 
 
-
-static void mapper26_reset(ines_mapper_t* p_mapper)
+ines_bool_t mapper26_create(ines_mapper_t* p_mapper)
 {
-	ines_host_t*  p_host = mapper2host(p_mapper);
-	
-	if(p_host->prom_8k_num >= 4)
-		ines_set_prom_bank_4(p_host, 0, 1, 2, 3);
-	else
-		ines_set_prom_bank_4(p_host, 0, 1, 0,1 );
-	
-	if(p_host->vrom_1k_num > 0)
+	INIT_MAPPER_DATA_ST(p_mapper, VRC6_data_t);
+
 	{
-		ines_set_vrom_bank_8(p_host, 0, 1, 2, 3, 4, 5, 6, 7);
+		VRC6_data_t* p = mapper2VRC6data(p_mapper);
+		p->is_vrc6b  = 1;      // VRC6b: A0/A1 交换
 	}
+
+	p_mapper->custom_sram = 0; // VRC6b 带 8K WRAM
+	p_mapper->fini      = vrc6_fini;
+	p_mapper->reset     = vrc6_reset;
+	p_mapper->writehigh = vrc6_writehigh;
+	p_mapper->hsync     = vrc6_hsync;
+	return ines_true;
 }
-
-static void mapper26_writehigh(ines_mapper_t* p_mapper, ines_word_t addr, ines_byte_t  val)
-{
-	ines_host_t*  p_host = mapper2host(p_mapper);
-	(void)p_host;
-}
-
-ines_bool_t  mapper26_create(ines_mapper_t* p_mapper)
-{
-	p_mapper->reset = mapper26_reset;
-	p_mapper->writehigh = mapper26_writehigh;
-	return ines_false;
-}
-
-
-

@@ -125,7 +125,7 @@ cmake --build build --config Release
 | [docs/api.md](docs/api.md) | 核心 API 参考（host/rom/cpu/ppu/apu/joypad/mapper/公共库/DLL 导出） |
 | [docs/coding-style.md](docs/coding-style.md) | 编码规范 |
 | [docs/mapper-guide.md](docs/mapper-guide.md) | **Mapper 开发规范**（接口、模板、IRQ、检查表） |
-| [docs/mapper-list.md](docs/mapper-list.md) | **已实现 Mapper 清单**（18 个已实现，238 个占位桩） |
+| [docs/mapper-list.md](docs/mapper-list.md) | **已实现 Mapper 清单**（25 个已实现：24 个注册表标注 + 163；231 个占位桩） |
 | [docs/build.md](docs/build.md) | 构建与工程约定 |
 
 ## 源码编码与换行

@@ -288,12 +288,12 @@ static ines_bool_t (*mapper_creator_func[MAX_MAPPER_CREATOR] )(ines_mapper_t* ) 
 	/* 018 */  mapper18_create, /* implemented */
 	/* 019 */  mapper19_create,
 	/* 020 */  mapper20_create,
-	/* 021 */  mapper21_create,
-	/* 022 */  mapper22_create,
-	/* 023 */  mapper23_create,
-	/* 024 */  mapper24_create,
-	/* 025 */  mapper25_create,
-	/* 026 */  mapper26_create,
+	/* 021 */  mapper21_create, /* implemented -- Konami VRC4a/c */
+	/* 022 */  mapper22_create, /* implemented -- Konami VRC2a */
+	/* 023 */  mapper23_create, /* implemented -- Konami VRC2b/VRC4f */
+	/* 024 */  mapper24_create, /* implemented -- Konami VRC6a */
+	/* 025 */  mapper25_create, /* implemented -- Konami VRC2c/VRC4b/d/e */
+	/* 026 */  mapper26_create, /* implemented -- Konami VRC6b */
 	/* 027 */  mapper27_create,
 	/* 028 */  mapper28_create,
 	/* 029 */  mapper29_create,
@@ -352,7 +352,7 @@ static ines_bool_t (*mapper_creator_func[MAX_MAPPER_CREATOR] )(ines_mapper_t* ) 
 	/* 082 */  mapper82_create,
 	/* 083 */  mapper83_create,
 	/* 084 */  mapper84_create,
-	/* 085 */  mapper85_create,
+	/* 085 */  mapper85_create, /* implemented -- Konami VRC7 */
 	/* 086 */  mapper86_create,
 	/* 087 */  mapper87_create,
 	/* 088 */  mapper88_create,
