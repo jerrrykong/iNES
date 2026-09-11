@@ -84,6 +84,7 @@ set(INES_THREAD_SOURCE "${INES_DIR}/comm/thread.c")
 
 # win32 GUI 源文件(iNES.vcproj 的 win32 分组)
 set(INES_WIN32_SOURCES
+    "${INES_DIR}/win32/dlgOpenRom.c"
     "${INES_DIR}/win32/dlgNetPlay.c"
     "${INES_DIR}/win32/iNES.c"
     "${INES_DIR}/win32/stdafx.c"

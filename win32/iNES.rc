@@ -1,4 +1,4 @@
-// Microsoft Visual C++ generated resource script.
+﻿// Microsoft Visual C++ generated resource script.
 //
 #include "resource.h"
 
@@ -13,6 +13,8 @@
 #define APSTUDIO_HIDDEN_SYMBOLS
 #include "windows.h"
 #undef APSTUDIO_HIDDEN_SYMBOLS
+// 列表视图控件(SysListView32)的样式常量(LVS_*)定义在 commctrl.h 中, 资源编译器同样需要
+#include <commctrl.h>
 
 /////////////////////////////////////////////////////////////////////////////
 #undef APSTUDIO_READONLY_SYMBOLS
@@ -219,6 +221,21 @@ BEGIN
     LTEXT           "提示信息...",IDC_LAB_INFO,18,95,279,14
     DEFPUSHBUTTON   "开始",IDOK,205,117,50,14
     PUSHBUTTON      "取消",IDCANCEL,258,117,50,14
+END
+
+// 载入 NES 文件管理器: 上(文件夹选择) / 中(可拉伸文件列表) / 下(加载、取消)
+IDD_OPENROM DIALOGEX 0, 0, 440, 300
+STYLE DS_SETFONT | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_CLIPCHILDREN
+CAPTION "载入 NES 文件"
+FONT 9, "MS Shell Dlg", 0, 0, 0x1
+BEGIN
+    LTEXT           "文件夹:",IDC_OPENROM_LAB_DIR,7,12,40,10
+    EDITTEXT        IDC_OPENROM_EDT_DIR,52,8,350,16,ES_AUTOHSCROLL
+    CONTROL         "",IDC_OPENROM_BTN_DIR,"Button",BS_PUSHBUTTON | BS_ICON | WS_TABSTOP,408,8,26,16
+    CONTROL         "",IDC_OPENROM_LIST,"SysListView32",LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | WS_BORDER | WS_TABSTOP,7,30,427,240
+    LTEXT           "",IDC_OPENROM_LAB_COUNT,7,278,240,12
+    DEFPUSHBUTTON   "加载",IDOK,300,275,60,18
+    PUSHBUTTON      "取消",IDCANCEL,368,275,60,18
 END
 
 
