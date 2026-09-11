@@ -117,7 +117,7 @@ static inline ines_int_t ines_cpu_cycles_to_samples(ines_int64_t cycles)
 //   - 芯片引擎由 mapper 拥有(通常放 mapper p_data 内, 随其存档 blob 自动保存),
 //     本结构只保存每帧瞬态输出缓冲 + 引擎回调; run() 由 APU 惰性推进点驱动。
 //   - buffer: 每帧每声道一段 44100Hz 样本幅值(±1.0 归一化的整数标度, 混音时
-//     Σbuf/32767 * gain 加到 fout 上)。幅值恒为非负(扩展 PSG 单极性)。
+//     Σbuf/32767 * gain 加到 fout 上)。幅值可为负(如 Namco 163 带直流中心偏置有符号输出)。
 //   - 帧推进协议: 每帧 start_frame 后 cursor 从 0 开始; run(to) 必须把
 //     [cursor, to) 的每 bin 填充完整并把引擎内部状态(分频余数/相位)前进,
 //     由 APU 把 cursor 更新为 to (run 内部不得修改 cursor)。

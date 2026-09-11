@@ -1674,12 +1674,32 @@ ines_int_t ines_apu_save_state(ines_apu_t* p_apu, FILE* fSave)
 ines_int_t ines_apu_load_state(ines_apu_t* p_apu, FILE* fSave)
 {
 	ines_state_apu_data_t   data;
+	// 扩展音源槽不入存档(芯片状态随 mapper 私有数据保存)，但 memset 会连芯片指针与
+	// 回调一起清掉，导致读档后扩展音永久失效；这里先把挂接信息摘出来再还原。
+	void*       exp_chip;
+	ines_int_t  exp_channels;
+	float       exp_gain;
+	void      (*exp_run)(ines_apu_exp_t*, ines_int_t);
+	void      (*exp_reset)(ines_apu_exp_t*);
 
 
 	if(1 != fread(&data, sizeof(data), 1, fSave))
 		return -1;
 
+	exp_chip     = p_apu->exp.p_chip;
+	exp_channels = p_apu->exp.channels;
+	exp_gain     = p_apu->exp.gain;
+	exp_run      = p_apu->exp.run;
+	exp_reset    = p_apu->exp.reset;
+
 	memset(p_apu, 0, sizeof(*p_apu));
+
+	p_apu->exp.p_chip   = exp_chip;
+	p_apu->exp.channels = exp_channels;
+	p_apu->exp.gain     = exp_gain;
+	p_apu->exp.run      = exp_run;
+	p_apu->exp.reset    = exp_reset;
+	p_apu->exp.cursor   = data.last_cycles;   // 帧游标对齐到还原后的推进位置
 
 	p_apu->reg_frame_mode = data.reg_frame_mode;	
 	p_apu->reg_ctrl = data.reg_ctrl;
