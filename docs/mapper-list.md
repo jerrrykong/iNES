@@ -37,18 +37,22 @@
 | 21 | 31 | `VRC24_data_t` | ✅ | ✅ | ✅ | Konami **VRC4a/c**（VRC 系，逻辑在 `vrc.h` 共享） |
 | 22 | 31 | `VRC24_data_t` | | | ✅ | Konami **VRC2a**：CHR 2KB 粒度、无 IRQ、无 WRAM |
 | 23 | 31 | `VRC24_data_t` | ✅ | ✅ | ✅ | Konami **VRC2b/VRC4f** |
-| 24 | 28 | `VRC6_data_t` | ✅ | ✅ | ✅ | Konami **VRC6a**：含 3 路扩展音寄存器捕获（混音待 APU 扩展） |
+| 24 | 28 | `VRC6_data_t` | ✅ | ✅ | ✅ | Konami **VRC6a**：3 路扩展音已由 VRC6 引擎发声（经 APU 扩展输入槽） |
 | 25 | 30 | `VRC24_data_t` | ✅ | ✅ | ✅ | Konami **VRC2c/VRC4b/d/e** |
-| 26 | 28 | `VRC6_data_t` | ✅ | ✅ | ✅ | Konami **VRC6b**：A0/A1 交换、带 8K WRAM |
-| 85 | 25 | `VRC7_data_t` | ✅ | ✅ | ✅ | Konami **VRC7**：FM(YM2413) 寄存器仅捕获，未集成 FM 合成 |
+| 26 | 28 | `VRC6_data_t` | ✅ | ✅ | ✅ | Konami **VRC6b**：A0/A1 交换、带 8K WRAM；3 路扩展音已发声 |
+| 85 | 25 | `VRC7_data_t` | ✅ | ✅ | ✅ | Konami **VRC7**：FM(YM2413) 简化内核已接入（vrc.h §5b，单声道经 APU 扩展输入槽） |
 | 163 | 178 | `MMC163` | | ✅ | ❌ | 有完整实现（含 `reset/writehigh/readlow/writelow/hsync/fini`），但注册表未标注 `implemented` |
 
 > **VRC 家族共享实现**：21/22/23/25（VRC2/VRC4）、24/26（VRC6）、85（VRC7）的核心逻辑
-> 集中在 `core/mapper/vrc.h`（547 行）：
+> 集中在 `core/mapper/vrc.h`（约 1200 行）：
 > - 引脚错位由 `reg_mask1/reg_mask2` 统一对齐（每个编号一套掩码）
 > - VRC4/6/7 共用同一个 IRQ 计数器状态机（latch/使能/ack/模式）
-> - VRC6/7 扩展音源寄存器已按芯片布局捕获（`pulse1/pulse2/saw`、`fm_reg[0x40]`），
->   但 APU 目前没有扩展声道混音接口，故暂不发声，接入后即可复用这些状态
+> - VRC6 扩展音：APU **扩展音源输入槽**（`ines_apu_exp_t`，见 `apu.h`），VRC6 引擎（vrc.h §4b，
+>   周期精确方波/锯齿）挂槽、随 `run_until` 惰性推进、`render_frame` 混音
+> - VRC7 FM(YM2413)：vrc.h §5b 简化 FM 内核（2-op × 9 旋律声道、15 内建音色 + 用户音色、
+>   19bit 相位/FB 反馈/简化 OPLL EG），同样经扩展槽发声；FM 寄存器写前先
+>   `ines_apu_flush_run` 对齐（时钟模型：YM2413 主频 = 2×CPU，FM 更新每 36 CPU 周期一次）
+> - 两芯片混音幅值均为经验标定（`VRC6_EXP_GAIN` / `VRC7_EXP_GAIN`），待与实录 A/B
 
 未实现但值得注意的是 **14**、**17**：它们的桩里已有基本的 bank 设置骨架，可以直接作为新实现的起点。
 

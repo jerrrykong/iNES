@@ -6,7 +6,7 @@
 
 #define CUR_CPU_CYCLES(p_apu)  (apu2host(p_apu)->cpu.total_cycles)
 
-#define CPUCYCLE2SAMPLENUM(cycle)   (ines_int_t)( (cycle) * (44100.0f/1789772.5f))
+#define CPUCYCLE2SAMPLENUM(cycle)   ines_cpu_cycles_to_samples(cycle)
 
 /* 音长寄存器写入值 -> 音长计数器初值转换表  */
 static const ines_byte_t length_table [0x20] = {
@@ -131,6 +131,11 @@ void ines_apu_reset(ines_apu_t* p_apu)
 	triangle_reset(&p_apu->channel_triangle);
 	noise_reset(&p_apu->channel_noise);
 	dmc_reset(&p_apu->channel_dmc);
+
+	// 扩展音源引擎复位(已挂接时)
+	p_apu->exp.cursor = 0;
+	if(p_apu->exp.p_chip && p_apu->exp.reset)
+		p_apu->exp.reset(&p_apu->exp);
 
 	ines_apu_write(p_apu, 0x4015, 0);
 	ines_apu_write(p_apu, 0x4017, 0);
@@ -335,6 +340,30 @@ void ines_apu_flush_run(ines_apu_t* p_apu)
 	run_until(p_apu, cur_cycles);
 }
 
+void ines_apu_exp_attach(ines_apu_t* p_apu, void* p_chip, ines_int_t channels, float gain,
+                         void (*run)(ines_apu_exp_t*, ines_int_t),
+                         void (*reset)(ines_apu_exp_t*))
+{
+	if(p_apu->exp.p_chip && p_apu->exp.p_chip != p_chip)
+		ines_apu_exp_detach(p_apu, p_apu->exp.p_chip);
+
+	memset(&p_apu->exp, 0, sizeof(p_apu->exp));
+	p_apu->exp.p_chip    = p_chip;
+	p_apu->exp.channels  = channels;
+	p_apu->exp.gain      = gain;
+	p_apu->exp.run       = run;
+	p_apu->exp.reset     = reset;
+
+	if(p_apu->exp.reset)
+		p_apu->exp.reset(&p_apu->exp);
+}
+
+void ines_apu_exp_detach(ines_apu_t* p_apu, void* p_chip)
+{
+	if(p_apu->exp.p_chip == p_chip)
+		memset(&p_apu->exp, 0, sizeof(p_apu->exp));
+}
+
 void ines_apu_setoutbuffer(ines_apu_t* p_apu, ines_byte_t* p_buffer, ines_dword_t  buffer_len, ines_int_t volumn)
 {
 	p_apu->out_buffer = p_buffer;
@@ -353,6 +382,11 @@ void ines_apu_start_frame(ines_apu_t* p_apu)
 	ines_int64_t   old = p_apu->frame_start_cpu_cycles;
 	p_apu->frame_start_cpu_cycles = CUR_CPU_CYCLES(p_apu);
 	p_apu->last_cycles = 0;
+
+	// 扩展音源: 帧游标复位; 清瞬态缓冲(读档后引擎余量可能跨帧残留)
+	p_apu->exp.cursor = 0;
+	if(p_apu->exp.p_chip)
+		memset(p_apu->exp.buffer, 0, sizeof(p_apu->exp.buffer));
 	if(p_apu->next_irq > 0)
 		p_apu->next_irq -= (ines_int_t)(p_apu->frame_start_cpu_cycles - old);
 	if(p_apu->channel_dmc.next_irq > 0)
@@ -365,6 +399,7 @@ void ines_apu_render_frame(ines_apu_t* p_apu, double _unused)
 	ines_int_t i;
 	ines_int_t a;
 	ines_int_t c;
+	ines_int_t ch;
 	ines_byte_t* outbuf;
 	ines_int64_t  cur_cycles;
 	float volumn;
@@ -405,6 +440,15 @@ void ines_apu_render_frame(ines_apu_t* p_apu, double _unused)
 					(ines_int_t) p_apu->channel_dmc.buffer[a] ;
 		fout = (pulse_vol >= 0 ? mix_pulse_table[ pulse_vol ] : -mix_pulse_table[ -pulse_vol ] ) + 
 			   (tnd_vol >= 0 ? mix_tnd_table[ tnd_vol ] : -mix_tnd_table[ -tnd_vol ]);
+
+		// 扩展音源: Σ(每声道幅值)/32767 * gain, 线性和
+		if(p_apu->exp.p_chip)
+		{
+			float ext_fout = 0.0f;
+			for(ch = 0; ch < p_apu->exp.channels; ch++)
+				ext_fout += (float)(p_apu->exp.buffer[ch][i]);
+			fout += (ext_fout / 32767.0f) * p_apu->exp.gain;
+		}
 		//  must -1.0 <= fout <= 1.0f
 
 		// low pass
@@ -473,6 +517,14 @@ static void run_until(ines_apu_t* p_apu, ines_int64_t  cur_cpu_cycle)
 		triangle_run(&p_apu->channel_triangle, p_apu->last_cycles, cycles);
 		noise_run(&p_apu->channel_noise, p_apu->last_cycles, cycles);
 		dmc_run(&p_apu->channel_dmc, p_apu->last_cycles, cycles);
+
+		// 扩展音源芯片随 2A03 一起惰性推进(游标只前进; mapper 写音频寄存器前的
+		// ines_apu_flush_run 会先进到这里, 保证寄存器变更落在准确的 CPU 周期)
+		if(p_apu->exp.p_chip && p_apu->exp.run && p_apu->exp.cursor < cycles)
+		{
+			p_apu->exp.run(&p_apu->exp, cycles);
+			p_apu->exp.cursor = cycles;
+		}
 
 		p_apu->last_cycles = cycles;
 
