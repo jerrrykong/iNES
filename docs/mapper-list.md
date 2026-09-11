@@ -7,9 +7,9 @@
 | 项目 | 数量 |
 |---|---|
 | Mapper 文件总数 | 256（`0.c` ~ `255.c`） |
-| 注册表标注 `implemented` | 24 |
+| 注册表标注 `implemented` | 26 |
 | 另有实质代码但未标注 | 1（Mapper **163**） |
-| 占位桩（未实现） | 231 |
+| 占位桩（未实现） | 229 |
 
 > 判定依据：桩文件统一为 **39 行**，只有 `reset` / `writehigh` 两个空函数且 `create` 返回 `ines_false`；真实实现则行数显著更多、带私有数据或 IRQ，且返回 `ines_true`。
 
@@ -34,6 +34,7 @@
 | 15 | 103 | — | | | ✅ | 100-in-1 类多卡带 |
 | 16 | 240 | `Mapper16` | ✅ | ✅ | ✅ | Bandai FCG，**注册表注明 "no EEPROM"**（串行 EEPROM 未实现） |
 | 18 | 227 | `MMC18` | ✅ | ✅ | ✅ | Jaleco SS88006 |
+| 19 | 662 | `Namco163_data_t` | ✅ | ✅ | ✅ | **Namco 163（Namcot 106）**：12 窗口 CHR/NT、CIRAM 当 CHR、ROM nametable、8KB WRAM + 2KB×4 写保护、15 位 CPU 周期 IRQ、8 通道波表扩展音（经 APU 扩展槽）；[方案与增益标定](mapper-19-plan.md) |
 | 21 | 31 | `VRC24_data_t` | ✅ | ✅ | ✅ | Konami **VRC4a/c**（VRC 系，逻辑在 `vrc.h` 共享） |
 | 22 | 31 | `VRC24_data_t` | | | ✅ | Konami **VRC2a**：CHR 2KB 粒度、无 IRQ、无 WRAM |
 | 23 | 31 | `VRC24_data_t` | ✅ | ✅ | ✅ | Konami **VRC2b/VRC4f** |
@@ -42,6 +43,7 @@
 | 26 | 28 | `VRC6_data_t` | ✅ | ✅ | ✅ | Konami **VRC6b**：A0/A1 交换、带 8K WRAM；3 路扩展音已发声 |
 | 85 | 25 | `VRC7_data_t` | ✅ | ✅ | ✅ | Konami **VRC7**：FM(YM2413) 简化内核已接入（vrc.h §5b，单声道经 APU 扩展输入槽） |
 | 163 | 178 | `MMC163` | | ✅ | ❌ | 有完整实现（含 `reset/writehigh/readlow/writelow/hsync/fini`），但注册表未标注 `implemented` |
+| 210 | 142 | —（无私有状态） | | | ✅ | **Namco 175 / Namco 340**（Namco 163 的降本版，同一个 iNES 号）：8 窗口 1KB CHR、3 槽 8KB PRG、340 可选 H/V/单屏镜像；175/340 变体不区分（详见 `core/mapper/210.c` 文件头） |
 
 > **VRC 家族共享实现**：21/22/23/25（VRC2/VRC4）、24/26（VRC6）、85（VRC7）的核心逻辑
 > 集中在 `core/mapper/vrc.h`（约 1200 行）：
@@ -60,15 +62,20 @@
 
 | 特性 | 使用的 Mapper |
 |---|---|
-| 扫描线 IRQ（`hsync` + `ines_cpu_IRQ`） | 4, 5, 6, 12, 16, 18 |
+| 扫描线 IRQ（`hsync` + `ines_cpu_IRQ`） | 4, 5, 6, 12, 16, 18, 19 |
 | `hsync`（无 IRQ，用于 CHR 切换特效） | 163 |
-| PRG + CHR 全切换 | 1, 4, 5, 6, 12, 16, 18, 163 |
+| PRG + CHR 全切换 | 1, 4, 5, 6, 12, 16, 18, 19, 163, 210 |
 | 仅 PRG 切换 | 2, 7, 11, 15 |
 | 仅 CHR 切换 | 3, 13 |
 | 无切换 | 0 |
 | `PPU_latch`（MMC5 图形扩展） | 5 |
 | `PPU_latch_FDFE`（`$FD/$FE` 锁存） | 9, 10 |
-| 私有数据 + `fini` | 1, 4, 5, 6, 9, 10, 12, 16, 18, 163 |
+| 内部 NT RAM 当作 CHR（`pattern_type = 2`） | 19 |
+| nametable 窗口指向 CHR 页（ROM nametable，`ines_set_nt_chr_bank_n`） | 19 |
+| 自定义 SRAM（`custom_sram = 1`，含写保护） | 19 |
+| 自由镜像排布（`ines_ppu_set_mirror`，含单屏选择） | 1, 6, 7, 16, 18, 19, 21-26, 210 |
+| 扩展音（APU 扩展输入槽） | 19, 24, 26, 85 |
+| 私有数据 + `fini` | 1, 4, 5, 6, 9, 10, 12, 16, 18, 19, 163 |
 
 ## 4. 桩文件（占位实现）
 

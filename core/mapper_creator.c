@@ -286,7 +286,7 @@ static ines_bool_t (*mapper_creator_func[MAX_MAPPER_CREATOR] )(ines_mapper_t* ) 
 	/* 016 */  mapper16_create, /* implemented -- FCG, no EEPROM */
 	/* 017 */  mapper17_create,
 	/* 018 */  mapper18_create, /* implemented */
-	/* 019 */  mapper19_create,
+	/* 019 */  mapper19_create, /* implemented -- Namco 163 (映射/IRQ/WRAM 写保护/12 窗口 CHR 与 CIRAM 当 CHR/扩展音) */
 	/* 020 */  mapper20_create,
 	/* 021 */  mapper21_create, /* implemented -- Konami VRC4a/c */
 	/* 022 */  mapper22_create, /* implemented -- Konami VRC2a */
@@ -477,7 +477,7 @@ static ines_bool_t (*mapper_creator_func[MAX_MAPPER_CREATOR] )(ines_mapper_t* ) 
 	/* 207 */  mapper207_create,
 	/* 208 */  mapper208_create,
 	/* 209 */  mapper209_create,
-	/* 210 */  mapper210_create,
+	/* 210 */  mapper210_create, /* implemented -- Namco 175/340 (同 iNES 号, 340 可选镜像, 变体不区分) */
 	/* 211 */  mapper211_create,
 	/* 212 */  mapper212_create,
 	/* 213 */  mapper213_create,
