@@ -319,6 +319,9 @@ p_host->cpu.bank_writeable[3] = NES_BANK_WRITE_PROTECTED;      // 写落到 mapp
 
 ## 5. 验证清单
 
+> **状态（2026-09-12）**：Mapper 19 已由用户实机验证，运行无问题。下列条目保留为后续回归与深入验证项；
+> 最后一条（mapper 210）因暂时没有可用 ROM，尚未验证。
+
 - [ ] 扩展音的 20 个游戏（三国志II、King of Kings、Rolling Thunder、幽游白书、Erika 等）能进游戏且音乐正常。
 - [ ] 音量主观校准：对 Rolling Thunder（约 +16.9 dB）与 Sangokushi II（约 +12.9 dB）A/B，
       确认 `N163_EXP_GAIN = 1.00f` 是否需要按 §1.6 的公式改。

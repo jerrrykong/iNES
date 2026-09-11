@@ -45,6 +45,10 @@
 | 163 | 178 | `MMC163` | | ✅ | ❌ | 有完整实现（含 `reset/writehigh/readlow/writelow/hsync/fini`），但注册表未标注 `implemented` |
 | 210 | 142 | —（无私有状态） | | | ✅ | **Namco 175 / Namco 340**（Namco 163 的降本版，同一个 iNES 号）：8 窗口 1KB CHR、3 槽 8KB PRG、340 可选 H/V/单屏镜像；175/340 变体不区分（详见 `core/mapper/210.c` 文件头） |
 
+> **实机验证状态（2026-09-12）**：**19**（Namco 163）已由用户实机验证，游戏运行无问题；
+> **210**（Namco 175/340）暂无可用 ROM，尚未实机验证（仅通过编译与静态检查）。
+> 详细验证项见 [mapper-19-plan.md](mapper-19-plan.md) §5。
+
 > **VRC 家族共享实现**：21/22/23/25（VRC2/VRC4）、24/26（VRC6）、85（VRC7）的核心逻辑
 > 集中在 `core/mapper/vrc.h`（约 1200 行）：
 > - 引脚错位由 `reg_mask1/reg_mask2` 统一对齐（每个编号一套掩码）
