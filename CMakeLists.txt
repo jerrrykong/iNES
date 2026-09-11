@@ -26,8 +26,12 @@ cmake_minimum_required(VERSION 3.16)
 # ---------------------------------------------------------------------
 # 必须以缓存变量形式设置: 普通变量会在 project() 内部被消费掉(实测不生效)。
 # 用户可用 cmake -A x64 显式覆盖。
-if(NOT DEFINED CMAKE_GENERATOR_PLATFORM OR "${CMAKE_GENERATOR_PLATFORM}" STREQUAL "")
-    set(CMAKE_GENERATOR_PLATFORM "Win32" CACHE STRING "目标平台(原 VC 工程为 Win32)" FORCE)
+# 注意: 该变量只对 Windows 生成器(Visual Studio)有效, 非 Windows 平台设置它会导致
+#       配置失败, 因此必须用 if(WIN32) 守卫。
+if(WIN32)
+    if(NOT DEFINED CMAKE_GENERATOR_PLATFORM OR "${CMAKE_GENERATOR_PLATFORM}" STREQUAL "")
+        set(CMAKE_GENERATOR_PLATFORM "Win32" CACHE STRING "目标平台(原 VC 工程为 Win32)" FORCE)
+    endif()
 endif()
 
 if(MSVC AND CMAKE_GENERATOR MATCHES "Ninja" AND
@@ -43,6 +47,12 @@ project(iNES
     DESCRIPTION "iNES NES (Family Computer) emulator"
     LANGUAGES C)
 
+# macOS 前端使用 Objective-C(非 ObjC++, 不引入 C++ 运行时), 需显式启用该语言。
+# 必须在 project() 之后调用。
+if(APPLE)
+    enable_language(OBJC)
+endif()
+
 set(INES_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 
 # ---------------------------------------------------------------------
@@ -50,9 +60,15 @@ set(INES_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 # ---------------------------------------------------------------------
 option(INES_BUILD_CORE "构建核心共享库 inescore(对应 iNesCore_DLL.vcproj)" ON)
 option(INES_BUILD_GUI  "构建 Win32 GUI 模拟器 iNES(对应 iNES.vcproj)"     ON)
+option(INES_BUILD_MAC_GUI "构建 macOS GUI 模拟器 iNES.app"                ON)
 # 输出目录: 原 VC 工程把可执行与 dll 统一输出到仓库 bin/
 set(INES_OUTPUT_DIR "${INES_DIR}/bin" CACHE PATH
     "可执行文件/共享库输出目录(默认 <仓库>/bin)")
+
+# macOS 最低系统版本(Universal 二进制含 arm64 时不能低于 11.0)
+if(APPLE AND NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "macOS 最低系统版本")
+endif()
 
 # ---------------------------------------------------------------------
 # 源文件列表(逐一对应 vcproj 中的文件分组)
@@ -93,6 +109,40 @@ set(INES_WIN32_SOURCES
     "${INES_DIR}/win32/wPatternTable.c"
     "${INES_DIR}/win32/wSPmemory.c"
     "${INES_DIR}/win32/wVmemory.c")
+
+# mac 前端源文件(Objective-C, 仅 APPLE 参与构建; core/comm 与 win32 共用)
+set(INES_MAC_OBJC_SOURCES
+    "${INES_DIR}/mac/main.m"
+    "${INES_DIR}/mac/iNESApp.m"
+    "${INES_DIR}/mac/iNESVideo.m"
+    "${INES_DIR}/mac/iNESAudio.m")
+
+set(INES_MAC_C_SOURCES
+    "${INES_DIR}/mac/iNESOsd.c"
+    "${INES_DIR}/mac/iNESPalette.c"
+    "${INES_DIR}/mac/iNESConfig.c")
+
+set(INES_MAC_SOURCES
+    ${INES_MAC_OBJC_SOURCES}
+    ${INES_MAC_C_SOURCES})
+
+# macOS 应用图标: 由 mac/icon/iNES-icon.svg 经 mac/icon/make-icns.sh 生成。
+# 借助 MACOSX_PACKAGE_LOCATION 让 CMake 把它拷进 iNES.app/Contents/Resources/。
+set(INES_MAC_ICON "${INES_DIR}/mac/icon/iNES.icns")
+if(APPLE AND EXISTS "${INES_MAC_ICON}")
+    set_source_files_properties("${INES_MAC_ICON}"
+        PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+else()
+    message(WARNING "iNES: 缺少 macOS 图标 ${INES_MAC_ICON}, 应用将显示默认图标")
+endif()
+
+# 前端使用 ARC(自动引用计数): 视图/音频模块依赖 weak 属性与 block 捕获语义。
+# 注意: -fobjc-arc 只对 Objective-C 源文件生效, 传给 .c 文件会被 clang 拒绝,
+#       因此这里按"源文件属性"逐个 .m 设置, 而不是给整个目标加编译选项。
+if(APPLE)
+    set_source_files_properties(${INES_MAC_OBJC_SOURCES}
+        PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+endif()
 
 # ---------------------------------------------------------------------
 # 辅助函数: 输出目录对齐原工程 bin/ 布局
@@ -140,11 +190,15 @@ if(INES_BUILD_CORE)
             OUTPUT_NAME "inescore"
             PREFIX "")
     else()
-        # UNIX/Android 风格: comm/net.c、thread.c 走 POSIX 分支
-        # (源码以小写 "linux" 宏区分平台, 需手动定义)
-        target_compile_definitions(inescore PRIVATE linux)
+        # UNIX/Android/macOS 风格: comm/net.c、thread.c 走 POSIX 分支
+        # (源码统一判断 INES_POSIX, idef.h 中也会依据 __APPLE__/__linux__ 自动归一化)
+        target_compile_definitions(inescore PRIVATE INES_POSIX)
         find_package(Threads REQUIRED)
-        target_link_libraries(inescore PRIVATE Threads::Threads m)
+        target_link_libraries(inescore PRIVATE Threads::Threads)
+        if(NOT APPLE)
+            # macOS 的 libSystem 已包含 libm, 显式链接 -lm 在部分 SDK 上会告警
+            target_link_libraries(inescore PRIVATE m)
+        endif()
         set_target_properties(inescore PROPERTIES OUTPUT_NAME "inescore")
     endif()
 
@@ -216,9 +270,60 @@ if(INES_BUILD_GUI)
 endif()
 
 # =====================================================================
+# 目标 3: iNES macOS GUI 模拟器 (iNES.app)
+# 字符集: UTF-8(NSString) ; 依赖: Cocoa/AudioToolbox/CoreAudio/QuartzCore
+# 复用:   core + comm(含 thread.c, 因其线程/互斥量封装已跨平台)
+# =====================================================================
+if(INES_BUILD_MAC_GUI)
+    if(NOT APPLE)
+        message(STATUS "iNES: 跳过 macOS GUI 目标(当前平台非 APPLE)")
+    else()
+        add_executable(iNES MACOSX_BUNDLE
+            ${INES_CORE_SOURCES}
+            ${INES_COMMON_COMM_SOURCES}
+            ${INES_THREAD_SOURCE}
+            ${INES_MAC_SOURCES}
+            ${INES_MAC_ICON})
+
+        target_include_directories(iNES PRIVATE "${INES_DIR}")
+
+        # 与 win32 侧一致: core/comm 依赖 INES_POSIX 判断平台分支
+        target_compile_definitions(iNES PRIVATE INES_POSIX)
+
+        target_link_libraries(iNES PRIVATE
+            "-framework Cocoa"
+            "-framework AudioToolbox"
+            "-framework CoreAudio"
+            "-framework QuartzCore")
+
+        set_target_properties(iNES PROPERTIES
+            OUTPUT_NAME "iNES"
+            MACOSX_BUNDLE_INFO_PLIST "${INES_DIR}/mac/Info.plist"
+            # 图标文件名需与 Info.plist 的 CFBundleIconFile 及 Resources 下的实际文件一致
+            MACOSX_BUNDLE_ICON_FILE "iNES.icns"
+            MACOSX_BUNDLE_BUNDLE_NAME "iNES"
+            MACOSX_BUNDLE_GUI_IDENTIFIER "com.ines.emulator"
+            MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+            MACOSX_BUNDLE_COPYRIGHT "Copyright (C) 2015")
+
+        # -Wno-deprecated-declarations: NSOpenPanel.allowedFileTypes 等在
+        #                              macOS 12 起被标记为弃用, 但为兼容 11.0 仍在使用
+        target_compile_options(iNES PRIVATE
+            -Wall -Wextra -Wno-unused-parameter -Wno-unused-function
+            -Wno-deprecated-declarations)
+
+        ines_set_output_dirs(iNES)
+
+        message(STATUS "iNES: 构建 macOS GUI 模拟器 iNES.app")
+    endif()
+endif()
+
+# =====================================================================
 # 构建配置摘要
 # =====================================================================
 message(STATUS "iNES: 输出目录         = ${INES_OUTPUT_DIR}")
 message(STATUS "iNES: 目标平台/生成器  = ${CMAKE_GENERATOR_PLATFORM} / ${CMAKE_GENERATOR}")
 message(STATUS "iNES: 核心库(inescore) = ${INES_BUILD_CORE}")
 message(STATUS "iNES: GUI  (iNES)      = ${INES_BUILD_GUI}")
+message(STATUS "iNES: GUI  (macOS)     = ${INES_BUILD_MAC_GUI}")

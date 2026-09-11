@@ -48,7 +48,7 @@ typedef ines_cstr_t       ines_log_module_t;
 #define INES_LOG(l,m,...)   do{  if(ines_check_level(l)) { ines_log_r((l),(m),ISTR("")  __VA_ARGS__); } } while(0)
 
 ines_cstr_t ines_get_ctime_u();
-#ifdef linux
+#ifdef INES_POSIX
 void ines_log(ines_log_level_t level, ines_log_module_t module, ines_cstr_t strFmt, ...) __attribute__((format (printf, 3,4 ))) ;
 void ines_log_r(ines_log_level_t level, ines_log_module_t module, ines_cstr_t strFmt, ...)  __attribute__((format (printf, 3,4 )));
 #else

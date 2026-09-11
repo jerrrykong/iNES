@@ -85,12 +85,12 @@ static ines_int64_t  get_cur_time_us()
 
 	return g_time_base_us + (ines_int64_t)( (double)(lc.QuadPart - g_time_base_counter) / g_time_base_freq * 1000000.0 );
 
-#elif defined (linux)
+#elif defined(INES_POSIX)
 
-	struct timeval  tv;
-	gettimeofday(&tv, NULL);
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
 
-	return (ines_int64_t)tv.tv_sec * 1000000 + tv.tv_usec;
+	return (ines_int64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
 #endif
 }
 
@@ -98,11 +98,19 @@ static void do_sleep(ines_int64_t  us)
 {
 #ifdef WIN32
 	Sleep((DWORD)(us/1000));
-#elif defined (linux)
-	usleep(us);
+#elif defined(INES_POSIX)
+	// usleep 自 macOS 10.13 起已废弃, 统一使用 nanosleep
+	if(us <= 0)
+		return;
+	{
+		struct timespec ts;
+		ts.tv_sec  = (time_t)(us / 1000000);
+		ts.tv_nsec = (long)((us % 1000000) * 1000);
+		nanosleep(&ts, NULL);
+	}
 #else
 	usleep(us);
-#endif 
+#endif
 }
 
 

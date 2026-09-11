@@ -4,7 +4,7 @@
 #include <WinSock2.h>
 //#define  EINPROGRESS    WSAEINPROGRESS
 typedef SOCKET  socket_t;
-#elif defined(linux)
+#elif defined(INES_POSIX)
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
@@ -43,7 +43,7 @@ static  char* __t2a(ines_str_t ts)
 #else
 	return (char*)ts;
 #endif
-#elif defined linux
+#elif defined(INES_POSIX)
 	return (char*)ts;
 #endif
 }
@@ -60,7 +60,7 @@ int net_init()
 	memset(&wsadata, 0, sizeof(wsadata));
 	if(0 != WSAStartup(MAKEWORD(2,2), &wsadata))
 		return -1;
-#elif defined(linux)
+#elif defined(INES_POSIX)
 	signal(SIGPIPE, SIG_IGN);
 #endif
 	s_sock_listen = INVALID_SOCKET;
@@ -74,7 +74,7 @@ static int net_get_error_code()
 {
 #ifdef WIN32
 	return WSAGetLastError();
-#elif defined (linux)
+#elif defined(INES_POSIX)
 	return errno;
 #endif
 }
@@ -88,7 +88,7 @@ static ines_cstr_t   net_strerror(int errCode)
 	if(!FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM,  0, errCode, 0, desc, 511, NULL))
 		return ISTR("");
 	return desc;
-#elif defined(linux)
+#elif defined(INES_POSIX)
 	return strerror(errCode);
 #endif
 }
@@ -106,7 +106,7 @@ static int net_socket_error(socket_t sock)
 	int errorCode = 0;
 #ifdef WIN32
 	int len = sizeof(errorCode);
-#elif defined (linux)
+#elif defined(INES_POSIX)
 	socklen_t len = sizeof(errorCode);
 #endif
 	int ret = getsockopt(sock, SOL_SOCKET, SO_ERROR, (char*)&errorCode, &len);
@@ -125,7 +125,7 @@ static int net_set_async(socket_t   sock)
 	u_long    on = 1;
 	if(ioctlsocket(sock, FIONBIO, &on) < 0)
 		return -1;
-#elif defined (linux)
+#elif defined(INES_POSIX)
 	const int on = 1;
 	if(ioctl(sock, FIONBIO, (void*)&on) < 0)
 		return -1;
@@ -293,7 +293,7 @@ int net_connect(net_saddr_t  saddr, net_port_t  port)
 
 #ifdef WIN32
 		if(WSAGetLastError() != WSAEWOULDBLOCK )
-#elif defined (linux)
+#elif defined(INES_POSIX)
 		if(errno != EINPROGRESS)
 #endif
 		{

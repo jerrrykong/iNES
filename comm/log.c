@@ -7,7 +7,7 @@
 #ifdef WIN32
 #include <windows.h>
 #include <sys/timeb.h>
-#elif defined(linux)
+#elif defined(INES_POSIX)
 #endif
 
 static  ines_int64_t  (*g_get_stamp_func) (void) =  NULL;
@@ -140,6 +140,50 @@ static void ines_log_perfix(ines_char_t* szBuf, ines_log_level_t  level)
 
 }
 
+// 计算日志文件的默认路径(返回 szBuf):
+//   Windows  : 可执行文件同目录(保持原有行为)
+//   macOS    : 用户数据目录 ~/Library/Application Support/iNES
+//   Android  : /sdcard
+//   其它POSIX: /tmp
+// 非 Windows 平台不用相对路径, 因为从桌面/Finder 启动时进程工作目录是 "/", 不可写。
+static ines_cstr_t ines_default_log_path(ines_char_t* szBuf, ines_size_t szLen)
+{
+	if(szBuf == NULL || szLen < 2)
+		return ISTR("");
+
+#ifdef WIN32
+	{
+		ines_char_t*  p;
+		GetModuleFileName(NULL, szBuf, (DWORD)szLen);
+		szBuf[szLen - 1] = 0;
+		p = szBuf + _tcslen(szBuf);
+		while(p > szBuf && p[-1] != '\\' && p[-1] != '/')
+			p--;
+		if((ines_size_t)(p - szBuf) + 8 >= szLen)
+			return szBuf;  // 空间不足: 保留目录部分, 调用方会写入失败但不越界
+		ines_strcpy(p, ISTR("iNES.log"));
+	}
+#elif defined(__ANDROID__)
+	ines_strncpy(szBuf, ISTR("/sdcard/iNES.log"), szLen);
+	szBuf[szLen - 1] = 0;
+#else
+	{
+		ines_char_t  szDir[INES_MAX_PATH];
+		ines_get_data_dir(szDir, count_of(szDir));
+		if(szDir[0] != 0)
+			ines_snprintf(szBuf, szLen, ISTR("%s/iNES.log"), szDir);
+		else
+		{
+			ines_strncpy(szBuf, ISTR("/tmp/iNES.log"), szLen);
+			szBuf[szLen - 1] = 0;
+		}
+	}
+#endif
+
+	return szBuf;
+}
+
+
 void ines_log_r(ines_log_level_t level, ines_log_module_t module, ines_cstr_t strFmt, ...)
 {
 	va_list vl;
@@ -156,19 +200,7 @@ void ines_log_r(ines_log_level_t level, ines_log_module_t module, ines_cstr_t st
 	{
 		if(szLogFileName[0] == 0)
 		{
-#ifdef WIN32
-			ines_char_t*  p;
-			GetModuleFileName(NULL, szLogFileName, count_of(szLogFileName));
-			p = szLogFileName + _tcslen(szLogFileName);
-			while(p>szLogFileName && p[-1] != '\\') p--;
-			ines_strcpy(p, ISTR("iNES.log"));
-#elif defined linux 
-	#ifdef __ANDROID__
-			ines_strcpy(szLogFileName, ISTR("/sdcard/iNES.log"));
-	#else
-			ines_strcpy(szLogFileName, ISTR("/tmp/iNES.log"));
-	#endif
-#endif
+			ines_default_log_path(szLogFileName, count_of(szLogFileName));
 		}
 		if(0 == _tstat(szLogFileName, &st))
 		{
@@ -231,7 +263,7 @@ ines_cstr_t ines_get_ctime_u()
 	tv.tv_sec  = (long)timebuffer.time;
 	tv.tv_usec = timebuffer.millitm;
 #define MTRP   ISTR("%03d")   // 支持毫秒级的 注意这里的tv_usec 是毫秒,不是微秒
-#elif defined linux
+#elif defined(INES_POSIX)
 	gettimeofday(&tv, NULL);
 #define MTRP   ISTR("%06ld")    // 支持微秒级
 #endif
@@ -305,22 +337,29 @@ void ines_log(ines_log_level_t level, ines_log_module_t module, ines_cstr_t strF
 	{
 		static FILE* pfLog = NULL;
 		static int   lines = 0;
+		static ines_char_t  szLogFile[INES_MAX_PATH] = {0};
+		ines_char_t  szNewFileName[INES_MAX_PATH];
+		struct _stat   st;
 
 		if(pfLog == NULL)
 		{
-			ines_char_t  szNewFileName[INES_MAX_PATH];
-
-			struct _stat   st;
-			if(0 == _tstat(ISTR("iNES.log"), &st))
+#ifdef WIN32
+			// Windows 保持原有行为: 相对当前工作目录
+			ines_strncpy(szLogFile, ISTR("iNES.log"), count_of(szLogFile));
+#else
+			// POSIX: 从桌面/Finder 启动时工作目录为 "/" 不可写, 改用绝对路径
+			ines_default_log_path(szLogFile, count_of(szLogFile));
+#endif
+			if(0 == _tstat(szLogFile, &st))
 			{
 				if(st.st_size > 10*1024*1024)
 				{
 					time_t  t = time(NULL);
-					ines_snprintf(szNewFileName, count_of(szNewFileName), ISTR("iNES.log.%d"), (unsigned int)t);
-					_trename(ISTR("iNES.log"), szNewFileName);
+					ines_snprintf(szNewFileName, count_of(szNewFileName), ISTR("%s.%d"), szLogFile, (unsigned int)t);
+					_trename(szLogFile, szNewFileName);
 				}
 			}
-			pfLog = _tfopen(ISTR("iNES.log"), ISTR("a+"));
+			pfLog = _tfopen(szLogFile, ISTR("a+"));
 		}
 
 		lines++;
@@ -329,17 +368,15 @@ void ines_log(ines_log_level_t level, ines_log_module_t module, ines_cstr_t strF
 			lines = 0;
 			if(pfLog)
 			{
-				ines_char_t    szNewFileName[INES_MAX_PATH];
-				struct _stat   st;
-				if(0 == _tstat(ISTR("iNES.log"), &st))
+				if(0 == _tstat(szLogFile, &st))
 				{
 					if(st.st_size > 10*1024*1024)
 					{
 						time_t  t = time(NULL);
 						fclose(pfLog);
-						ines_snprintf(szNewFileName, count_of(szNewFileName), ISTR("iNES.log.%d"), (unsigned int)t);
-						_trename(ISTR("iNES.log"), szNewFileName);
-						pfLog = _tfopen(ISTR("iNES.log"), ISTR("a+"));
+						ines_snprintf(szNewFileName, count_of(szNewFileName), ISTR("%s.%d"), szLogFile, (unsigned int)t);
+						_trename(szLogFile, szNewFileName);
+						pfLog = _tfopen(szLogFile, ISTR("a+"));
 					}
 				}
 			}

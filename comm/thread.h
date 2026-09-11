@@ -7,7 +7,7 @@
 
 #ifdef WIN32
 #include <windows.h>
-#elif defined (linux)
+#elif defined(INES_POSIX)
 #include <pthread.h>
 #endif
 
@@ -21,7 +21,7 @@ extern "C"
 
 #ifdef WIN32
 typedef  DWORD     ines_thread_id_t;
-#elif defined(linux)
+#elif defined(INES_POSIX)
 typedef  pthread_t  ines_thread_id_t;
 #endif
 
@@ -33,7 +33,7 @@ struct _ines_mutex_
 {
 #ifdef WIN32
 	HANDLE  h_mutex;
-#elif defined(linux)
+#elif defined(INES_POSIX)
 	pthread_mutex_t  mutex_id;
 #endif
 };
@@ -44,7 +44,7 @@ struct _ines_thread_
 {
 #ifdef WIN32
 	HANDLE  h_thread;
-#elif defined(linux)
+#elif defined(INES_POSIX)
 	pthread_t  th_id;
 #endif
 	ines_thread_func  proc;
@@ -57,7 +57,7 @@ struct _ines_thread_
 
 #ifdef WIN32
 #define ines_thread_exit()  ExitThread(0)
-#elif defined(linux)
+#elif defined(INES_POSIX)
 #define ines_thread_exit()   pthread_exit(NULL)
 #endif
 

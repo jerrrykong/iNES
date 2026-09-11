@@ -12,11 +12,27 @@
 #include <time.h>
 #include <math.h>
 
+// 平台归一化: Windows 用 WIN32 区分, 其余 POSIX 平台(Linux/Android/macOS)
+// 统一用 INES_POSIX 区分, 避免源码里散落的非标准宏 "linux"。
+// 说明: 编译器在 Linux/Android 目标上会预定义 linux/__linux__, 在 macOS 上会
+//       预定义 __APPLE__, 这里统一收敛为 INES_POSIX; CMake 也会显式定义它。
+#if defined(linux) || defined(__linux__) || defined(__ANDROID__) || defined(__APPLE__)
+	#ifndef INES_POSIX
+		#define INES_POSIX 1
+	#endif
+#endif
+
 #ifdef WIN32
 #pragma warning(disable:4996)
 #include <tchar.h>
-#elif defined linux
+#elif defined(INES_POSIX)
 #include <unistd.h>
+// struct timeval: macOS 上不随 <time.h> 提供, 必须显式包含
+#include <sys/time.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+// strcasecmp: macOS 上声明在 <strings.h>(Linux 由 <string.h> 提供)
+#include <strings.h>
 #endif
 
 #include <assert.h>
@@ -40,7 +56,7 @@ typedef  TCHAR          ines_char_t;
 #define PRI64    "I64"
 
 
-#elif defined linux
+#elif defined(INES_POSIX)
 typedef  const char*   ines_cstr_t;
 typedef  char*         ines_str_t;
 typedef  char          ines_char_t;
@@ -52,7 +68,7 @@ typedef  int            ines_int_t;
 typedef  size_t         ines_size_t;
 #ifdef WIN32
 typedef  __int64        ines_int64_t;
-#elif defined linux
+#elif defined(INES_POSIX)
 typedef  long long        ines_int64_t;
 #endif
 
@@ -75,7 +91,7 @@ typedef  long long        ines_int64_t;
 #define  ines_strncpy     _tcsncpy
 #define  ines_strcmp     _tcscmp
 #define  ines_strcasecmp     _tcsicmp
-#elif defined linux
+#elif defined(INES_POSIX)
 #define ISTR(s)   s
 
 #define  ines_printf     printf
@@ -125,6 +141,14 @@ extern "C"
 
 
 ines_char_t* get_file_title(ines_char_t* title, ines_cstr_t  file_path);
+
+// 取"用户数据目录"(配置/日志/存档/截图/即时存档的存放根目录), 返回值即 szPath,
+// 目录不存在时会被创建(创建失败时仍然返回路径, 由调用方在写入时报错):
+//   Windows : 可执行文件所在目录
+//   macOS   : $HOME/Library/Application Support/iNES
+//   其它POSIX: $HOME/.local/share/iNES
+// 之所以不在 Windows 上改变原行为, 是为了让 win32 前端与旧版本完全一致。
+ines_cstr_t ines_get_data_dir(ines_str_t szPath, ines_size_t szLen);
 
 #ifdef __cplusplus
 }

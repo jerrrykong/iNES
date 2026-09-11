@@ -11,7 +11,7 @@ int  ines_mutex_init(ines_mutex_t* mutex)
 	mutex->h_mutex = CreateMutex(NULL, FALSE, NULL);
 	if(mutex->h_mutex == NULL)
 		return -1;
-#elif defined (linux)
+#elif defined(INES_POSIX)
 	//always returns 0.
 	pthread_mutex_init(&mutex->mutex_id, NULL);
 #endif
@@ -25,7 +25,7 @@ int  ines_mutex_fini(ines_mutex_t* mutex)
 
 #ifdef WIN32
 	CloseHandle(mutex->h_mutex);
-#elif defined (linux)
+#elif defined(INES_POSIX)
 	int ret = pthread_mutex_destroy(&mutex->mutex_id);
 	if(EBUSY== ret)
 	{
@@ -41,7 +41,7 @@ int  ines_mutex_lock(ines_mutex_t* mutex)
 {
 #ifdef WIN32
 	DWORD ret;
-#elif defined (linux)
+#elif defined(INES_POSIX)
 	int ret;
 #endif
 	if(mutex == NULL)
@@ -51,7 +51,7 @@ int  ines_mutex_lock(ines_mutex_t* mutex)
 	ret = WaitForSingleObject(mutex->h_mutex, INFINITE);
 	if(ret != WAIT_OBJECT_0)
 		return  -1;
-#elif defined (linux)
+#elif defined(INES_POSIX)
 	ret = pthread_mutex_lock(&mutex->mutex_id);
 	if(0 != ret)
 	{
@@ -65,7 +65,7 @@ int  ines_mutex_try_lock(ines_mutex_t* mutex)
 {
 #ifdef WIN32
 	DWORD ret;
-#elif defined (linux)
+#elif defined(INES_POSIX)
 	int ret;
 #endif
 
@@ -82,7 +82,7 @@ int  ines_mutex_try_lock(ines_mutex_t* mutex)
 	default:
 		return -1;
 	}
-#elif defined (linux)
+#elif defined(INES_POSIX)
 	ret = pthread_mutex_trylock(&mutex->mutex_id);
 	if(0 != ret)
 	{
@@ -105,7 +105,7 @@ int  ines_mutex_unlock(ines_mutex_t* mutex)
 #ifdef WIN32
 	if(!ReleaseMutex(mutex->h_mutex))
 		return -1;
-#elif defined(linux)
+#elif defined(INES_POSIX)
 	int ret = pthread_mutex_unlock(&mutex->mutex_id);
 	if(0 != ret)
 	{
@@ -124,7 +124,7 @@ ines_thread_id_t  ines_thread_getcurid()
 {
 #ifdef WIN32
 	return GetCurrentThreadId();
-#elif defined(linux)
+#elif defined(INES_POSIX)
 	return pthread_self();
 #endif
 }
@@ -135,7 +135,7 @@ int  ines_thread_init(ines_thread_t* th, ines_thread_func pf, void* ud)
 		return -1;
 #ifdef WIN32
 	th->h_thread = NULL;
-#elif defined(linux)
+#elif defined(INES_POSIX)
 	th->th_id = 0;
 #endif
 	th->proc = pf;
@@ -154,7 +154,7 @@ int  ines_thread_fini(ines_thread_t* th)
 		CloseHandle(th->h_thread);
 		th->h_thread = NULL;
 	}
-#elif defined(linux)
+#elif defined(INES_POSIX)
 	if( th->th_id != 0)
 	{
 		
@@ -167,7 +167,7 @@ int  ines_thread_fini(ines_thread_t* th)
 }
 
 
-#ifdef linux 
+#ifdef INES_POSIX 
 #ifdef __ANDROID__ // android not support force cancel thread 
 void handle_quit(int signo)
 {
@@ -180,16 +180,22 @@ void handle_quit(int signo)
 
 #ifdef WIN32
 static DWORD WINAPI ines_thread_proc(void* param)
-#elif defined (linux)
+#elif defined(INES_POSIX)
 static void* ines_thread_proc(void* param)
 #endif 
 {
 	int ret;
 	ines_thread_t* self = (ines_thread_t*)param;
 
-#ifdef linux 
-#ifdef __ANDROID__ // android not support force cancel thread 
+#ifdef INES_POSIX 
+#if defined(__ANDROID__) // android not support force cancel thread 
 	signal(SIGQUIT,handle_quit);
+#elif defined(__APPLE__)
+	// Darwin 的异步取消(PTHREAD_CANCEL_ASYNCHRONOUS)不可靠, 只允许延迟取消点。
+	// 强制终止线程在 macOS 上不被支持(见 ines_thread_terminate), 线程退出统一
+	// 走协作式停止标志 + pthread_join。
+	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
+	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
 #else
 	// set the thread can be canceled.
 	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
@@ -205,7 +211,7 @@ static void* ines_thread_proc(void* param)
 	{
 #ifdef WIN32
 		self->h_thread = NULL;
-#elif defined (linux)
+#elif defined(INES_POSIX)
 		self->th_id = 0;
 #endif
 		self->auto_detach = 0;
@@ -215,7 +221,7 @@ static void* ines_thread_proc(void* param)
 
 #ifdef WIN32
 	return 0;
-#elif defined (linux)
+#elif defined(INES_POSIX)
 	return NULL;
 #endif
 
@@ -225,7 +231,7 @@ int  ines_thread_start(ines_thread_t* th)
 {
 #ifdef WIN32
 	DWORD  thread_id;
-#elif defined (linux)
+#elif defined(INES_POSIX)
 	int ret;
 #endif
 
@@ -236,7 +242,7 @@ int  ines_thread_start(ines_thread_t* th)
 	if(th->h_thread  == 0) {
 		return -1;
 	}
-#elif defined (linux)
+#elif defined(INES_POSIX)
 	ret = pthread_create(&th->th_id, NULL, ines_thread_proc,   (void*)th);
 	if(ret != 0)
 	{
@@ -263,10 +269,17 @@ int  ines_thread_terminate(ines_thread_t* th)
 		return -1;  // thread error
 	CloseHandle(th->h_thread);
 	th->h_thread = NULL;
-#elif defined(linux)
+#elif defined(INES_POSIX)
 	if(th->th_id == 0)
 		return -1;
-#ifdef __ANDROID__ // android not support force cancel thread 
+#if defined(__APPLE__)
+	// Darwin 不支持可靠的线程强制终止: pthread_cancel 只在取消点生效, 无法打断
+	// 纯计算循环, 强行使用会掩盖资源释放逻辑。这里直接拒绝, 由调用方改用
+	// 协作式停止标志(例如 libinescore.c 的 g_stop_flag) + ines_thread_wait()。
+	INES_LOG(LOG_ERR, MOD_SYS, ISTR("ines_thread_terminate: not supported on macOS, "
+		"use a cooperative stop flag + ines_thread_wait() instead.\n"));
+	return -1;
+#elif defined(__ANDROID__) // android not support force cancel thread 
 	ret = pthread_kill(th->th_id, SIGQUIT);
 #else
 	ret = pthread_cancel(th->th_id);
@@ -289,7 +302,7 @@ int  ines_thread_wait(ines_thread_t* th)
 {
 #ifdef WIN32
 	DWORD ret;
-#elif defined(linux)
+#elif defined(INES_POSIX)
 	int ret;
 #endif
 
@@ -308,7 +321,7 @@ int  ines_thread_wait(ines_thread_t* th)
 			return -1;
 		}
 	}
-#elif defined(linux)
+#elif defined(INES_POSIX)
 	ret = pthread_join(th->th_id, NULL);
 	if(ret != 0)
 	{
@@ -329,7 +342,7 @@ int  ines_thread_wait(ines_thread_t* th)
 
 int  ines_thread_set_auto_detach(ines_thread_t* th)
 {
-#if defined(linux)
+#if defined(INES_POSIX)
 	int ret ;
 	if(th == NULL)
 		return -1;

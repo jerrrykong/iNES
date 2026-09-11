@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  iNES 应用图标（macOS / iNES.app）
+  ======================================================================
+  原型: 红白机(Famicom)手柄
+  设计: 深红底 + 米白手柄面板, 左侧深红十字键, 右侧两枚深红圆钮。
+  这是红白机最具辨识度的两个符号(十字键 / AB 圆钮), 在 16x16 的小尺寸下仍可辨识。
+  配色: 手柄米白(#FCF8EE ~ #E1D6BE) + 装饰深红(#C22A22 ~ #8A1216)。
+
+  画布遵循 macOS Big Sur 图标网格: 1024 画布, 主体圆角方 824x824, 圆角半径 186。
+  生成 .icns: cd mac/icon && ./make-icns.sh
+  依赖: qlmanage(渲染 SVG)、sips(缩放)、iconutil(打包) —— 均为 macOS 自带工具。
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>iNES 应用图标</title>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#C22A22"/>
+      <stop offset="1" stop-color="#8A1216"/>
+    </linearGradient>
+    <linearGradient id="shell" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FCF8EE"/>
+      <stop offset="1" stop-color="#E1D6BE"/>
+    </linearGradient>
+    <radialGradient id="btn" cx="0.35" cy="0.3" r="0.85">
+      <stop offset="0" stop-color="#C9352A"/>
+      <stop offset="1" stop-color="#971A16"/>
+    </radialGradient>
+    <filter id="shadow" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#2B0304" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#bg)"/>
+
+  <!-- 手柄面板 -->
+  <rect x="152" y="372" width="720" height="280" rx="60"
+        fill="url(#shell)" filter="url(#shadow)"/>
+
+  <!-- 十字键 -->
+  <g fill="#9C1B17">
+    <rect x="256" y="464" width="200" height="96" rx="24"/>
+    <rect x="308" y="412" width="96" height="200" rx="24"/>
+  </g>
+
+  <!-- 两枚圆钮 -->
+  <circle cx="636" cy="512" r="52" fill="url(#btn)"/>
+  <circle cx="760" cy="512" r="52" fill="url(#btn)"/>
+</svg>
