@@ -14,6 +14,7 @@
 #include "wPatternTable.h"
 #include "wPalette.h"
 #include "dlgNetPlay.h"
+#include "dlgOpenRom.h"
 #include "../comm/net.h"
 
 // 模拟器全局变量
@@ -1774,28 +1775,55 @@ LRESULT   OnDropFiles(HWND hWnd, HDROP hDrop)
 
 VOID OnMenuOpen()
 {
-	BOOL bRet;
-	OPENFILENAME   ofn;
-	TCHAR  szBuffer[INES_MAX_PATH] = {0};
+	// 自定义文件加载管理器: 选择文件夹 -> 列出 NES 文件及其属性 -> 加载
+	ines_char_t  szPath[INES_MAX_PATH];
+	ines_char_t  szDir[INES_MAX_PATH];
+	ines_char_t  szLastDir[INES_MAX_PATH];
+	ines_char_t* pSplit;
+	ines_cstr_t  szConfigDir;
+	DWORD        dwAttr;
 
-	memset(&ofn, 0, sizeof(ofn));
-	ofn.lStructSize = sizeof(ofn);
-	ofn.hwndOwner = hMainWnd;
-	ofn.lpstrFilter = _T("NES Files(*.nes)\0*.nes\0All Files(*.*)\0*.*\0\0");
-	ofn.lpstrInitialDir = NULL;
-	ofn.lpstrFile = szBuffer;
-	ofn.nMaxFile = INES_MAX_PATH;
-	ofn.nFilterIndex = 0;
-	ofn.Flags = OFN_EXPLORER|OFN_FILEMUSTEXIST|OFN_PATHMUSTEXIST|OFN_HIDEREADONLY;
+	szDir[0] = 0;
+	szPath[0] = 0;
+	szLastDir[0] = 0;
 
-
-
-	bRet = GetOpenFileName(&ofn);
-
-	if(bRet)
+	// 初始目录优先取上次使用的文件夹(记录在 config.ini, 重启后依然有效)
+	// GetConfigStr 内部按 GetLastError() 判断读取是否失败, 先清零避免上一次调用的残留错误码
+	SetLastError(ERROR_SUCCESS);
+	szConfigDir = GetConfigStr(ISTR("rom"), ISTR("last_dir"), ISTR(""));
+	if(szConfigDir != NULL && szConfigDir[0] != 0)
 	{
-		NesOpenFile(szBuffer);
+		_tcsncpy(szDir, szConfigDir, count_of(szDir) - 1);
+		szDir[count_of(szDir) - 1] = 0;
+
+		// 目录可能已被删除或改名, 不可用时忽略这个记录
+		dwAttr = GetFileAttributes(szDir);
+		if(dwAttr == INVALID_FILE_ATTRIBUTES || 0 == (dwAttr & FILE_ATTRIBUTE_DIRECTORY))
+			szDir[0] = 0;
 	}
+
+	// 没有可用的历史目录时, 退回到当前 ROM 所在目录, 再没有则由对话框使用当前工作目录
+	if(szDir[0] == 0 && szROMFilePath[0] != 0)
+	{
+		_tcsncpy(szDir, szROMFilePath, count_of(szDir) - 1);
+		szDir[count_of(szDir) - 1] = 0;
+
+		pSplit = _tcsrchr(szDir, _T('\\'));
+		if(pSplit != NULL)
+			*pSplit = 0;
+	}
+
+	INES_LOG(LOG_DBG, MOD_SYS, ISTR("Open ROM dialog initial dir: \'%s\'\n"), szDir);
+
+	if(dlgOpenRom_DoModal(hInst, hMainWnd, (szDir[0] != 0) ? szDir : NULL,
+			szPath, count_of(szPath), szLastDir, count_of(szLastDir)))
+	{
+		NesOpenFile(szPath);
+	}
+
+	// 记住对话框关闭时所在的文件夹(点“加载”或“取消”都算), 下次打开时默认定位到这里
+	if(szLastDir[0] != 0)
+		SetConfigStr(ISTR("rom"), ISTR("last_dir"), szLastDir);
 }
 
 

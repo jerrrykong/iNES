@@ -1,38 +1,31 @@
 
+// ============================================================================
+// Mapper 023 -- Konami VRC2b / VRC4f
+//   PRG 4 x 8KB; CHR 8 x 1KB; 镜像; IRQ 计数器 (参考 FCEUX VRC2And4)
+//   寄存器地址线: A0/A2? -> 统一由 reg_mask1/2 对齐
+// ============================================================================
 #include "../../comm/idef.h"
 #include "../../comm/log.h"
 #include "../nes.h"
 #include "../mapper.h"
+#include "vrc.h"
 
 
-
-static void mapper23_reset(ines_mapper_t* p_mapper)
+ines_bool_t mapper23_create(ines_mapper_t* p_mapper)
 {
-	ines_host_t*  p_host = mapper2host(p_mapper);
-	
-	if(p_host->prom_8k_num >= 4)
-		ines_set_prom_bank_4(p_host, 0, 1, 2, 3);
-	else
-		ines_set_prom_bank_4(p_host, 0, 1, 0,1 );
-	
-	if(p_host->vrom_1k_num > 0)
+	INIT_MAPPER_DATA_ST(p_mapper, VRC24_data_t);
+
 	{
-		ines_set_vrom_bank_8(p_host, 0, 1, 2, 3, 4, 5, 6, 7);
+		VRC24_data_t* p = mapper2VRC24data(p_mapper);
+		p->is_vrc2   = 0;      // 走 VRC4 逻辑(VRC4f)
+		p->reg_mask1 = 0x15;
+		p->reg_mask2 = 0x2A;
 	}
+
+	p_mapper->custom_sram = 0;
+	p_mapper->fini      = vrc24_fini;
+	p_mapper->reset     = vrc24_reset;
+	p_mapper->writehigh = vrc24_writehigh;
+	p_mapper->hsync     = vrc24_hsync;
+	return ines_true;
 }
-
-static void mapper23_writehigh(ines_mapper_t* p_mapper, ines_word_t addr, ines_byte_t  val)
-{
-	ines_host_t*  p_host = mapper2host(p_mapper);
-	(void)p_host;
-}
-
-ines_bool_t  mapper23_create(ines_mapper_t* p_mapper)
-{
-	p_mapper->reset = mapper23_reset;
-	p_mapper->writehigh = mapper23_writehigh;
-	return ines_false;
-}
-
-
-

@@ -713,6 +713,64 @@ void ines_set_vram_bank_n(ines_host_t* p_host, ines_word_t n, ines_word_t bn)
 	p_host->ppu.pattern_table_used[bn] = 1;
 }
 
+/**
+ * 把 PPU 的一个 1KB 窗口指向卡带内部的 NT RAM(即 CIRAM)页。
+ * @param p_host 宿主
+ * @param n      PPU 窗口号(0-7，对应 $0000-$1FFF 的 pattern 区)
+ * @param page   NT RAM 的 1KB 页号(内部 2KB -> 0-1)
+ * @note 供 Namco 163(mapper 19) 等支持"内部 nametable RAM 当作 CHR"的 ASIC 使用。
+ *       该窗口的 pattern_type 记为 2：$2007 写入仍会落到这片 NT RAM(即可当 CHR-RAM 使用)，
+ *       读取则直接读 NT RAM，因此 CIRAM 同时被当作 nametable 与 pattern 内存。
+ */
+void ines_set_ciram_pattern_bank_n(ines_host_t* p_host, ines_word_t n, ines_word_t page)
+{
+	if(p_host->ppu.in_vblank)
+		INES_LOG(LOG_DBG, MOD_SYS, ISTR("SET_CIRAM_PATTERN_BANK(%d)=(%d), VBLANK\n"), n, page);
+	else
+		INES_LOG(LOG_DBG, MOD_SYS, ISTR("SET_CIRAM_PATTERN_BANK(%d)=(%d), SCANLINE=%d\n"), n, page, p_host->ppu.current_line);
+
+	ines_assert(n < NES_MAX_PTMEM_BANKS);
+	page &= (NES_MAX_NTRAM_BANKS - 1);
+	p_host->ppu.mem_bank[n] = p_host->ppu.name_table + (page << 10);
+	p_host->ppu.pattern_type[n] = 2;
+}
+
+/**
+ * 把一个 nametable 窗口($2000/$2400/$2800/$2C00)指向卡带 CHR 的 1KB 页。
+ * @param p_host 宿主
+ * @param n      nametable 窗口号(0-3，对应 PPU 窗口 8-11，即 $2000-$2FFF 的四个 1KB 段)
+ * @param bn     CHR 1KB 页号(0-255，按卡带 CHR 容量取模)
+ * @note 供 Namco 163(mapper 19) 的 ROM nametable 特性使用：CHR 页可直接当作 nametable 读取。
+ *       目标随卡带配置选择——有 CHR-ROM 时指向 CHR-ROM(nt_type = 1，只读，$2007 写入被忽略)；
+ *       纯 CHR-RAM 卡带指向 pattern RAM(nt_type = 2，可写，并标记该页"已使用"以便即时存档保存内容)。
+ *       需要窗口回到内部 CIRAM 时调用 ines_ppu_set_mirror()，它会把 4 个窗口的 nt_type 复位为 0。
+ */
+void ines_set_nt_chr_bank_n(ines_host_t* p_host, ines_word_t n, ines_word_t bn)
+{
+	if(p_host->ppu.in_vblank)
+		INES_LOG(LOG_DBG, MOD_SYS, ISTR("SET_NT_CHR_BANK(%d)=(%d), VBLANK\n"), n, bn);
+	else
+		INES_LOG(LOG_DBG, MOD_SYS, ISTR("SET_NT_CHR_BANK(%d)=(%d), SCANLINE=%d\n"), n, bn, p_host->ppu.current_line);
+
+	ines_assert(n < NES_MAX_NTRAM_BANKS);
+
+	if(p_host->vrom_1k_num > 0)
+	{
+		bn &= p_host->vrom_1k_mask;
+		if(bn >= p_host->vrom_1k_num)
+			bn %= p_host->vrom_1k_num;      // 非 2 的幂 CHR 容量：回卷，避免越界读
+		p_host->ppu.mem_bank[0x08 + n] = p_host->rom.pVROMs + ((ines_dword_t)bn << 10);
+		p_host->ppu.nt_type[n] = 1;
+	}
+	else
+	{
+		bn &= NES_VRAM_1K_MASK;
+		p_host->ppu.mem_bank[0x08 + n] = p_host->ppu.pattern_table + ((ines_dword_t)bn << 10);
+		p_host->ppu.pattern_table_used[bn] = 1;
+		p_host->ppu.nt_type[n] = 2;
+	}
+}
+
 
 #pragma pack(push, 1)
 // 24 bytes

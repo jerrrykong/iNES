@@ -157,6 +157,8 @@ void ines_set_vrom_bank_8(ines_host_t* p_host, ines_word_t b0, ines_word_t b1, i
 						  ines_word_t b4, ines_word_t b5, ines_word_t b6, ines_word_t b7);
 void ines_set_vrom_bank_n(ines_host_t* p_host, ines_word_t n, ines_word_t bn); // n=0~8, bn = b0~b8
 void ines_set_vram_bank_n(ines_host_t* p_host, ines_word_t n, ines_word_t bn);  // sram bank point
+void ines_set_ciram_pattern_bank_n(ines_host_t* p_host, ines_word_t n, ines_word_t page); // 内部 NT RAM 当作 CHR 页(mapper 19)
+void ines_set_nt_chr_bank_n(ines_host_t* p_host, ines_word_t n, ines_word_t bn); // nametable 窗口指向 CHR 页(n=0-3，mapper 19 ROM nametable)
 
 ines_int_t ines_host_save_state(ines_host_t* p_host, FILE* fSave);
 ines_int_t ines_host_load_state(ines_host_t* p_host, FILE* fSave);

@@ -22,12 +22,18 @@
 #define IDR_MAINFRAME                   128
 #define IDC_POPUP                       129
 #define IDD_NETPLAY                     130
+#define IDD_OPENROM                     131
 #define IDC_RAD_SERVER                  1000
 #define IDC_RAD_CLIENT                  1001
 #define IDC_EDT_IP                      1002
 #define IDC_EDT_PORT                    1003
 #define IDC_CMB_CACHE                   1004
 #define IDC_LAB_INFO                    1005
+#define IDC_OPENROM_LAB_DIR             1006
+#define IDC_OPENROM_EDT_DIR             1007
+#define IDC_OPENROM_BTN_DIR             1008
+#define IDC_OPENROM_LIST                1009
+#define IDC_OPENROM_LAB_COUNT           1010
 #define IDS_ERR_FILE_FORMAT             10001
 #define IDS_ERR_UNSUPPORT_MAPPER_ID     10002
 #define IDS_ERR_ILLEGAL_INSTRUCTION     10003
@@ -104,9 +110,9 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
-#define _APS_NEXT_RESOURCE_VALUE        131
+#define _APS_NEXT_RESOURCE_VALUE        132
 #define _APS_NEXT_COMMAND_VALUE         32903
-#define _APS_NEXT_CONTROL_VALUE         1006
+#define _APS_NEXT_CONTROL_VALUE         1011
 #define _APS_NEXT_SYMED_VALUE           110
 #endif
 #endif

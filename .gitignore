@@ -1,5 +1,6 @@
 bin/**
 build/**
+build-x64/**
 win32/iNES.aps
 project/**
 

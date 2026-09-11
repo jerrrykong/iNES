@@ -24,8 +24,8 @@ NES 卡带上的"存储器管理芯片"。CPU 只能直接寻址 `$8000-$FFFF`�
 | `reset` | 上电 / 软件复位，**必须把 bank 恢复到初始状态** | 是 |
 | `hsync` | 每条扫描线（0-239 可见区）调用，用于 IRQ 计数、CHR 切换特效 | 否 |
 | `vsync` | 每帧结束 | 否 |
-| `readlow` | CPU 读 `$6000-$7FFF`（SRAM 区） | 否 |
-| `writelow` | CPU 写 `$6000-$7FFF` | 否 |
+| `readlow` | CPU 读 `$4020-$5FFF`（mapper 的扩展寄存器/ROM）；`$6000-$7FFF` 只有在 `bank_writeable[3]` 置了 `NES_BANK_READ_PROTECTED` 时才会落到这里（本仓库尚无此用法） | 否 |
+| `writelow` | CPU 写 `$4020-$5FFF`；`$6000-$7FFF` 则在 `NES_BANK_CAN_WRITE(bank_writeable[3])` 为假时落到这里（置 `NES_BANK_WRITE_PROTECTED` 做写保护，见 mapper 19 的 WRAM） | 否 |
 | `writehigh` | CPU 写 `$8000+`（Mapper 寄存器） | 绝大多数需要 |
 | `PPU_latch` | MMC5 类：PPU 取图时锁存 | 仅 MMC5 |
 | `PPU_latch_FDFE` | MMC2 类：`$FD/$FE` 触发的 CHR 切换 | 仅 MMC2/MMC4 |
@@ -279,3 +279,56 @@ ines_bool_t  mapperN_create(ines_mapper_t* p_mapper)
 - [ ] Win32 与 x64 两种配置都能编译通过，无新增警告
 - [ ] 至少 2 个使用该 Mapper 的游戏可正常运行
 - [ ] 源码为 UTF-8 无 BOM + LF（见 `docs/coding-style.md`）
+
+## 12. 范例：Konami VRC 家族（21/22/23/25/24/26/85，共享 `vrc.h`）
+
+VRC2/VRC4/VRC6/VRC7 走线变体极多，但核心逻辑只有三套（VRC2/4 一套、VRC6 一套、VRC7 一套）。
+本项目把它们放进共享头 `core/mapper/vrc.h`（静态 inline），7 个 `mapper<N>.c` 各自只做"配置 + 挂回调"，
+是"一个头文件驱动多个编号"的现成范例，后续遇到同族多编号芯片可直接照搬：
+
+```c
+// mapper21.c 主体结构（每个编号文件只有 create 是导出符号）
+#include "../../comm/idef.h"
+#include "../../comm/log.h"
+#include "../nes.h"
+#include "../mapper.h"
+#include "vrc.h"
+
+ines_bool_t mapper21_create(ines_mapper_t* p_mapper)
+{
+    INIT_MAPPER_DATA_ST(p_mapper, VRC24_data_t);
+    VRC24_data_t* p = mapper2VRC24data(p_mapper);
+    p->is_vrc2   = 0;      // 芯片族配置：VRC2a=1（CHR 2KB 粒度、无 IRQ）
+    p->reg_mask1 = 0x42;    // 引脚错位掩码 → 寄存器偏移 bit0
+    p->reg_mask2 = 0x84;    // 引脚错位掩码 → 寄存器偏移 bit1
+    p_mapper->fini      = vrc24_fini;
+    p_mapper->reset     = vrc24_reset;
+    p_mapper->writehigh = vrc24_writehigh;
+    p_mapper->hsync     = vrc24_hsync;   // 无 IRQ 硬件的编号(VRC2a)不挂 hsync
+    return ines_true;
+}
+```
+
+要点：
+
+- **差异参数化，而不是复制代码**：族内差异被折叠成几个配置位——
+  `reg_mask1/reg_mask2`（地址线错位）、`is_vrc2`（CHR 粒度/有无 IRQ）、`is_vrc6b`（A0/A1 交换）。
+- **CPU 周期驱动型 IRQ**：VRC 计数器按 CPU 周期（或 341 dots/线）递增，而宿主只在每个 `hsync`
+  回调一次。`vrc.h` 的 `vrc_irq_tick()` 用 `host->cpu.total_cycles` 的真实增量做**批处理推进**，
+  把差值折算成剩余量（`rem`），只引入"线内触发时刻"的量化误差、不漂移。实现周期性计数器时优先考虑这种"增量对账"写法。
+- **扩展音源 = 状态捕获 + 引擎挂槽**：VRC6（3 路 PSG）、VRC7（YM2413 FM）与 Namco 163（8 路波表）
+  的音频寄存器在 `writehigh`/`writelow` 里原样存进 `p_data`，再由各自引擎（`vrc.h` §4b/§5b、
+  `19.c` 的 N163 引擎）读出合成，经 **APU 扩展输入槽**（`ines_apu_exp_attach`，`channels = 1`、
+  引擎内部先混成一路）与 APU 主输出相加。引擎挂在 mapper 的 `reset` 末尾、`fini` 里 `detach`；
+  引擎的相位/计数器等状态放 `p_data` 即随即时存档自动保存。寄存器写入前调 `ines_apu_flush_run()`
+  把引擎推进到当前 CPU 周期，使变更落在准确时刻。
+- **`custom_sram` 语义（重要）**：`mapper.c` 在 `reset` 里对 `custom_sram == 0` 的 mapper 统一挂 8K 默认 RAM
+  到 `$6000-$7FFF`（`ines_set_sram_bank_n`）。因此：
+  - 卡带**带 WRAM/电池存档**且无自定义逻辑 → 保持 `custom_sram = 0`（默认 RAM 即 WRAM，可存档）；
+  - mapper 需要**自己维护** `$6000`（EEPROM 等，如 mapper16/19）→ 设 `custom_sram = 1` 并自己挂 SRAM 块；
+  - **不要**为了"让 `$6000` 不存在"而设 `custom_sram = 1` 且不挂 RAM：`NES_BANK_CAN_READ(0)` 为真，
+    读仍走 `mem_bank[3]`（复位时指向 CPU 内 `dead_mem` 哑缓冲，不是开总线值）；更麻烦的是
+    `ines_cpu_save_state()` 对 `bank_writeable[n] == 0` 的块按 `PROM28KNUM(mem_bank[n])` 编码，
+    `dead_mem` 不在 `rom.pPROMs` 内 → 存出垃圾页号，**读档会因 `BANK >= prom_8k_num` 校验失败**。
+    宁可多给一块 8KB RAM（mapper19/210 的做法），也不要留 `mem_bank[3]` 悬空。
+- 音频寄存器等"写后即忘"的状态若没有消耗方，也要按芯片布局保留一份镜像，便于将来扩展且省去改寄存器解码。

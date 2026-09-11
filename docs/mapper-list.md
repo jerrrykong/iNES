@@ -7,9 +7,9 @@
 | 项目 | 数量 |
 |---|---|
 | Mapper 文件总数 | 256（`0.c` ~ `255.c`） |
-| 注册表标注 `implemented` | 17 |
+| 注册表标注 `implemented` | 26 |
 | 另有实质代码但未标注 | 1（Mapper **163**） |
-| 占位桩（未实现） | 238 |
+| 占位桩（未实现） | 229 |
 
 > 判定依据：桩文件统一为 **39 行**，只有 `reset` / `writehigh` 两个空函数且 `create` 返回 `ines_false`；真实实现则行数显著更多、带私有数据或 IRQ，且返回 `ines_true`。
 
@@ -34,7 +34,31 @@
 | 15 | 103 | — | | | ✅ | 100-in-1 类多卡带 |
 | 16 | 240 | `Mapper16` | ✅ | ✅ | ✅ | Bandai FCG，**注册表注明 "no EEPROM"**（串行 EEPROM 未实现） |
 | 18 | 227 | `MMC18` | ✅ | ✅ | ✅ | Jaleco SS88006 |
+| 19 | 662 | `Namco163_data_t` | ✅ | ✅ | ✅ | **Namco 163（Namcot 106）**：12 窗口 CHR/NT、CIRAM 当 CHR、ROM nametable、8KB WRAM + 2KB×4 写保护、15 位 CPU 周期 IRQ、8 通道波表扩展音（经 APU 扩展槽）；[方案与增益标定](mapper-19-plan.md) |
+| 21 | 31 | `VRC24_data_t` | ✅ | ✅ | ✅ | Konami **VRC4a/c**（VRC 系，逻辑在 `vrc.h` 共享） |
+| 22 | 31 | `VRC24_data_t` | | | ✅ | Konami **VRC2a**：CHR 2KB 粒度、无 IRQ、无 WRAM |
+| 23 | 31 | `VRC24_data_t` | ✅ | ✅ | ✅ | Konami **VRC2b/VRC4f** |
+| 24 | 28 | `VRC6_data_t` | ✅ | ✅ | ✅ | Konami **VRC6a**：3 路扩展音已由 VRC6 引擎发声（经 APU 扩展输入槽） |
+| 25 | 30 | `VRC24_data_t` | ✅ | ✅ | ✅ | Konami **VRC2c/VRC4b/d/e** |
+| 26 | 28 | `VRC6_data_t` | ✅ | ✅ | ✅ | Konami **VRC6b**：A0/A1 交换、带 8K WRAM；3 路扩展音已发声 |
+| 85 | 25 | `VRC7_data_t` | ✅ | ✅ | ✅ | Konami **VRC7**：FM(YM2413) 简化内核已接入（vrc.h §5b，单声道经 APU 扩展输入槽） |
 | 163 | 178 | `MMC163` | | ✅ | ❌ | 有完整实现（含 `reset/writehigh/readlow/writelow/hsync/fini`），但注册表未标注 `implemented` |
+| 210 | 142 | —（无私有状态） | | | ✅ | **Namco 175 / Namco 340**（Namco 163 的降本版，同一个 iNES 号）：8 窗口 1KB CHR、3 槽 8KB PRG、340 可选 H/V/单屏镜像；175/340 变体不区分（详见 `core/mapper/210.c` 文件头） |
+
+> **实机验证状态（2026-09-12）**：**19**（Namco 163）已由用户实机验证，游戏运行无问题；
+> **210**（Namco 175/340）暂无可用 ROM，尚未实机验证（仅通过编译与静态检查）。
+> 详细验证项见 [mapper-19-plan.md](mapper-19-plan.md) §5。
+
+> **VRC 家族共享实现**：21/22/23/25（VRC2/VRC4）、24/26（VRC6）、85（VRC7）的核心逻辑
+> 集中在 `core/mapper/vrc.h`（约 1200 行）：
+> - 引脚错位由 `reg_mask1/reg_mask2` 统一对齐（每个编号一套掩码）
+> - VRC4/6/7 共用同一个 IRQ 计数器状态机（latch/使能/ack/模式）
+> - VRC6 扩展音：APU **扩展音源输入槽**（`ines_apu_exp_t`，见 `apu.h`），VRC6 引擎（vrc.h §4b，
+>   周期精确方波/锯齿）挂槽、随 `run_until` 惰性推进、`render_frame` 混音
+> - VRC7 FM(YM2413)：vrc.h §5b 简化 FM 内核（2-op × 9 旋律声道、15 内建音色 + 用户音色、
+>   19bit 相位/FB 反馈/简化 OPLL EG），同样经扩展槽发声；FM 寄存器写前先
+>   `ines_apu_flush_run` 对齐（时钟模型：YM2413 主频 = 2×CPU，FM 更新每 36 CPU 周期一次）
+> - 两芯片混音幅值均为经验标定（`VRC6_EXP_GAIN` / `VRC7_EXP_GAIN`），待与实录 A/B
 
 未实现但值得注意的是 **14**、**17**：它们的桩里已有基本的 bank 设置骨架，可以直接作为新实现的起点。
 
@@ -42,15 +66,20 @@
 
 | 特性 | 使用的 Mapper |
 |---|---|
-| 扫描线 IRQ（`hsync` + `ines_cpu_IRQ`） | 4, 5, 6, 12, 16, 18 |
+| 扫描线 IRQ（`hsync` + `ines_cpu_IRQ`） | 4, 5, 6, 12, 16, 18, 19 |
 | `hsync`（无 IRQ，用于 CHR 切换特效） | 163 |
-| PRG + CHR 全切换 | 1, 4, 5, 6, 12, 16, 18, 163 |
+| PRG + CHR 全切换 | 1, 4, 5, 6, 12, 16, 18, 19, 163, 210 |
 | 仅 PRG 切换 | 2, 7, 11, 15 |
 | 仅 CHR 切换 | 3, 13 |
 | 无切换 | 0 |
 | `PPU_latch`（MMC5 图形扩展） | 5 |
 | `PPU_latch_FDFE`（`$FD/$FE` 锁存） | 9, 10 |
-| 私有数据 + `fini` | 1, 4, 5, 6, 9, 10, 12, 16, 18, 163 |
+| 内部 NT RAM 当作 CHR（`pattern_type = 2`） | 19 |
+| nametable 窗口指向 CHR 页（ROM nametable，`ines_set_nt_chr_bank_n`） | 19 |
+| 自定义 SRAM（`custom_sram = 1`，含写保护） | 19 |
+| 自由镜像排布（`ines_ppu_set_mirror`，含单屏选择） | 1, 6, 7, 16, 18, 19, 21-26, 210 |
+| 扩展音（APU 扩展输入槽） | 19, 24, 26, 85 |
+| 私有数据 + `fini` | 1, 4, 5, 6, 9, 10, 12, 16, 18, 19, 163 |
 
 ## 4. 桩文件（占位实现）
 
