@@ -64,6 +64,10 @@ struct _ines_ppu_
 	ines_byte_t   pattern_table[NES_MAX_VRAM_SIZE]; // 1000 0000 0000 0000   some MMC used 32K VRAM for example mapper6
 	ines_byte_t   pattern_table_used[NES_MAX_VRAM_BANKS]; // used 32K VRAM for example mapper6
 	ines_byte_t   pattern_type[NES_MAX_PTMEM_BANKS];
+	/* nametable 窗口(8-11)指向的内存类型：
+	 * 0 = 内部 CIRAM(name_table，可写) 1 = 卡带 CHR-ROM 页(只读) 2 = 卡带 CHR-RAM 页(可写)
+	 * 供 Namco 163(mapper 19) 的 ROM nametable 特性使用，见 ines_set_nt_chr_bank_n()。 */
+	ines_byte_t   nt_type[NES_MAX_NTRAM_BANKS];
 	ines_byte_t   name_table[NES_MAX_NTMEM_SIZE];
 	ines_byte_t   bg_pal[NES_MAX_PALMEM_SIZE];
 	ines_byte_t   sp_pal[NES_MAX_PALMEM_SIZE];

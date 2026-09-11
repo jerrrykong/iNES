@@ -47,6 +47,7 @@ void ines_ppu_reset(ines_ppu_t* p_ppu)
 	memset(p_ppu->name_table, 0, sizeof(p_ppu->name_table));
 	memset(p_ppu->pattern_table, 0, sizeof(p_ppu->pattern_table));
 	memset(p_ppu->pattern_type, 0, sizeof(p_ppu->pattern_type));
+	memset(p_ppu->nt_type, 0, sizeof(p_ppu->nt_type));
 	memset(p_ppu->pattern_table_used, 0, sizeof(p_ppu->pattern_table_used));
 
 	// reset banks . 先不进行初始化，等mapper初始化后，如果没有设置pattern块则自动使用RAM方式
@@ -73,6 +74,11 @@ void ines_ppu_set_mirror(ines_ppu_t* p_ppu, ines_byte_t  n0, ines_byte_t  n1, in
 	p_ppu->mem_bank[0x09] = p_ppu->name_table + ((n1 & 0x3) << 10);  // to name table #n1
 	p_ppu->mem_bank[0x0a] = p_ppu->name_table + ((n2 & 0x3) << 10);  // to name table #n2
 	p_ppu->mem_bank[0x0b] = p_ppu->name_table + ((n3 & 0x3) << 10);  // to name table #n3
+	// 这 4 个窗口全部回到内部 CIRAM(可写)，清掉可能残留的"CHR 页当 nametable"标记
+	p_ppu->nt_type[0] = 0;
+	p_ppu->nt_type[1] = 0;
+	p_ppu->nt_type[2] = 0;
+	p_ppu->nt_type[3] = 0;
 }
 
 void ines_ppu_set_mirror_type(ines_ppu_t* p_ppu, ines_byte_t mt)
@@ -152,7 +158,16 @@ static void write2007(ines_ppu_t* p_ppu, ines_byte_t  val)
 		addr &= 0xefff;
 	}
 
-	if(addr >= 0x2000 || !p_ppu->pattern_type[addr>>10])
+	// pattern_type: 0=VRAM(可写) 1=VROM(只读) 2=卡带内部 NT RAM 当作 CHR(可写，mapper 19)
+	// nt_type:      0=CIRAM(可写) 1=CHR-ROM 页(只读，Namco 163 的 ROM nametable) 2=CHR-RAM 页(可写)
+	if(addr >= 0x2000)
+	{
+		if(p_ppu->nt_type[(addr >> 10) & 0x03] != 1)
+		{
+			VRAM(p_ppu, addr) = val;
+		}
+	}
+	else if(p_ppu->pattern_type[addr>>10] != 1)
 	{
 		VRAM(p_ppu, addr) = val;
 	}
@@ -709,7 +724,7 @@ struct _ines_state_ppu_data_
 	ines_word_t    IT;   /// index_t
 	ines_word_t    IV;   /// index_v
 	ines_word_t    IX;   /// index_x
-	ines_byte_t    Reserved1;
+	ines_byte_t    NTT;  /// nametable 窗口类型(每窗口 2 bit：bit0-1=窗口8 ... bit6-7=窗口11)
 	ines_byte_t    Reserved2;
 /* 16 - 32 : 8 bytes  */
 	ines_int_t     LN;   /// current_line
@@ -753,6 +768,10 @@ ines_int_t ines_ppu_save_state(ines_ppu_t* p_ppu, FILE* fSave)
 	data.IV = p_ppu->index_v;
 	data.IX = p_ppu->index_x;
 	data.LN = p_ppu->current_line;
+	data.NTT = (ines_byte_t)( (p_ppu->nt_type[0] & 0x3)        |
+	                          ((p_ppu->nt_type[1] & 0x3) << 2) |
+	                          ((p_ppu->nt_type[2] & 0x3) << 4) |
+	                          ((p_ppu->nt_type[3] & 0x3) << 6) );
 
 	for(n = 0; n < NES_MAX_VRAM_BANKS; n++)
 	{
@@ -779,14 +798,30 @@ ines_int_t ines_ppu_save_state(ines_ppu_t* p_ppu, FILE* fSave)
 			{
 				data.BANK[n] = VRAM21KNUM(p_ppu->mem_bank[n]);
 			}
-			else
+			else if(data.PTRW[n] == 1)
 			{
 				data.BANK[n] = VROM21KNUM(p_ppu->mem_bank[n]);
+			}
+			else
+			{
+				data.BANK[n] = VNTM21KNUM(p_ppu->mem_bank[n]);   // 2: CIRAM 当作 CHR
 			}
 		}
 		else
 		{
-			data.BANK[n] = VNTM21KNUM(p_ppu->mem_bank[n]);
+			// nametable 窗口：按 nt_type 记录窗口指向的是 CIRAM / CHR-ROM / CHR-RAM 页
+			switch(p_ppu->nt_type[n - NES_MAX_PTMEM_BANKS])
+			{
+			case 1:
+				data.BANK[n] = (ines_word_t)VROM21KNUM(p_ppu->mem_bank[n]);
+				break;
+			case 2:
+				data.BANK[n] = (ines_word_t)VRAM21KNUM(p_ppu->mem_bank[n]);
+				break;
+			default:
+				data.BANK[n] = (ines_word_t)VNTM21KNUM(p_ppu->mem_bank[n]);
+				break;
+			}
 		}
 	}
 	
@@ -830,6 +865,11 @@ ines_int_t ines_ppu_load_state(ines_ppu_t* p_ppu, FILE* fSave)
 	p_ppu->index_x = data.IX;
 	p_ppu->current_line = data.LN;
 
+	for(n = 0; n < NES_MAX_NTRAM_BANKS; n++)
+	{
+		p_ppu->nt_type[n] = (ines_byte_t)((data.NTT >> (n << 1)) & 0x3);
+	}
+
 	for(n = 0; n < NES_MAX_VRAM_BANKS; n++)
 	{
 		if(data.VRAM_used & (1<<n))
@@ -852,18 +892,47 @@ ines_int_t ines_ppu_load_state(ines_ppu_t* p_ppu, FILE* fSave)
 					return  -1;
 				p_ppu->mem_bank[n] = p_ppu->pattern_table + ((ines_dword_t)data.BANK[n]<<10);
 			}
-			else
+			else if(data.PTRW[n] == 1)
 			{
 				if(data.BANK[n] >= ppu2host(p_ppu)->vrom_1k_num)
 					return  -1;
 				p_ppu->mem_bank[n] = ppu2host(p_ppu)->rom.pVROMs + ((ines_dword_t)data.BANK[n]<<10);
 			}
+			else if(data.PTRW[n] == 2)
+			{
+				// CIRAM 当作 CHR：mem_bank 指向内部 NT RAM
+				if(data.BANK[n] >= NES_MAX_NTRAM_BANKS)
+					return  -1;
+				p_ppu->mem_bank[n] = p_ppu->name_table + ((ines_dword_t)data.BANK[n]<<10);
+			}
+			else
+			{
+				return  -1;
+			}
 		}
 		else
 		{
-			if(data.BANK[n] >= NES_MAX_NTRAM_BANKS)
-				return -1;
-			p_ppu->mem_bank[n] = p_ppu->name_table + ((ines_dword_t)data.BANK[n]<<10);
+			ines_int_t t = p_ppu->nt_type[n - NES_MAX_PTMEM_BANKS];
+
+			if(t == 1)          // CHR-ROM 页当 nametable(只读)
+			{
+				if(data.BANK[n] >= ppu2host(p_ppu)->vrom_1k_num)
+					return  -1;
+				p_ppu->mem_bank[n] = ppu2host(p_ppu)->rom.pVROMs + ((ines_dword_t)data.BANK[n]<<10);
+			}
+			else if(t == 2)     // CHR-RAM 页当 nametable(可写)
+			{
+				if(data.BANK[n] >= NES_MAX_VRAM_BANKS)
+					return  -1;
+				p_ppu->pattern_table_used[data.BANK[n]] = 1;
+				p_ppu->mem_bank[n] = p_ppu->pattern_table + ((ines_dword_t)data.BANK[n]<<10);
+			}
+			else                // 内部 CIRAM
+			{
+				if(data.BANK[n] >= NES_MAX_NTRAM_BANKS)
+					return -1;
+				p_ppu->mem_bank[n] = p_ppu->name_table + ((ines_dword_t)data.BANK[n]<<10);
+			}
 		}
 	}
 	memcpy(p_ppu->bg_pal, data.BG_PAL, sizeof(data.BG_PAL));

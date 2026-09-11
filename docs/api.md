@@ -74,7 +74,13 @@ ines_set_sram_bank_n(host, n, bn);               // $6000-$7FFF
 ines_set_vrom_bank_8(host, b0..b7);              // PPU $0000-$1FFF，1KB/页
 ines_set_vrom_bank_n(host, n, bn);               // n=0~7
 ines_set_vram_bank_n(host, n, bn);               // CHR-RAM 情形
+ines_set_ciram_pattern_bank_n(host, n, page);    // 内部 NT RAM 当作 CHR 页(n=0~7，page=0~1)
+ines_set_nt_chr_bank_n(host, n, bn);             // nametable 窗口指向 CHR 页(n=0~3 即 PPU 窗口 8~11)
 ```
+
+`ines_set_nt_chr_bank_n()` 供 Namco 163 的 ROM nametable 特性使用：有 CHR-ROM 时窗口指向
+CHR-ROM 1KB 页（只读，`$2007` 写入被忽略），纯 CHR-RAM 卡带则指向 pattern RAM（可写）。
+窗口要回到内部 CIRAM 时调用 `ines_ppu_set_mirror()`（它会把 4 个 nametable 窗口的类型全部复位）。
 
 ### 反查宿主
 
@@ -140,7 +146,17 @@ void         ines_apu_start_frame(ines_apu_t* p_apu);
 void         ines_apu_render_frame(ines_apu_t* p_apu, double end_time);
 ines_int_t   ines_apu_save_state(ines_apu_t* p_apu, FILE* fSave);
 ines_int_t   ines_apu_load_state(ines_apu_t* p_apu, FILE* fSave);
+
+// 扩展音源输入槽（mapper 24/26/85/19 的 VRC6/VRC7/N163 引擎挂在这里）
+void         ines_apu_exp_attach(ines_apu_t* p_apu, void* p_chip, ines_int_t channels, float gain,
+                                 void (*run)(ines_apu_exp_t*, ines_int_t),
+                                 void (*reset)(ines_apu_exp_t*));
+void         ines_apu_exp_detach(ines_apu_t* p_apu, void* p_chip);
 ```
+
+- 扩展音槽**不随存档保存**（芯片状态在 mapper 私有数据里），但 `ines_apu_load_state()` 会保留槽位的
+  芯片指针与回调，并把 `exp.cursor` 对齐到还原后的 `last_cycles`；否则读档后扩展音会永久失效。
+- `p_chip` 必须与 `ines_apu_exp_detach()` 传入的指针一致（通常填 `p_mapper->p_data`）。
 
 ## 8. 手柄（`core/joypad.h`）
 
