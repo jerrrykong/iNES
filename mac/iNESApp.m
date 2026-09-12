@@ -21,6 +21,8 @@
 #import "iNESOsd.h"
 #import "iNESPalette.h"
 #import "iNESConfig.h"
+#import "iNESDebug.h"
+#import "iNESOpenRomDialog.h"
 
 #import "../comm/log.h"
 
@@ -101,7 +103,10 @@ static ines_byte_t   s_screen_back[SCREEN_IMAGE_BYTES];  // 模拟线程的绘�
 
 static ines_char_t   s_save_dir[INES_MAX_PATH];          // <数据目录>/save
 static ines_char_t   s_state_dir[INES_MAX_PATH];         // <数据目录>/state
-static ines_char_t   s_snapshot_dir[INES_MAX_PATH];      // <数据目录>/snapshot
+static ines_char_t   s_picture_dir[INES_MAX_PATH];       // ~/Pictures/iNES(截图输出目录, 用户可见)
+
+// 截图用的 BGRA 缓冲: 240KB, 仅主线程访问, 避免每次截图在栈上开大数组
+static ines_byte_t   s_snapshot_bgra[SCREEN_IMAGE_BYTES * 4];
 
 
 // ---------------------------------------------------------------------
@@ -196,30 +201,6 @@ typedef struct _app_state_head_
 	ines_dword_t   prom_crc32;
 } app_state_head_t;
 
-// 截图 BMP 头(与 win32 前端写出的格式一致, 自底向上)
-typedef struct _app_bmp_file_header_
-{
-	ines_word_t    bfType;
-	ines_dword_t   bfSize;
-	ines_word_t    bfReserved1;
-	ines_word_t    bfReserved2;
-	ines_dword_t   bfOffBits;
-} app_bmp_file_header_t;
-
-typedef struct _app_bmp_info_header_
-{
-	ines_dword_t   biSize;
-	ines_int_t     biWidth;
-	ines_int_t     biHeight;
-	ines_word_t    biPlanes;
-	ines_word_t    biBitCount;
-	ines_dword_t   biCompression;
-	ines_dword_t   biSizeImage;
-	ines_int_t     biXPelsPerMeter;
-	ines_int_t     biYPelsPerMeter;
-	ines_dword_t   biClrUsed;
-	ines_dword_t   biClrImportant;
-} app_bmp_info_header_t;
 #pragma pack(pop)
 
 // 读取即时存档文件头。文件不存在/魔数不符/CRC 不匹配时返回 0, 否则返回存档时间戳。
@@ -269,6 +250,10 @@ static int nes_proc(void* ud);
 	ines_int_t   _mute;
 	ines_int_t   _osd;
 	ines_int_t   _aspectMode;
+
+	// 截图完成的轻提示(同时只显示一条, 用序号避免旧定时器误删新提示)
+	NSTextField* _toastView;
+	NSUInteger   _toastSeq;
 }
 
 @property (nonatomic, strong) NSWindow*       window;
@@ -300,10 +285,12 @@ static int nes_proc(void* ud);
 - (void)pushControlState;
 - (void)refreshTitle;
 - (void)showAlert:(NSString*)title message:(NSString*)message;
+- (void)showToast:(NSString*)message;
 
 - (void)createWindow;
 - (NSPoint)windowOriginForSize:(NSSize)size;
 - (void)requestLoadROM:(NSString*)path;
+- (NSString*)romInitialDir;
 - (void)updateRecentFilesMenu;
 - (void)updateStateMenu:(NSMenu*)menu;
 - (void)loadHistories;
@@ -415,6 +402,9 @@ static NSString* app_function_key(ines_int_t n)
 	[self createWindow];
 	[self updateRecentFilesMenu];
 
+	// 调试视图窗口以主窗口为 owner(仅用于退出时统一收尾)
+	[iNESDebugManager sharedManager].parentWindow = self.window;
+
 	// 5) 音频对象(设备在模拟线程上打开)
 	self.audio = [[iNESAudio alloc] init];
 
@@ -454,6 +444,8 @@ static NSString* app_function_key(ines_int_t n)
 		s_thread_started = 0;
 	}
 
+	[[iNESDebugManager sharedManager] closeAll];
+
 	ines_host_free(&host);
 
 	ines_mutex_fini(&s_mutex_output);
@@ -466,21 +458,33 @@ static NSString* app_function_key(ines_int_t n)
 {
 	ines_char_t  data_dir[INES_MAX_PATH];
 	ines_char_t  config_file[INES_MAX_PATH];
+	NSArray*     pictures;
+	NSString*    picture_dir;
 
 	ines_get_data_dir(data_dir, count_of(data_dir));
 
-	ines_snprintf(s_save_dir,     sizeof(s_save_dir),     ISTR("%s/save"),     data_dir);
-	ines_snprintf(s_state_dir,    sizeof(s_state_dir),    ISTR("%s/state"),    data_dir);
-	ines_snprintf(s_snapshot_dir, sizeof(s_snapshot_dir), ISTR("%s/snapshot"), data_dir);
+	ines_snprintf(s_save_dir,  sizeof(s_save_dir),  ISTR("%s/save"),  data_dir);
+	ines_snprintf(s_state_dir, sizeof(s_state_dir), ISTR("%s/state"), data_dir);
+
+	// 截图输出到用户可见的 ~/Pictures/iNES: 数据目录在 ~/Library 下,
+	// Finder 里默认看不到, 截图会"找不到"。
+	pictures = NSSearchPathForDirectoriesInDomains(NSPicturesDirectory, NSUserDomainMask, YES);
+	if (pictures.count > 0)
+		picture_dir = [pictures[0] stringByAppendingPathComponent:@"iNES"];
+	else
+		picture_dir = [NSString stringWithFormat:@"%s/snapshot", data_dir];  // 兜底: 退回数据目录
+
+	app_str_copy(s_picture_dir, sizeof(s_picture_dir), picture_dir.UTF8String);
 
 	app_make_dir(s_save_dir);
 	app_make_dir(s_state_dir);
-	app_make_dir(s_snapshot_dir);
+	app_make_dir(s_picture_dir);
 
 	ines_snprintf(config_file, sizeof(config_file), ISTR("%s/config.ini"), data_dir);
 	iNES_config_set_file(config_file);
 
 	INES_LOG(LOG_NTY, MOD_SYS, ISTR("Data directory: '%s'\n"), data_dir);
+	INES_LOG(LOG_NTY, MOD_SYS, ISTR("Snapshot directory: '%s'\n"), s_picture_dir);
 }
 
 - (void)loadConfig
@@ -733,14 +737,16 @@ static NSString* app_function_key(ines_int_t n)
 					  title:[NSString stringWithFormat:@"存档 %d", (int)i]
 					 action:@selector(loadState:)
 				   keyEquiv:[NSString stringWithFormat:@"%d", (int)i]
-				  modifiers:(NSEventModifierFlagCommand | NSEventModifierFlagShift)
+				  modifiers:(NSEventModifierFlagCommand | NSEventModifierFlagOption)
 						tag:i
 					  group:APP_GROUP_LOADSTATE];
 	}
 
 	[menu addItem:[NSMenuItem separatorItem]];
-	[self addItemToMenu:menu title:@"截图" action:@selector(takeSnapshot:) keyEquiv:app_function_key(11)
-			  modifiers:0 tag:0 group:nil];
+	// 截图用 Cmd+F10(与 win32 的 Ctrl+F10 对齐): 裸功能键会被 macOS 的系统快捷键/媒体键
+	// 抢占(F11 "显示桌面" 已实测按不动), 加 Command 后系统不再拦截。
+	[self addItemToMenu:menu title:@"截图" action:@selector(takeSnapshot:) keyEquiv:app_function_key(10)
+			  modifiers:NSEventModifierFlagCommand tag:0 group:nil];
 
 	// ------------------ 工具 ------------------
 	root = [self addSubmenuToMenu:main_menu title:@"工具"];
@@ -780,18 +786,23 @@ static NSString* app_function_key(ines_int_t n)
 			  modifiers:0 tag:0 group:nil];
 	[menu addItem:[NSMenuItem separatorItem]];
 
-	// 调试视图(属于后续里程碑, 当前置灰)
+	// 调试视图: 6 个独立工具窗口(与 win32 的 IDM_VIEW_* 一一对应, tag 即视图标识)。
+	// 与 win32 一致: 菜单始终可点, 未载入 ROM 时窗口内为灰色。
+	// "寄存器"在 win32 中是空实现, 这里保持一致。
 	root = [self addSubmenuToMenu:menu title:@"调试视图"];
 	{
 		NSArray<NSString*>*  titles = @[@"图形查看…", @"卷轴查看", @"调色板查看…", @"程序内存查看…",
-										@"图案内存查看…", @"精灵内存查看…", @"寄存器…"];
+										@"图案内存查看…", @"精灵内存查看…"];
+		ines_int_t           view_id;
 
-		for (NSString* title in titles)
+		for (view_id = 0; view_id < (ines_int_t)titles.count; view_id++)
 		{
-			item = [self addItemToMenu:root.submenu title:title action:nil keyEquiv:nil
-							 modifiers:0 tag:0 group:nil];
-			item.enabled = NO;
+			[self addItemToMenu:root.submenu title:titles[view_id] action:@selector(showDebugView:)
+					  keyEquiv:nil modifiers:0 tag:view_id group:nil];
 		}
+
+		[self addItemToMenu:root.submenu title:@"寄存器…" action:@selector(showUnimplemented:)
+				  keyEquiv:nil modifiers:0 tag:0 group:nil];
 	}
 	item = [self addItemToMenu:menu title:@"联网对战" action:nil keyEquiv:nil modifiers:0 tag:0 group:nil];
 	item.enabled = NO;
@@ -907,6 +918,81 @@ static NSString* app_function_key(ines_int_t n)
 	[alert addButtonWithTitle:@"确定"];
 
 	[alert runModal];
+}
+
+// 在画面视图上方浮现一条提示, 约 2.2 秒后淡出。用于截图等无对话框的反馈。
+// 必须主线程调用; 同时只保留最新一条。
+- (void)showToast:(NSString*)message
+{
+	NSTextField*  label;
+	NSRect        bounds;
+	NSUInteger    seq;
+
+	if (![NSThread isMainThread])
+	{
+		[self performSelectorOnMainThread:@selector(showToast:) withObject:message waitUntilDone:NO];
+		return;
+	}
+
+	if ((self.videoView == nil) || (message == nil))
+		return;
+
+	[_toastView removeFromSuperview];
+	_toastView = nil;
+
+	label = [[NSTextField alloc] initWithFrame:NSZeroRect];
+	label.stringValue     = message;
+	label.editable        = NO;
+	label.selectable      = NO;
+	label.bezeled         = NO;
+	label.drawsBackground = YES;
+	label.backgroundColor = [NSColor colorWithCalibratedWhite:0.0 alpha:0.72];
+	label.textColor       = [NSColor whiteColor];
+	label.font            = [NSFont systemFontOfSize:14.0 weight:NSFontWeightMedium];
+	label.alignment       = NSTextAlignmentCenter;
+	label.wantsLayer      = YES;
+	label.layer.cornerRadius = 9.0;
+	label.layer.masksToBounds = YES;
+
+	[label sizeToFit];
+
+	bounds = self.videoView.bounds;
+	label.frame = NSMakeRect(0, 0,
+							 label.frame.size.width + 30.0,
+							 label.frame.size.height + 14.0);
+	label.frame = NSMakeRect(floor(NSMidX(bounds) - label.frame.size.width / 2.0),
+							 NSMaxY(bounds) - label.frame.size.height - 26.0,
+							 label.frame.size.width, label.frame.size.height);
+
+	// 窗口缩放时保持水平居中、并维持与顶部的间距
+	label.autoresizingMask = NSViewMinXMargin | NSViewMaxXMargin | NSViewMinYMargin;
+
+	[self.videoView addSubview:label];
+	_toastView = label;
+
+	_toastSeq++;
+	seq = _toastSeq;
+
+	dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.2 * NSEC_PER_SEC)),
+				   dispatch_get_main_queue(), ^
+	{
+		if (self->_toastSeq != seq)
+			return;
+
+		[NSAnimationContext runAnimationGroup:^(NSAnimationContext* context)
+		{
+			context.duration = 0.3;
+			label.animator.alphaValue = 0.0;
+		}
+		completionHandler:^
+		{
+			if (self->_toastSeq == seq)
+			{
+				[label removeFromSuperview];
+				self->_toastView = nil;
+			}
+		}];
+	});
 }
 
 #pragma mark - 菜单校验与动态菜单
@@ -1137,19 +1223,64 @@ static NSString* app_function_key(ines_int_t n)
 
 - (IBAction)openROM:(id)sender
 {
-	NSOpenPanel*  panel = [NSOpenPanel openPanel];
+	NSString*  last_dir = nil;
+	NSString*  path;
 
-	panel.title                   = @"载入 ROM";
-	panel.allowsMultipleSelection = NO;
-	panel.canChooseDirectories    = NO;
-	panel.canChooseFiles          = YES;
-	panel.allowedFileTypes        = @[@"nes"];
+	// 文件加载管理器: 先选文件夹, 再列出其中的 NES 文件及其属性, 最后加载选中的文件
+	path = [iNESOpenRomDialog runModalWithInitialDir:[self romInitialDir]
+											   owner:self.window
+											 lastDir:&last_dir];
 
-	if ([panel runModal] != NSModalResponseOK)
-		return;
+	// 记住对话框关闭时所在的文件夹(点"加载"或"取消"都算), 下次打开时默认定位到这里
+	if (last_dir.length > 0)
+		SetConfigStr(ISTR("rom"), ISTR("last_dir"), [last_dir fileSystemRepresentation]);
 
-	if (panel.URL.path != nil)
-		[self requestLoadROM:panel.URL.path];
+	if (path.length > 0)
+		[self requestLoadROM:path];
+}
+
+// 载入对话框的初始目录: 上次使用的文件夹 -> 最近打开的 ROM 所在目录;
+// 都没有时返回 nil, 由对话框自行退化为用户主目录
+- (NSString*)romInitialDir
+{
+	NSString*    dir = nil;
+	ines_cstr_t  config_dir;
+	BOOL         is_dir = NO;
+
+	// 1) 上次使用的文件夹(记录在 config.ini 里, 重启后依然有效);
+	//    目录可能已被删除或改名, 不可用时忽略这条记录
+	config_dir = GetConfigStr(ISTR("rom"), ISTR("last_dir"), ISTR(""));
+
+	if ((config_dir != NULL) && (config_dir[0] != 0))
+	{
+		NSString*  saved = [NSString stringWithUTF8String:config_dir];
+
+		if ((saved.length > 0)
+		 && [[NSFileManager defaultManager] fileExistsAtPath:saved isDirectory:&is_dir]
+		 && is_dir)
+		{
+			dir = saved;
+		}
+	}
+
+	// 2) 退回到最近打开过的 ROM 所在目录(与 win32 的 szROMFilePath 语义一致)
+	if ((dir == nil) && (latest_open_files[0][0] != 0))
+	{
+		NSString*  rom = [NSString stringWithUTF8String:latest_open_files[0]];
+
+		if (rom.length > 0)
+		{
+			dir = [rom stringByDeletingLastPathComponent];
+
+			if (dir.length == 0)
+				dir = nil;
+		}
+	}
+
+	INES_LOG(LOG_DBG, MOD_SYS, ISTR("open rom dialog initial dir: `%s`\n"),
+		(dir != nil) ? [dir fileSystemRepresentation] : "");
+
+	return dir;
 }
 
 // 只做"请求": 真正的载入由模拟线程完成
@@ -1358,69 +1489,95 @@ static NSString* app_function_key(ines_int_t n)
 - (IBAction)takeSnapshot:(id)sender
 {
 	ines_byte_t   frame[SCREEN_IMAGE_BYTES];
-	ines_byte_t   palette[sizeof(ines_palette_rgb_t) * MAX_COLORS];
-	ines_char_t   file_path[INES_MAX_PATH];
 	ines_char_t   rom_title[INES_MAX_TITLE];
-	time_t        t;
-	struct tm*    lt;
-	FILE*         fp;
+	NSString*     title;
+	NSString*     path;
+	NSBitmapImageRep*  rep;
+	NSData*       png;
+	NSUInteger    i;
 
 	if ([self currentStatus] == NES_STATUS_OFF)
 		return;
 
 	[self copyCurrentRomTitle:rom_title length:sizeof(rom_title)];
 
-	t  = time(NULL);
-	lt = localtime(&t);
-	if (lt == NULL)
-		return;
+	// ROM 标题可能含路径分隔符, 直接拼进文件名会把文件写到别处
+	title = [NSString stringWithUTF8String:rom_title];
+	if (title == nil)
+		title = @"";
+	title = [title stringByReplacingOccurrencesOfString:@"/" withString:@"_"];
+	title = [title stringByReplacingOccurrencesOfString:@":" withString:@"_"];
 
-	ines_snprintf(file_path, sizeof(file_path), ISTR("%s/%s_snapshot_%04d%02d%02d%02d%02d%02d.bmp"),
-				  s_snapshot_dir, rom_title,
-				  lt->tm_year + 1900, lt->tm_mon + 1, lt->tm_mday,
-				  lt->tm_hour, lt->tm_min, lt->tm_sec);
+	{
+		NSDateFormatter*  fmt = [[NSDateFormatter alloc] init];
+
+		fmt.locale     = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+		fmt.dateFormat = @"yyyyMMddHHmmss";
+
+		path = [NSString stringWithFormat:@"%s/%@_snapshot_%@.png",
+				s_picture_dir, title, [fmt stringFromDate:[NSDate date]]];
+	}
 
 	// 取一份画面快照, 其余工作都在主线程完成
 	ines_mutex_lock(&s_mutex_output);
 	memcpy(frame, screen_front, SCREEN_IMAGE_BYTES);
 	ines_mutex_unlock(&s_mutex_output);
 
-	fp = fopen(file_path, "wb");
-	if (fp == NULL)
+	// 索引色 -> 自顶向下 BGRA(与视频显示走同一套转换, 保证颜色一致)
+	iNES_palette_to_bgra(frame, s_snapshot_bgra, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+	// NSBitmapImageRep 的像素字节序为 R,G,B,A, 把 BGRA 就地换成 RGBA
+	for (i = 0; i < (NSUInteger)(SCREEN_WIDTH * SCREEN_HEIGHT); i++)
 	{
-		[self showAlert:@"截图失败" message:@"无法写入截图文件。"];
+		ines_byte_t  b = s_snapshot_bgra[i * 4];
+
+		s_snapshot_bgra[i * 4]     = s_snapshot_bgra[i * 4 + 2];
+		s_snapshot_bgra[i * 4 + 2] = b;
+	}
+
+	rep = [[NSBitmapImageRep alloc]
+			initWithBitmapDataPlanes:NULL
+						  pixelsWide:SCREEN_WIDTH
+						  pixelsHigh:SCREEN_HEIGHT
+					   bitsPerSample:8
+					 samplesPerPixel:4
+							hasAlpha:YES
+							isPlanar:NO
+					  colorSpaceName:NSDeviceRGBColorSpace
+						 bytesPerRow:SCREEN_WIDTH * 4
+						bitsPerPixel:32];
+	if ((rep == nil) || (rep.bitmapData == NULL))
+	{
+		[self showAlert:@"截图失败" message:@"无法生成图像数据。"];
 		return;
 	}
 
+	memcpy(rep.bitmapData, s_snapshot_bgra, sizeof(s_snapshot_bgra));
+
+	png = [rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
+	if ((png == nil) || ![png writeToFile:path atomically:YES])
 	{
-		app_bmp_file_header_t  bmfh;
-		app_bmp_info_header_t  bmih;
-
-		memset(&bmfh, 0, sizeof(bmfh));
-		memset(&bmih, 0, sizeof(bmih));
-		memset(palette, 0, sizeof(palette));
-		memcpy(palette, iNES_palette, sizeof(ines_palette_rgb_t) * MAX_COLORS);
-
-		bmfh.bfType    = 0x4D42;   // 'BM'
-		bmfh.bfOffBits = sizeof(bmfh) + sizeof(bmih) + sizeof(palette);
-		bmfh.bfSize    = bmfh.bfOffBits + SCREEN_IMAGE_BYTES;
-
-		bmih.biSize     = sizeof(bmih);
-		bmih.biWidth    = SCREEN_WIDTH;
-		bmih.biHeight   = SCREEN_HEIGHT;
-		bmih.biPlanes   = 1;
-		bmih.biBitCount = PIXEL_BITS;
-		bmih.biClrUsed  = MAX_COLORS * 4;
-
-		fwrite(&bmfh, sizeof(bmfh), 1, fp);
-		fwrite(&bmih, sizeof(bmih), 1, fp);
-		fwrite(palette, sizeof(palette), 1, fp);
-		fwrite(frame, SCREEN_IMAGE_BYTES, 1, fp);
+		INES_LOG(LOG_ERR, MOD_SYS, ISTR("Save snapshot to '%s' Failed!\n"), path.UTF8String);
+		[self showAlert:@"截图失败" message:[NSString stringWithFormat:@"无法写入截图文件:\n%@", path]];
+		return;
 	}
 
-	fclose(fp);
+	INES_LOG(LOG_NTY, MOD_SYS, ISTR("Save snapshot to '%s' OK!\n"), path.UTF8String);
+	[self showToast:@"截图已保存到 ~/Pictures/iNES"];
+}
 
-	INES_LOG(LOG_NTY, MOD_SYS, ISTR("Save snapshot to '%s' OK!\n"), file_path);
+// 打开调试视图工具窗口(对应 win32 的 IDM_VIEW_* 菜单命令)
+- (IBAction)showDebugView:(id)sender
+{
+	ines_int_t  view_id = (ines_int_t)[sender tag];
+
+	if ((view_id < 0) || (view_id >= IDBG_VIEW_COUNT))
+	{
+		[self showUnimplemented:sender];
+		return;
+	}
+
+	[[iNESDebugManager sharedManager] showView:view_id];
 }
 
 - (IBAction)showUnimplemented:(id)sender
@@ -1804,6 +1961,9 @@ static NSString* app_function_key(ines_int_t n)
 				ines_joypad_update_bits(&host.joypad, main_keys, 0);
 			}
 
+			// ---- 6) 跑一帧前: 应用调试视图提交的内存写入 ----
+			ines_dbg_apply_writes(&host);
+
 			// ---- 6) 跑一帧(APU 输出 -> PPU 渲染 -> 提交画面) ----
 			{
 				ines_int64_t  t_mark = app_cur_time_us();   // ---- 临时诊断 ----
@@ -1837,6 +1997,9 @@ static NSString* app_function_key(ines_int_t n)
 				ines_mutex_unlock(&s_mutex_output);
 
 				[self.videoView presentIndexedPixels:s_screen_back];
+
+				// 帧末: 为调试视图采集一份 host 快照(无调试窗口可见时直接返回, 无拷贝开销)
+				ines_dbg_capture(&host);
 
 				diag_render_us += (app_cur_time_us() - t_mark);   // ---- 临时诊断 ----
 			}

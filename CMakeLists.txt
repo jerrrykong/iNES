@@ -6,9 +6,13 @@
 #   iNesCore_DLL.vcproj -> 目标 inescore(模拟核心共享库, 输出 inescore.dll/.so)
 #
 # 用法示例(在仓库根目录执行, project/ 已被 .gitignore 忽略):
-#   cmake -S . -B project/build
-#   cmake --build project/build --config Release
+#   cmake -S . -B project/build                 # 默认 Release(全优化)
+#   cmake --build project/build -j              # 单配置生成器无需 --config
 #   构建产物默认输出到仓库 bin/ 目录(与原 VC 工程一致)
+#
+# 需要调试时请显式指定, 并使用独立的构建目录(避免与 Release 缓存互相污染):
+#   cmake -S . -B project/build-dbg -DCMAKE_BUILD_TYPE=Debug
+#   cmake --build project/build-dbg -j
 #
 # 注意事项:
 #   1) 与原始 VC 工程一致: iNES.exe 按 Unicode 字符集编译, inescore 按
@@ -51,6 +55,28 @@ project(iNES
 # 必须在 project() 之后调用。
 if(APPLE)
     enable_language(OBJC)
+endif()
+
+# ---------------------------------------------------------------------
+# 默认构建类型: Release(全优化)
+#
+# 单配置生成器(Unix Makefiles / Ninja / MinGW Makefiles)下, 若配置时不带
+# -DCMAKE_BUILD_TYPE=..., CMake 会得到"空构建类型": 既没有 -O3 也没有
+# -DNDEBUG, 且 core/ 内的 assert 全部生效, 模拟器帧率会明显下降。
+# 这里统一默认成 Release(即 -O3 -DNDEBUG 全优化), 只有显式传入
+# -DCMAKE_BUILD_TYPE=Debug(或 RelWithDebInfo/MinSizeRel)时才按指定值构建。
+#
+# 注意: 多配置生成器(Visual Studio / Xcode / Ninja Multi-Config)的构建类型
+#       由 --config 决定, 不受本变量影响, 仍需 cmake --build <dir> --config Release
+# ---------------------------------------------------------------------
+if(NOT CMAKE_CONFIGURATION_TYPES)
+    if(NOT CMAKE_BUILD_TYPE)
+        set(CMAKE_BUILD_TYPE "Release" CACHE STRING "构建类型" FORCE)
+        message(STATUS "iNES: 未指定 CMAKE_BUILD_TYPE, 默认按 Release(全优化)构建")
+    endif()
+    # 让 ccmake / cmake-gui 以下拉框形式列出可选值
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
+        Debug Release RelWithDebInfo MinSizeRel)
 endif()
 
 set(INES_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -115,8 +141,11 @@ set(INES_WIN32_SOURCES
 set(INES_MAC_OBJC_SOURCES
     "${INES_DIR}/mac/main.m"
     "${INES_DIR}/mac/iNESApp.m"
+    "${INES_DIR}/mac/iNESOpenRomDialog.m"
     "${INES_DIR}/mac/iNESVideo.m"
-    "${INES_DIR}/mac/iNESAudio.m")
+    "${INES_DIR}/mac/iNESAudio.m"
+    "${INES_DIR}/mac/iNESDebug.m"
+    "${INES_DIR}/mac/iNESDebugView.m")
 
 set(INES_MAC_C_SOURCES
     "${INES_DIR}/mac/iNESOsd.c"
@@ -324,6 +353,12 @@ endif()
 # 构建配置摘要
 # =====================================================================
 message(STATUS "iNES: 输出目录         = ${INES_OUTPUT_DIR}")
+if(CMAKE_CONFIGURATION_TYPES)
+    message(STATUS "iNES: 构建类型         = 多配置(${CMAKE_CONFIGURATION_TYPES}), 构建时用 --config 指定")
+else()
+    message(STATUS "iNES: 构建类型         = ${CMAKE_BUILD_TYPE}")
+endif()
+message(STATUS "iNES: Release 优化标志 = ${CMAKE_C_FLAGS_RELEASE}")
 message(STATUS "iNES: 目标平台/生成器  = ${CMAKE_GENERATOR_PLATFORM} / ${CMAKE_GENERATOR}")
 message(STATUS "iNES: 核心库(inescore) = ${INES_BUILD_CORE}")
 message(STATUS "iNES: GUI  (iNES)      = ${INES_BUILD_GUI}")

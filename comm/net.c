@@ -324,7 +324,12 @@ int net_is_connected()
 	if(s_sock_listen != INVALID_SOCKET)
 	{
 		struct sockaddr_in   addr;
+		// accept() 的长度参数: Winsock 为 int*, POSIX 为 socklen_t*(同 net_socket_error 的写法)
+#ifdef WIN32
 		int                  addr_len;
+#elif defined(INES_POSIX)
+		socklen_t            addr_len;
+#endif
 		socket_t  sock_c;
 
 		// run as server

@@ -55,7 +55,7 @@ BEGIN
         MENUITEM SEPARATOR
         MENUITEM "最近文件",                        32990, INACTIVE
         MENUITEM SEPARATOR
-        MENUITEM "退出(&X)\tAtl+Q",               IDM_EXIT
+        MENUITEM "退出(&X)\tAlt+Q",               IDM_EXIT
     END
     POPUP "控制(&C)"
     BEGIN
@@ -106,19 +106,19 @@ BEGIN
         END
         POPUP "载入存档(&L)"
         BEGIN
-            MENUITEM "存档 0\tCtrl+Shift+0",          IDM_LOAD_STATE_0
-            MENUITEM "存档 1\tCtrl+Shift+1",          IDM_LOAD_STATE_1
-            MENUITEM "存档 2\tCtrl+Shift+2",          IDM_LOAD_STATE_2
-            MENUITEM "存档 3\tCtrl+Shift+3",          IDM_LOAD_STATE_3
-            MENUITEM "存档 4\tCtrl+Shift+4",          IDM_LOAD_STATE_4
-            MENUITEM "存档 5\tCtrl+Shift+5",          IDM_LOAD_STATE_5
-            MENUITEM "存档 6\tCtrl+Shift+6",          IDM_LOAD_STATE_6
-            MENUITEM "存档 7\tCtrl+Shift+7",          IDM_LOAD_STATE_7
-            MENUITEM "存档 8\tCtrl+Shift+8",          IDM_LOAD_STATE_8
-            MENUITEM "存档 9\tCtrl+Shift+9",          IDM_LOAD_STATE_9
+            MENUITEM "存档 0\tCtrl+Alt+0",            IDM_LOAD_STATE_0
+            MENUITEM "存档 1\tCtrl+Alt+1",            IDM_LOAD_STATE_1
+            MENUITEM "存档 2\tCtrl+Alt+2",            IDM_LOAD_STATE_2
+            MENUITEM "存档 3\tCtrl+Alt+3",            IDM_LOAD_STATE_3
+            MENUITEM "存档 4\tCtrl+Alt+4",            IDM_LOAD_STATE_4
+            MENUITEM "存档 5\tCtrl+Alt+5",            IDM_LOAD_STATE_5
+            MENUITEM "存档 6\tCtrl+Alt+6",            IDM_LOAD_STATE_6
+            MENUITEM "存档 7\tCtrl+Alt+7",            IDM_LOAD_STATE_7
+            MENUITEM "存档 8\tCtrl+Alt+8",            IDM_LOAD_STATE_8
+            MENUITEM "存档 9\tCtrl+Alt+9",            IDM_LOAD_STATE_9
         END
         MENUITEM SEPARATOR
-        MENUITEM "截图(S)\tF12",                  IDM_SNAPSHOT
+        MENUITEM "截图(S)\tCtrl+F10",             IDM_SNAPSHOT
     END
     POPUP "工具(&T)"
     BEGIN
@@ -168,6 +168,12 @@ END
 // Accelerator
 //
 
+// 快捷键表(与 mac 侧菜单快捷键对齐): Ctrl+O/Ctrl+U 载入/卸载, Alt+Q 退出,
+// Ctrl+F1/F1 上电/复位, P/Space 暂停/单帧, F12 全屏, F5~F8 缩放, F9 静音,
+// Ctrl+0~9 存档, Ctrl+Alt+0~9 读档, Ctrl+F10 截图。
+// 读档不用 Ctrl+Shift —— Cmd+Shift+3/4/5/6 在 macOS 上是系统截图键, 两侧统一避开。
+// 注意: 组合键的字母请避开 A/Z/S/X —— 它们是游戏键, 且游戏输入是轮询式的
+// (NesGetKeyState), 不区分修饰键, 否则按下快捷键会同时向游戏注入按键。
 IDC_INES ACCELERATORS 
 BEGIN
     "/",            IDM_ABOUT,              ASCII,  ALT, NOINVERT
@@ -178,13 +184,34 @@ BEGIN
     VK_F1,          IDM_HARDRESET,          VIRTKEY, CONTROL, NOINVERT
     "O",            IDM_OPEN,               VIRTKEY, CONTROL, NOINVERT
     "P",            IDM_PAUSE,              VIRTKEY, NOINVERT
-    VK_F12,         IDM_SNAPSHOT,           VIRTKEY, NOINVERT
+    VK_F10,         IDM_SNAPSHOT,           VIRTKEY, CONTROL, NOINVERT
     VK_F1,          IDM_SOFTRESET,          VIRTKEY, NOINVERT
     VK_F5,          IDM_ZOOM_X1,            VIRTKEY, NOINVERT
     VK_F6,          IDM_ZOOM_X2,            VIRTKEY, NOINVERT
     VK_F7,          IDM_ZOOM_X3,            VIRTKEY, NOINVERT
     VK_F8,          IDM_ZOOM_X4,            VIRTKEY, NOINVERT
     VK_F9,          IDM_MUTE,               VIRTKEY, NOINVERT
+    VK_F12,         IDM_FULL_SCREEN,        VIRTKEY, NOINVERT
+    "0",            IDM_SAVE_STATE_0,       VIRTKEY, CONTROL, NOINVERT
+    "1",            IDM_SAVE_STATE_1,       VIRTKEY, CONTROL, NOINVERT
+    "2",            IDM_SAVE_STATE_2,       VIRTKEY, CONTROL, NOINVERT
+    "3",            IDM_SAVE_STATE_3,       VIRTKEY, CONTROL, NOINVERT
+    "4",            IDM_SAVE_STATE_4,       VIRTKEY, CONTROL, NOINVERT
+    "5",            IDM_SAVE_STATE_5,       VIRTKEY, CONTROL, NOINVERT
+    "6",            IDM_SAVE_STATE_6,       VIRTKEY, CONTROL, NOINVERT
+    "7",            IDM_SAVE_STATE_7,       VIRTKEY, CONTROL, NOINVERT
+    "8",            IDM_SAVE_STATE_8,       VIRTKEY, CONTROL, NOINVERT
+    "9",            IDM_SAVE_STATE_9,       VIRTKEY, CONTROL, NOINVERT
+    "0",            IDM_LOAD_STATE_0,       VIRTKEY, CONTROL, ALT, NOINVERT
+    "1",            IDM_LOAD_STATE_1,       VIRTKEY, CONTROL, ALT, NOINVERT
+    "2",            IDM_LOAD_STATE_2,       VIRTKEY, CONTROL, ALT, NOINVERT
+    "3",            IDM_LOAD_STATE_3,       VIRTKEY, CONTROL, ALT, NOINVERT
+    "4",            IDM_LOAD_STATE_4,       VIRTKEY, CONTROL, ALT, NOINVERT
+    "5",            IDM_LOAD_STATE_5,       VIRTKEY, CONTROL, ALT, NOINVERT
+    "6",            IDM_LOAD_STATE_6,       VIRTKEY, CONTROL, ALT, NOINVERT
+    "7",            IDM_LOAD_STATE_7,       VIRTKEY, CONTROL, ALT, NOINVERT
+    "8",            IDM_LOAD_STATE_8,       VIRTKEY, CONTROL, ALT, NOINVERT
+    "9",            IDM_LOAD_STATE_9,       VIRTKEY, CONTROL, ALT, NOINVERT
 END
 
 

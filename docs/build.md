@@ -17,6 +17,7 @@
 | 设置 | 值 | 原因 |
 |---|---|---|
 | `CMAKE_GENERATOR_PLATFORM` | `Win32`（可用 `-A x64` 覆盖） | 原 VC 工程为 32 位；必须以**缓存变量**在 `project()` 之前设置，否则不生效 |
+| `CMAKE_BUILD_TYPE` | `Release`（单配置生成器默认值，显式传 `Debug` 可覆盖） | 不指定会得到"空构建类型"：既无 `-O3` 也无 `-DNDEBUG`，`assert` 生效、帧率明显下降 |
 | 字符集 | `iNES`：`UNICODE/_UNICODE`；`inescore`：多字节 | 与原工程一致，因此 `core/comm` 会分别编译进两个目标 |
 | MSVC 选项 | `/W3 /utf-8` | 与 VC 工程告警级别一致；源码为 UTF-8，需显式指定源/执行字符集 |
 | 预定义宏 | `WIN32` `_WIN32` `_WINDOWS` `_CRT_SECURE_NO_WARNINGS` `UNICODE` `_UNICODE`，Debug 附加 `_DEBUG` | 对齐 vcproj；`_WIN32` 同时供 `rc.exe` 使用 |
@@ -60,6 +61,7 @@ powershell -ExecutionPolicy Bypass -File tools\convert_encoding.ps1          # �
 | `RC2104: undefined keyword or key name` | rc 文件编码/内容被破坏 | 恢复 `win32/iNES.rc` 为正确的 UTF-8 |
 | 平台仍是 x64 | `CMAKE_GENERATOR_PLATFORM` 未生效或被缓存 | 删除构建目录重新配置；或显式 `-A Win32` |
 | `C4819` 中文告警 | 缺 `/utf-8` | 已在 CMake 中统一添加，勿删除 |
+| 帧率明显偏低（`assert` 反而生效） | 单配置生成器下 `CMAKE_BUILD_TYPE` 为空 | 现已默认 `Release`；旧的空类型构建目录删除后重新配置 |
 
 ## 6. Win64
 

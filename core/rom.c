@@ -137,8 +137,8 @@ ines_bool_t ines_rom_load_from_file(ines_rom_t*  p_rom, ines_cstr_t strFileName)
 	PROM_size = (ines_size_t)header.PROM_block_num * INES_PROM_BLOCK_SIZE;
 	VROM_size = (ines_size_t)header.VROM_block_num * INES_VROM_BLOCK_SIZE;
 
-	INES_LOG(LOG_NTY, MOD_ROM, ISTR("Calc PROM Size: %dK, VROM Size %dK, Mapper: %d\n"), 
-		PROM_size/1024, VROM_size/1024, mapper_num);
+	INES_LOG(LOG_NTY, MOD_ROM, ISTR("Calc PROM Size: %")ISTR(PRI64)ISTR("dK, VROM Size %")ISTR(PRI64)ISTR("dK, Mapper: %d\n"),
+		(ines_int64_t)(PROM_size/1024), (ines_int64_t)(VROM_size/1024), mapper_num);
 
 	pPROM = ines_alloc(PROM_size);
 	pVROM = ines_alloc(VROM_size);

@@ -42,7 +42,7 @@ NES（FC）模拟器，由两部分组成：
 ### 快速开始（推荐）
 
 ```powershell
-# 配置（默认 Win32 / x86，与原 VC 工程一致）
+# 配置（默认 Win32 / x86，与原 VC 工程一致；单配置生成器的构建类型默认 Release）
 cmake -S . -B build
 
 # 构建 Release
@@ -69,11 +69,15 @@ cmake --build build-x64 --config Release
 cmake --build build --config Release --clean-first
 ```
 
-若使用 Ninja 这类**单配置生成器**，必须在配置时指定构建类型，且目标架构取决于命令行环境：
+若使用 Ninja 这类**单配置生成器**，构建类型**默认即为 `Release`**（`-O3 -DNDEBUG`，全优化），无需再手工指定；只有需要 Debug 时才显式传入。目标架构取决于命令行环境：
 
 ```powershell
-cmake -S . -B build-ninja -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build-ninja -G Ninja          # 默认 Release
 cmake --build build-ninja
+
+# 需要调试时（用独立构建目录，避免污染 Release 缓存）
+cmake -S . -B build-ninja-dbg -G Ninja -DCMAKE_BUILD_TYPE=Debug
+cmake --build build-ninja-dbg
 # 要生成 32 位程序，请在 “x86 Native Tools Command Prompt for VS 2022” 中执行
 ```
 
@@ -85,6 +89,7 @@ cmake --build build-ninja
 | `INES_BUILD_GUI` | `ON` | 构建 Win32 GUI `iNES`（非 Windows 平台自动跳过） |
 | `INES_OUTPUT_DIR` | `<仓库>/bin` | 可执行文件与共享库的输出目录 |
 | `CMAKE_GENERATOR_PLATFORM` | `Win32` | 目标平台，可用 `cmake -A x64` 覆盖 |
+| `CMAKE_BUILD_TYPE` | `Release` | 仅单配置生成器有效：默认 `Release`（全优化），显式传 `Debug` 可覆盖 |
 
 示例：只构建核心库
 
@@ -179,11 +184,13 @@ powershell -ExecutionPolicy Bypass -File tools\convert_encoding.ps1          # �
 | 快捷键 | 功能 |
 |---|---|
 | `Ctrl+O` / `Ctrl+U` | 载入 / 卸载 ROM |
+| `Alt+Q` | 退出 |
 | `Ctrl+F1` / `F1` | 重新上电 / 软件复位 |
 | `P` / `Space` | 暂停 / 单帧执行 |
+| `F12` | 全屏 |
 | `F5`-`F8` | 窗口缩放 x1-x4 |
 | `F9` | 静音 |
-| `F12` | 截图 |
-| `Ctrl+0`-`9` / `Ctrl+Shift+0`-`9` | 即时存档 / 载入存档 |
+| `Ctrl+0`-`9` / `Ctrl+Alt+0`-`9` | 即时存档 / 载入存档 |
+| `Ctrl+F10` | 截图 |
 
 （快捷键以 `win32/iNES.rc` 中的菜单定义为准。）
