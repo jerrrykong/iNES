@@ -2286,12 +2286,12 @@ VOID UpdateMenuLoadState(HMENU hMenu, UINT nPos, int index)
 	if(host.status == NES_STATUS_OFF)
 	{
 		bEnable = FALSE;
-		ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d 存档 (空) %s"), index, pszAccel);
+		ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d 读档 (空) %s"), index, pszAccel);
 	}else{
 		time_t t = GetSaveStateTime(index);
 		if(t == 0)
 		{
-			ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d 存档 (空) %s"), index, pszAccel);
+			ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d 读档 (空) %s"), index, pszAccel);
 			bEnable = FALSE;
 		}
 		else
@@ -2300,11 +2300,11 @@ VOID UpdateMenuLoadState(HMENU hMenu, UINT nPos, int index)
 			struct  tm* lt = localtime(&tt);
 			if(lt == NULL)
 			{
-				ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d 存档 (\?\?) %s"), index, pszAccel);				
+				ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d 读档 (\?\?) %s"), index, pszAccel);				
 			}
 			else
 			{
-				ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d 存档 (%04d/%02d/%02d %02d:%02d:%02d) %s"),
+				ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d 读档 (%04d/%02d/%02d %02d:%02d:%02d) %s"),
 					index, lt->tm_year+1900, lt->tm_mon+1, lt->tm_mday, lt->tm_hour, lt->tm_min, lt->tm_sec, pszAccel);				
 			}
 			bEnable = TRUE;

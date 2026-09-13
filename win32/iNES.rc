@@ -106,16 +106,16 @@ BEGIN
         END
         POPUP "载入存档(&L)"
         BEGIN
-            MENUITEM "存档 0\tCtrl+Alt+0",            IDM_LOAD_STATE_0
-            MENUITEM "存档 1\tCtrl+Alt+1",            IDM_LOAD_STATE_1
-            MENUITEM "存档 2\tCtrl+Alt+2",            IDM_LOAD_STATE_2
-            MENUITEM "存档 3\tCtrl+Alt+3",            IDM_LOAD_STATE_3
-            MENUITEM "存档 4\tCtrl+Alt+4",            IDM_LOAD_STATE_4
-            MENUITEM "存档 5\tCtrl+Alt+5",            IDM_LOAD_STATE_5
-            MENUITEM "存档 6\tCtrl+Alt+6",            IDM_LOAD_STATE_6
-            MENUITEM "存档 7\tCtrl+Alt+7",            IDM_LOAD_STATE_7
-            MENUITEM "存档 8\tCtrl+Alt+8",            IDM_LOAD_STATE_8
-            MENUITEM "存档 9\tCtrl+Alt+9",            IDM_LOAD_STATE_9
+            MENUITEM "读档 0\tCtrl+Alt+0",            IDM_LOAD_STATE_0
+            MENUITEM "读档 1\tCtrl+Alt+1",            IDM_LOAD_STATE_1
+            MENUITEM "读档 2\tCtrl+Alt+2",            IDM_LOAD_STATE_2
+            MENUITEM "读档 3\tCtrl+Alt+3",            IDM_LOAD_STATE_3
+            MENUITEM "读档 4\tCtrl+Alt+4",            IDM_LOAD_STATE_4
+            MENUITEM "读档 5\tCtrl+Alt+5",            IDM_LOAD_STATE_5
+            MENUITEM "读档 6\tCtrl+Alt+6",            IDM_LOAD_STATE_6
+            MENUITEM "读档 7\tCtrl+Alt+7",            IDM_LOAD_STATE_7
+            MENUITEM "读档 8\tCtrl+Alt+8",            IDM_LOAD_STATE_8
+            MENUITEM "读档 9\tCtrl+Alt+9",            IDM_LOAD_STATE_9
         END
         MENUITEM SEPARATOR
         MENUITEM "截图(S)\tCtrl+F10",             IDM_SNAPSHOT
