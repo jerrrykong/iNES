@@ -35,6 +35,7 @@
 #define APP_KEY_FLASH_FREQ       6          // 连发按键的半周期(帧), 与 win32 的 key_flash_freq 一致
 #define APP_SRAM_SAVE_INTERVAL   5000000    // 自动保存 SRAM 的间隔(微秒), 与 win32 一致
 #define APP_AUDIO_CACHE_NUM      4          // 在飞音频缓冲的目标值(等价 win32 的 audio_cache_num)
+#define APP_AUDIO_LOW_WATER      2          // 水位低于该值就补静音(必须 > 0, 见帧循环里的说明)
 #define APP_STATE_MAGIC          0x41545349 // 'ISTA' 即时存档文件头魔数(见 core/nes.c 的 INES_STATE_HEADER_MAGIC)
 #define APP_STATE_COUNT          10         // 即时存档槽位数
 #define APP_STATE_NONE           (-1)       // 无存档/读档请求
@@ -292,7 +293,7 @@ static int nes_proc(void* ud);
 - (void)requestLoadROM:(NSString*)path;
 - (NSString*)romInitialDir;
 - (void)updateRecentFilesMenu;
-- (void)updateStateMenu:(NSMenu*)menu;
+- (void)updateStateMenu:(NSMenu*)menu label:(NSString*)label;
 - (void)loadHistories;
 - (void)saveHistories;
 - (void)addHistoryFile:(NSString*)path;
@@ -734,7 +735,7 @@ static NSString* app_function_key(ines_int_t n)
 	for (i = 0; i < APP_STATE_COUNT; i++)
 	{
 		[self addItemToMenu:self.loadStateMenu
-					  title:[NSString stringWithFormat:@"存档 %d", (int)i]
+					  title:[NSString stringWithFormat:@"读档 %d", (int)i]
 					 action:@selector(loadState:)
 				   keyEquiv:[NSString stringWithFormat:@"%d", (int)i]
 				  modifiers:(NSEventModifierFlagCommand | NSEventModifierFlagOption)
@@ -1084,7 +1085,7 @@ static NSString* app_function_key(ines_int_t n)
 	if (menu == self.recentFilesMenu)
 		[self updateRecentFilesMenu];
 	else if ((menu == self.saveStateMenu) || (menu == self.loadStateMenu))
-		[self updateStateMenu:menu];
+		[self updateStateMenu:menu label:(menu == self.saveStateMenu) ? @"存档" : @"读档"];
 }
 
 - (void)updateRecentFilesMenu
@@ -1124,8 +1125,8 @@ static NSString* app_function_key(ines_int_t n)
 	}
 }
 
-// 即时存档菜单的标题随文件是否存在而变化; 是否可点由 validateMenuItem: 决定
-- (void)updateStateMenu:(NSMenu*)menu
+// 存档 / 读档菜单的标题随文件是否存在而变化; 是否可点由 validateMenuItem: 决定
+- (void)updateStateMenu:(NSMenu*)menu label:(NSString*)label
 {
 	ines_int_t    i;
 	ines_dword_t  crc32 = [self currentRomCrc32];
@@ -1146,7 +1147,7 @@ static NSString* app_function_key(ines_int_t n)
 
 		if (save_time == 0)
 		{
-			item.title = [NSString stringWithFormat:@"存档 %d (空)", (int)i];
+			item.title = [NSString stringWithFormat:@"%@ %d (空)", label, (int)i];
 			continue;
 		}
 
@@ -1154,9 +1155,9 @@ static NSString* app_function_key(ines_int_t n)
 		lt = localtime(&t);
 
 		if (lt == NULL)
-			item.title = [NSString stringWithFormat:@"存档 %d", (int)i];
+			item.title = [NSString stringWithFormat:@"%@ %d", label, (int)i];
 		else
-			item.title = [NSString stringWithFormat:@"存档 %d - %04d/%02d/%02d %02d:%02d:%02d", (int)i,
+			item.title = [NSString stringWithFormat:@"%@ %d - %04d/%02d/%02d %02d:%02d:%02d", label, (int)i,
 						  lt->tm_year + 1900, lt->tm_mon + 1, lt->tm_mday,
 						  lt->tm_hour, lt->tm_min, lt->tm_sec];
 	}
@@ -1790,6 +1791,12 @@ static NSString* app_function_key(ines_int_t n)
 	ines_int_t    diag_refill_cnt  = 0;   // 本统计周期内补静音次数
 	ines_int64_t  diag_playing_sum = 0;   // 本统计周期内在飞缓冲数累计
 	ines_int_t    diag_frames      = 0;   // 本统计周期内帧数
+	ines_int64_t  diag_fed_samples = 0;   // 本统计周期内投喂给音频的样本总数
+	ines_int_t    diag_push_cnt    = 0;   // 本统计周期内实际投喂次数(out_len > 0)
+	ines_int_t    diag_push_fail   = 0;   // 本统计周期内 pushFrame 返回 -1 的次数
+	ines_int_t    diag_out_min     = 0;   // 本统计周期内单帧 out_len 最小值
+	ines_int_t    diag_out_max     = 0;   // 本统计周期内单帧 out_len 最大值
+	double        diag_played_prev = 0.0; // 上次统计时设备已渲染样本数
 	// ---- 临时诊断结束 ----
 
 	INES_LOG(LOG_NTY, MOD_SYS, ISTR("++ simulation thread running ++\n"));
@@ -1891,11 +1898,14 @@ static NSString* app_function_key(ines_int_t n)
 				{
 					ines_int_t  playing = [self.audio playingCount];
 
-					if (playing <= 0)
+					if (playing < APP_AUDIO_LOW_WATER)
 					{
-						// 音频已断流(队列里一个缓冲都不剩): 先用静音把缓冲补回目标深度。
-						// 这一步对应 win32 前端在 wvPlayingNum == 0 时填充静音缓冲的做法,
-						// 少了它播放会一直停滞, 帧率调整也拿不到反馈量, 声音会长时间断续甚至消失。
+						// 水位低于下限: 用静音把缓冲补回目标深度(对应 win32 在 wvPlayingNum == 0
+						// 时填充静音缓冲的做法), 少了它播放会一直停滞, 声音会长时间断续甚至消失。
+						// 门限必须高于 0 而不能等到"一个缓冲都不剩": 本判断在帧首执行, 而真正的
+						// 断流判定在 pushFrame 里、位于一帧的模拟与等待之后(约 16.7ms = 恰好一个
+						// 缓冲的播放时长)。等到帧首看到 0 时, 投喂时必然已是 0, 于是队列会长期钉在
+						// 1 个缓冲上(实测 underrun ≈ 帧数) 且再也涨不回目标深度 —— 表现为持续无声。
 						t_refill = app_cur_time_us();                       // ---- 临时诊断 ----
 						playing  = [self.audio refillSilence:APP_AUDIO_CACHE_NUM];
 						diag_refill_us += (app_cur_time_us() - t_refill);   // ---- 临时诊断 ----
@@ -1978,7 +1988,22 @@ static NSString* app_function_key(ines_int_t n)
 					ines_dword_t  out_len = ines_apu_getoutlen(&host.apu);
 
 					if (out_len > 0)
-						[self.audio pushFrame:audio_buffer length:(ines_int_t)out_len];
+					{
+						ines_int_t  rc = [self.audio pushFrame:audio_buffer length:(ines_int_t)out_len];
+
+						// ---- 临时诊断: 记录单帧样本数分布与投喂结果 ----
+						if (diag_push_cnt == 0)
+							diag_out_min = diag_out_max = (ines_int_t)out_len;
+						else if ((ines_int_t)out_len < diag_out_min)
+							diag_out_min = (ines_int_t)out_len;
+						else if ((ines_int_t)out_len > diag_out_max)
+							diag_out_max = (ines_int_t)out_len;
+						diag_fed_samples += (ines_int64_t)out_len;
+						diag_push_cnt++;
+						if (rc < 0)
+							diag_push_fail++;
+						// ---- 临时诊断结束 ----
+					}
 				}
 
 				diag_push_us += (app_cur_time_us() - t_mark);   // ---- 临时诊断 ----
@@ -2037,6 +2062,27 @@ static NSString* app_function_key(ines_int_t n)
 							 (double)diag_refill_us / 1000.0 / (double)((diag_refill_cnt > 0) ? diag_refill_cnt : 1),
 							 (double)diag_playing_sum / (double)n);
 				}
+
+				// ---- 临时诊断: 音频供需对账(APU 每帧产出 vs 设备实播) ----
+				{
+					double  played_now = [self.audio playedSamples];
+					double  fed_s      = (double)diag_fed_samples * 1000000.0 / (double)period;
+					double  play_s     = (played_now - diag_played_prev) * 1000000.0 / (double)period;
+
+					INES_LOG(LOG_NTY, MOD_SYS,
+							 ISTR("audio feed: fed=%.0f/s n=%d out=%d..%d avg=%.1f pushfail=%d play=%.0f/s need=44100/s surplus=%+.0f/s\n"),
+							 fed_s, (int)diag_push_cnt, (int)diag_out_min, (int)diag_out_max,
+							 (double)diag_fed_samples / (double)((diag_push_cnt > 0) ? diag_push_cnt : 1),
+							 (int)diag_push_fail, play_s, fed_s - play_s);
+
+					diag_played_prev = played_now;
+					diag_fed_samples = 0;
+					diag_push_cnt    = 0;
+					diag_push_fail   = 0;
+					diag_out_min     = 0;
+					diag_out_max     = 0;
+				}
+				// ---- 临时诊断结束 ----
 
 				diag_frames      = 0;
 				diag_sim_us      = 0;

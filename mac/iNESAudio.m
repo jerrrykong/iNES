@@ -96,6 +96,23 @@ static void iNESAudioOutputCallback(void* pUserData, AudioQueueRef pQueue, Audio
 	return count;
 }
 
+- (double)playedSamples
+{
+	AudioTimeStamp  ts;
+	double          t = 0.0;
+
+	[_lock lock];
+	if(_started && _queue != NULL)
+	{
+		memset(&ts, 0, sizeof(ts));
+		if(AudioQueueGetCurrentTime(_queue, NULL, &ts, NULL) == noErr)
+			t = ts.mSampleTime;
+	}
+	[_lock unlock];
+
+	return t;
+}
+
 - (ines_int_t)refillSilence:(ines_int_t)count
 {
 	AudioQueueBufferRef  pending[INES_AUDIO_BUFFER_NUM];
@@ -389,10 +406,10 @@ static void iNESAudioOutputCallback(void* pUserData, AudioQueueRef pQueue, Audio
 		return -1;
 	}
 
-	// ---- 临时诊断: 每 600 帧(约 10 秒)输出一次状态 ----
+	// ---- 临时诊断: 每 120 帧(约 2 秒)输出一次状态 ----
 	[_lock lock];
 
-	if((_diagFrames % 600) == 0)
+	if((_diagFrames % 120) == 0)
 	{
 		UInt32          running = 0;
 		UInt32          rsize   = (UInt32)sizeof(running);
