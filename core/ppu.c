@@ -130,7 +130,8 @@ static void write2007(ines_ppu_t* p_ppu, ines_byte_t  val)
 {
 	ines_word_t  addr;
 
-	addr = p_ppu->index_v & 0x3fff;
+	addr = p_ppu->index_v & 0x3fff;     // 0011 11,11 1111 1111
+ 	                                    // now addr MUST < 0x4000
 	p_ppu->index_v += (p_ppu->reg_ctrl_1 & PPU_RW_VERT) ? 32 : 1;
 
 	INES_LOG(LOG_DBG, MOD_PPU, ISTR("WRITE_PPU_VRAM($%04X)=$%02X\n"), addr, val);
@@ -153,9 +154,10 @@ static void write2007(ines_ppu_t* p_ppu, ines_byte_t  val)
 		}
 		return;
 	}
-	else if(addr >= 0x3000)
+	else if(addr >= 0x3000)  //  11 00,00 0000 0000
 	{
-		addr &= 0xefff;
+		// addr is over than 12 vram_banks 
+		addr &= 0xefff;      //  1110 11,11 1111 1111
 	}
 
 	// pattern_type: 0=VRAM(可写) 1=VROM(只读) 2=卡带内部 NT RAM 当作 CHR(可写，mapper 19)
@@ -507,9 +509,17 @@ static void render_bg(ines_ppu_t* p_ppu, ines_byte_t* p_line,  ines_byte_t* soli
 			{
 				if(0 == (tile_x & 0x1f))
 				{
-					nt_addr ^= 0x400;
+					/* 硬件 coarse-X 回绕：cx 归 0，并翻转水平 nametable 选择位(bit10)；
+					   垂直位(bit11)与镜像位(bit12/13)保持不变。
+					   前面的 nt_addr++ 已把 cx 的进位带进 high 位（极端情况 0x2FFF++ -> 0x3000），
+					   先做一次 16 位减法把多走的那 0x20 扣回去：减法的借位会依次穿过
+					   bit10/bit11/bit12，正好把被进位污染的高位复原（0x3000 -> 0x2FE0），
+					   之后再翻 bit10 切到水平相邻的那块 nametable。
+					   必须"先减后异或"：若先 ^0x400 再减，借位会把 bit10 又翻回去（水平不切屏），
+					   且任何"高位单独掩码保留"的写法都拉不回 0x3000 -> 0x2000-0x2FFF，
+					   会越界到 mem_bank[12]/[13] 而 SIGSEGV。 */
+					nt_addr = (ines_word_t)((nt_addr - 0x20) ^ 0x0400);
 					attr_addr ^= 0x400;
-					nt_addr -= 0x20;
 					attr_addr -= 0x08;
 					tile_x -= 0x20;
 				}

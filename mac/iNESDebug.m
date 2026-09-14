@@ -357,7 +357,8 @@ static NSSize idbg_initial_content_size(ines_int_t viewId)
 	case IDBG_VIEW_NAMETABLE: return NSMakeSize(SCREEN_WIDTH * 2, SCREEN_HEIGHT * 2);   // 512x480
 	case IDBG_VIEW_PATTERN:   return NSMakeSize(8 * 16, 8 * 32);                        // 128x256
 	case IDBG_VIEW_PALETTE:   return NSMakeSize(8 * 16, 8 * 2);                         // 128x16
-	default:                  return NSMakeSize(512, 512);                              // 3 个内存查看器
+	// 3 个内存查看器: 由字体度量算出"整行 + 一点空隙"的宽度, 默认打开时无需横向滚动
+	default:                  return [iNESMemoryView suggestedContentSize];
 	}
 }
 

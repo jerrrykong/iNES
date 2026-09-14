@@ -28,6 +28,10 @@
 // 一行正文的字符列数: 16 个 "%02X " (48) + 1 个空格 + 16 个 ASCII 字符
 #define IDBG_LINE_BODY_COLS    (IDBG_BYTES_PER_LINE * 3 + 1 + IDBG_BYTES_PER_LINE)   // 65
 
+// 整行字符列数(地址列 + 正文列)与内存窗口的初始客户区高度(高度与 win32 一致)
+#define IDBG_LINE_COLS         (IDBG_ADDR_COLS + IDBG_LINE_BODY_COLS)                // 71
+#define IDBG_WIN_HEIGHT        512
+
 // ---------------------------------------------------------------------
 // 图形视图的固定逻辑尺寸(与 win32 的宏一致)
 // ---------------------------------------------------------------------
@@ -57,6 +61,19 @@ static void idbg_fill_off_color(void)
 	NSRectFill(NSMakeRect(0, 0, 1e6, 1e6));
 }
 
+// 内存视图的字体: 与 win32 的 LOGFONT(Courier New, 12px, 细体) 对齐;
+// 取不到 Courier New 时退化为系统等宽字体, 排版不受影响。
+// 视图实例与"初始窗口尺寸"都必须走这里, 否则算出来的客户区宽度会和实际排版对不上。
+static NSFont* idbg_memory_font(void)
+{
+	NSFont*  font = [NSFont fontWithName:@"Courier New" size:12.0];
+
+	if (font == nil)
+		font = [NSFont userFixedPitchFontOfSize:12.0];
+
+	return font;
+}
+
 
 #pragma mark - iNESMemoryView
 
@@ -66,12 +83,14 @@ static void idbg_fill_off_color(void)
 	ines_int_t     _startCol;       // 水平滚动起点(字符列)
 	ines_int_t     _curAddr;        // 光标地址
 	ines_int_t     _halfChar;       // 0 = 待输入高半字节, 1 = 待输入低半字节
-	ines_int_t     _charW;          // 字符宽度(像素)
+	CGFloat        _charW;          // 字符宽度(像素, 必须保留小数, 见 rebuildMetrics)
 	ines_int_t     _charH;          // 字符高度(像素)
 	ines_int_t     _rows;           // 当前可见行数
 	ines_int_t     _cols;           // 当前可见字符列数
 	ines_int_t     _totalRows;      // 总行数
 	ines_int_t     _totalCols;      // 总字符列数
+	CGFloat        _wheelX;         // 滚轮横向累积量(像素, 仅触控板使用)
+	CGFloat        _wheelY;         // 滚轮纵向累积量(像素, 仅触控板使用)
 	NSFont*        _font;
 	NSDictionary*  _attrs;
 	NSScroller*    _hScroller;
@@ -80,6 +99,7 @@ static void idbg_fill_off_color(void)
 
 - (ines_int_t)memBytes;
 - (void)rebuildMetrics;
+- (void)layoutScrollers;
 - (void)updateScrollers;
 - (void)setCursor:(ines_int_t)addr;
 - (void)scrollBy:(ines_int_t)bar code:(ines_int_t)code;
@@ -92,7 +112,10 @@ static void idbg_fill_off_color(void)
 
 - (instancetype)initWithSpace:(ines_int_t)space
 {
-	self = [super initWithFrame:NSMakeRect(0, 0, 512, 512)];
+	NSSize  content = [iNESMemoryView suggestedContentSize];
+
+	// 初始 frame 与窗口管理器给出的客户区尺寸保持一致(见 iNESDebug.m: idbg_initial_content_size)
+	self = [super initWithFrame:NSMakeRect(0, 0, content.width, content.height)];
 	if (self == nil)
 		return nil;
 
@@ -102,11 +125,7 @@ static void idbg_fill_off_color(void)
 	_curAddr   = 0;
 	_halfChar  = 0;
 
-	// 字体与 win32 的 LOGFONT(Courier New, 12px, 细体) 对齐;
-	// 取不到 Courier New 时退化为系统等宽字体, 排版不受影响。
-	_font = [NSFont fontWithName:@"Courier New" size:12.0];
-	if (_font == nil)
-		_font = [NSFont userFixedPitchFontOfSize:12.0];
+	_font  = idbg_memory_font();
 
 	_attrs = @{ NSFontAttributeName: _font,
 				NSForegroundColorAttributeName: [NSColor textColor] };
@@ -126,7 +145,31 @@ static void idbg_fill_off_color(void)
 	[self addSubview:_hScroller];
 	[self addSubview:_vScroller];
 
+	// 先按初始尺寸摆一次(之后由 viewDidMoveToWindow / 尺寸变化再校正)
+	[self layoutScrollers];
+	[self updateScrollers];
+
 	return self;
+}
+
+// 推荐的初始客户区大小: 宽度上让整行(地址列 + 十六进制 + 空格 + ASCII 区)完整可见,
+// 右侧再留一个字符的空隙(行尾与反色光标不会紧贴垂直滚动条, 看起来也更舒展),
+// 最后加上垂直滚动条自身占用的宽度。高度沿用 win32 的 512。
+// 度量方式与 rebuildMetrics 完全一致, 所以默认打开时整行可见、不会出现横向滚动。
++ (NSSize)suggestedContentSize
+{
+	NSSize   sz;
+	CGFloat  charW;
+	CGFloat  textW;
+	CGFloat  scrollerW;
+
+	sz        = [@"X" sizeWithAttributes:@{ NSFontAttributeName: idbg_memory_font() }];
+	charW     = (sz.width < 1.0) ? 1.0 : sz.width;
+	textW     = (CGFloat)IDBG_LINE_COLS * charW;
+	scrollerW = [NSScroller scrollerWidthForControlSize:NSControlSizeSmall
+										  scrollerStyle:NSScrollerStyleLegacy];
+
+	return NSMakeSize(ceil(textW + charW + scrollerW), IDBG_WIN_HEIGHT);
 }
 
 // 与 win32 的左上原点一致(所有 y 坐标可直接照搬)
@@ -161,9 +204,17 @@ static void idbg_fill_off_color(void)
 	NSSize    sz;
 
 	sz = [@"X" sizeWithAttributes:@{ NSFontAttributeName: _font }];
-	_charW = (ines_int_t)ceil(sz.width);
+
+	// 宽度必须保留小数而不能向上取整: 正文是整行交给 CoreText 排版的, 它按字体的实际
+	// advance 逐字符推进(Courier New 12pt = 7.2px), 而光标与鼠标命中都按 _charW 累加。
+	// 若在此 ceil 成 8, 每列就多算 0.8px, 越靠右偏差越大(ASCII 区累积到约 40px),
+	// 表现为反色光标与实际的字节/字符错位。
+	_charW = sz.width;
+	if (_charW < 1.0) _charW = 1.0;
+
+	// 高度保持取整: 正文行间距由本视图自己按 _charH 累加, 取整后与光标的 y 公式
+	// ((行 + 头行) * _charH + 分隔高)整数等价, 纵向不会错位。
 	_charH = (ines_int_t)ceil(sz.height);
-	if (_charW < 1) _charW = 1;
 	if (_charH < 1) _charH = 1;
 
 	_totalCols = IDBG_LINE_BODY_COLS;
@@ -180,18 +231,34 @@ static void idbg_fill_off_color(void)
 	return NSMakeSize(MAX(10.0, sz.width - w), MAX(10.0, sz.height - w));
 }
 
-- (void)resizeSubviewsWithOldSize:(NSSize)oldSize
+// 滚动条的摆放(纵向在右、横向在底; 视图已翻转, 底部即 y 最大处)
+- (void)layoutScrollers
 {
 	NSSize   sz = self.bounds.size;
 	CGFloat  w  = [NSScroller scrollerWidthForControlSize:NSControlSizeSmall
 											scrollerStyle:NSScrollerStyleLegacy];
 
-	[super resizeSubviewsWithOldSize:oldSize];
-
-	// 纵向在右、横向在底(视图已翻转, 底部即 y 最大处)
 	_vScroller.frame = NSMakeRect(sz.width - w, 0, w, MAX(0.0, sz.height - w));
 	_hScroller.frame = NSMakeRect(0, sz.height - w, MAX(0.0, sz.width - w), w);
+}
 
+- (void)resizeSubviewsWithOldSize:(NSSize)oldSize
+{
+	[super resizeSubviewsWithOldSize:oldSize];
+
+	[self layoutScrollers];
+	[self updateScrollers];
+}
+
+// 窗口把 contentView 的尺寸设为内容区大小; 若该尺寸恰好等于视图初始 frame(内存查看器
+// 两者都是 512x512), 就不会触发 resizeSubviewsWithOldSize:, 滚动条会停留在 init 里
+// 临时 frame(0,0,100,15)/(0,0,15,100) 上 —— 表现为"刚打开时滚动条位置不对, 调整一次
+// 窗口大小后才正常"。这里补一次校正。
+- (void)viewDidMoveToWindow
+{
+	[super viewDidMoveToWindow];
+
+	[self layoutScrollers];
 	[self updateScrollers];
 }
 
@@ -358,6 +425,58 @@ static void idbg_fill_off_color(void)
 }
 
 #pragma mark 交互
+
+// 滚轮滚动(win32 通过 WM_MOUSEWHEEL / 滚动条实现, 这里直接改 _startLine / _startCol)。
+// 方向遵循 NSScrollView 的约定: 增量为正表示查看更上方 / 更左侧的内容。
+- (void)scrollWheel:(NSEvent*)event
+{
+	CGFloat     dy    = event.scrollingDeltaY;
+	CGFloat     dx    = event.scrollingDeltaX;
+	ines_int_t  dLine = 0;
+	ines_int_t  dCol  = 0;
+
+	if (event.hasPreciseScrollingDeltas)
+	{
+		// 触控板: 增量是像素, 先累积, 攒够一格才滚一行 / 一列
+		_wheelY += dy;
+		_wheelX += dx;
+
+		while (_wheelY >= _charH)  { _wheelY -= _charH; dLine--; }
+		while (_wheelY <= -_charH) { _wheelY += _charH; dLine++; }
+		while (_wheelX >= _charW)  { _wheelX -= _charW; dCol--; }
+		while (_wheelX <= -_charW) { _wheelX += _charW; dCol++; }
+	}
+	else
+	{
+		// 传统滚轮: 增量本身就是行数
+		dLine = -(ines_int_t)dy;
+		dCol  = -(ines_int_t)dx;
+	}
+
+	if ((dLine == 0) && (dCol == 0))
+		return;
+
+	if (dLine != 0)
+	{
+		ines_int_t  maxRow = MAX(0, _totalRows - _rows);
+
+		_startLine += dLine;
+		if (_startLine < 0)      _startLine = 0;
+		if (_startLine > maxRow) _startLine = maxRow;
+	}
+
+	if (dCol != 0)
+	{
+		ines_int_t  maxCol = MAX(0, _totalCols - _cols);
+
+		_startCol += dCol;
+		if (_startCol < 0)      _startCol = 0;
+		if (_startCol > maxCol) _startCol = maxCol;
+	}
+
+	[self updateScrollers];
+	[self setNeedsDisplay:YES];
+}
 
 - (void)mouseDown:(NSEvent*)event
 {

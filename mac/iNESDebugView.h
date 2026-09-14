@@ -49,6 +49,10 @@
 
 - (instancetype)initWithSpace:(ines_int_t)space;
 
+// 推荐的初始客户区大小: 宽度上让整行(地址列 + 十六进制 + 空格 + ASCII 区)完整可见,
+// 右侧再留一个字符的空隙避免贴边; 高度与 win32 的 512 一致。
++ (NSSize)suggestedContentSize;
+
 // 未载入 ROM 时是否有内容可显示(由窗口管理器判断并置灰色)
 - (BOOL)hasContent;
 
