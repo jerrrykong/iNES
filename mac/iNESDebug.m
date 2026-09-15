@@ -11,6 +11,7 @@
 
 #import "iNESDebug.h"
 #import "iNESDebugView.h"
+#import "iNESRegisterView.h"
 
 #include "../comm/log.h"
 #include "../comm/thread.h"
@@ -72,6 +73,76 @@ int ines_dbg_is_wanted(void)
 }
 
 
+// 寄存器采集: 一律直拷 host 字段, 不调用任何端口读函数
+//   (ines_ppu_readlow($2002) 会清 VBlank 与 toggle, ines_apu_read($4015) 会清 IRQ)
+static void idbg_capture_regs(const ines_host_t* pHost, ines_dbg_regs_t* pRegs)
+{
+	const ines_cpu_t*  pCpu = &pHost->cpu;
+	const ines_ppu_t*  pPpu = &pHost->ppu;
+	const ines_apu_t*  pApu = &pHost->apu;
+	ines_int_t         i;
+	ines_byte_t        st;
+
+	if ((pHost == NULL) || (pRegs == NULL))
+		return;
+
+	/* ---- CPU ---- */
+	pRegs->a           = pCpu->reg_A;
+	pRegs->x           = pCpu->reg_X;
+	pRegs->y           = pCpu->reg_Y;
+	pRegs->p           = pCpu->reg_P;
+	pRegs->sp          = pCpu->reg_SP;
+	pRegs->pc          = pCpu->reg_PC;
+	pRegs->int_pending = pCpu->INT_pending;
+	pRegs->jammed      = (ines_byte_t)(pCpu->jammed ? 1 : 0);
+	pRegs->total_cycles = pCpu->total_cycles;
+
+	/* ---- PPU ---- */
+	pRegs->ctrl1             = pPpu->reg_ctrl_1;
+	pRegs->ctrl2             = pPpu->reg_ctrl_2;
+	pRegs->status            = pPpu->reg_status;
+	pRegs->oam_addr          = pPpu->reg_spr_addr;
+	pRegs->oam_data          = pPpu->sp_RAM[pPpu->reg_spr_addr];
+	pRegs->t                 = pPpu->index_t;
+	pRegs->v                 = pPpu->index_v;
+	pRegs->fine_x            = (ines_byte_t)(pPpu->index_x & 0x07);
+	pRegs->toggle            = pPpu->toggle_2005_2006;
+	pRegs->read_2007_buffer  = pPpu->read_2007_buffer;
+	pRegs->scanline          = pPpu->current_line;
+	pRegs->in_vblank         = (ines_byte_t)(pPpu->in_vblank ? 1 : 0);
+
+	/* ---- APU: 各端口上一次写入值 ---- */
+	for (i = 0; i < 4; i++)
+	{
+		pRegs->pulse1[i]   = pApu->channel_pulse1.reg_ctrl[i];
+		pRegs->pulse2[i]   = pApu->channel_pulse2.reg_ctrl[i];
+		pRegs->triangle[i] = pApu->channel_triangle.reg_ctrl[i];
+		pRegs->noise[i]    = pApu->channel_noise.reg_ctrl[i];
+		pRegs->dmc[i]      = pApu->channel_dmc.reg_ctrl[i];
+	}
+
+	pRegs->ctrl_4015  = pApu->reg_ctrl;
+	pRegs->frame_4017 = pApu->reg_frame_mode;
+
+	// $4015 状态位: 与 ines_apu_read() 的派生逻辑一致, 但不触发其副作用(清 IRQ)
+	st = 0;
+	if (pApu->irq_flag)                              st |= APU_STATUS_FRAME_IRQ;
+	if (pApu->channel_dmc.irq_flag)                  st |= APU_STATUS_DMC_IRQ;
+	if (pApu->channel_pulse1.length_counter != 0)    st |= APU_STATUS_PULSE1_ENABLED;
+	if (pApu->channel_pulse2.length_counter != 0)    st |= APU_STATUS_PULSE2_ENABLED;
+	if (pApu->channel_triangle.length_counter != 0)  st |= APU_STATUS_TRIANGLE_ENABLED;
+	if (pApu->channel_noise.length_counter != 0)     st |= APU_STATUS_NOISE_ENABLED;
+	if (pApu->channel_dmc.length_counter != 0)       st |= APU_STATUS_DMC_ENABLED;
+	pRegs->apu_status   = st;
+	pRegs->apu_irq_flag = (ines_byte_t)(pApu->irq_flag ? 1 : 0);
+
+	/* ---- I/O ---- */
+	pRegs->dma_high   = pHost->DMA_high;
+	pRegs->joy_strobe = (ines_byte_t)(pHost->joypad.input_brush ? 1 : 0);
+	pRegs->joy2_bits  = (ines_byte_t)(pHost->joypad.joypad_bits[1] & 0xFF);
+}
+
+
 void ines_dbg_capture(const ines_host_t* pHost)
 {
 	ines_int_t  i;
@@ -84,6 +155,7 @@ void ines_dbg_capture(const ines_host_t* pHost)
 	if (pHost->status == NES_STATUS_OFF)
 	{
 		s_snap_back.rom_off = 1;
+		memset(&s_snap_back.regs, 0, sizeof(s_snap_back.regs));
 	}
 	else
 	{
@@ -122,6 +194,8 @@ void ines_dbg_capture(const ines_host_t* pHost)
 		memcpy(s_snap_back.sp_ram, pHost->ppu.sp_RAM, sizeof(s_snap_back.sp_ram));
 
 		s_snap_back.reg_ctrl_1 = pHost->ppu.reg_ctrl_1;
+
+		idbg_capture_regs(pHost, &s_snap_back.regs);
 	}
 
 	ines_mutex_lock(&s_mutex_snap);
@@ -276,6 +350,7 @@ int ines_dbg_post_write(ines_int_t space, ines_int_t addr, ines_byte_t val)
 	}
 
 	p = &s_write_queue[s_write_head];
+	p->kind  = IDBG_WRITE_MEMORY;
 	p->space = space;
 	p->addr  = addr;
 	p->val   = val;
@@ -284,6 +359,118 @@ int ines_dbg_post_write(ines_int_t space, ines_int_t addr, ines_byte_t val)
 	ines_mutex_unlock(&s_mutex_write);
 
 	return 1;
+}
+
+
+int ines_dbg_post_reg_write(ines_int_t regId, ines_int_t val)
+{
+	ines_dbg_write_t*  p;
+	int                next;
+
+	if ((regId < 0) || (regId >= IDBG_REG_COUNT))
+		return 0;
+
+	idbg_lazy_init();
+
+	ines_mutex_lock(&s_mutex_write);
+
+	next = (s_write_head + 1) % IDBG_WRITE_QUEUE_SIZE;
+	if (next == s_write_tail)
+	{
+		ines_mutex_unlock(&s_mutex_write);
+		return 0;
+	}
+
+	p = &s_write_queue[s_write_head];
+	p->kind  = IDBG_WRITE_REGISTER;
+	p->space = 0;
+	p->addr  = regId;
+	p->val   = val;
+	s_write_head = next;
+
+	ines_mutex_unlock(&s_mutex_write);
+
+	return 1;
+}
+
+
+// 寄存器写入(模拟线程, 帧首执行):
+//   * CPU 内部寄存器直接改字段;
+//   * PPU/APU 端口一律走 ines_ppu_writelow / ines_apu_write, 保留真实写入副作用
+//     ($2000 同步 T 的 name table 位、$4003 重载 length counter、$4015 清 DMC IRQ 等);
+//   * PPU 内部 T/V/fine_x 直接改字段(不经过 $2005/$2006 双写, 避免连带改动另一个寄存器);
+//   * $4014 走 ines_host_write, 会立即触发 256 字节 DMA + 514 周期(视图侧已做二次确认)。
+static int idbg_apply_reg_write(ines_host_t* pHost, ines_int_t regId, ines_int_t val)
+{
+	ines_cpu_t*  pCpu = &pHost->cpu;
+	ines_ppu_t*  pPpu = &pHost->ppu;
+	ines_apu_t*  pApu = &pHost->apu;
+
+	if (pHost->status == NES_STATUS_OFF)
+		return 0;
+
+	switch (regId)
+	{
+	/* ---- CPU ---- */
+	case IDBG_REG_A:        pCpu->reg_A  = (ines_byte_t)(val & 0xFF);            return 1;
+	case IDBG_REG_X:        pCpu->reg_X  = (ines_byte_t)(val & 0xFF);            return 1;
+	case IDBG_REG_Y:        pCpu->reg_Y  = (ines_byte_t)(val & 0xFF);            return 1;
+	case IDBG_REG_P:        pCpu->reg_P  = (ines_byte_t)(val & 0xFF);            return 1;
+	case IDBG_REG_SP:       pCpu->reg_SP = (ines_byte_t)(val & 0xFF);            return 1;
+	case IDBG_REG_PC:       pCpu->reg_PC = (ines_word_t)(val & 0xFFFF);          return 1;
+	case IDBG_REG_IRQ_PEND: pCpu->INT_pending = (ines_byte_t)(val & 0x07);       return 1;
+
+	/* ---- PPU ---- */
+	case IDBG_REG_PPUCTRL:  ines_ppu_writelow(pPpu, 0x2000, (ines_byte_t)val);   return 1;
+	case IDBG_REG_PPUMASK:  ines_ppu_writelow(pPpu, 0x2001, (ines_byte_t)val);   return 1;
+	case IDBG_REG_OAMADDR:  ines_ppu_writelow(pPpu, 0x2003, (ines_byte_t)val);   return 1;
+	case IDBG_REG_OAMDATA:  ines_ppu_writelow(pPpu, 0x2004, (ines_byte_t)val);   return 1;
+	case IDBG_REG_PPUDATA:  ines_ppu_writelow(pPpu, 0x2007, (ines_byte_t)val);   return 1;
+	case IDBG_REG_PPU_T:    pPpu->index_t = (ines_word_t)(val & 0x7FFF);         return 1;
+	case IDBG_REG_PPU_V:    pPpu->index_v = (ines_word_t)(val & 0x7FFF);         return 1;
+
+	/* ---- APU(端口写) ---- */
+	case IDBG_REG_P1VOL:
+	case IDBG_REG_P1SWP:
+	case IDBG_REG_P1TLO:
+	case IDBG_REG_P1THI:
+		ines_apu_write(pApu, (ines_word_t)(0x4000 + (regId - IDBG_REG_P1VOL)), (ines_byte_t)val);
+		return 1;
+	case IDBG_REG_P2VOL:
+	case IDBG_REG_P2SWP:
+	case IDBG_REG_P2TLO:
+	case IDBG_REG_P2THI:
+		ines_apu_write(pApu, (ines_word_t)(0x4004 + (regId - IDBG_REG_P2VOL)), (ines_byte_t)val);
+		return 1;
+	case IDBG_REG_TRLIN:
+	case IDBG_REG_TR_UNUSED:
+	case IDBG_REG_TRTLO:
+	case IDBG_REG_TRTHI:
+		ines_apu_write(pApu, (ines_word_t)(0x4008 + (regId - IDBG_REG_TRLIN)), (ines_byte_t)val);
+		return 1;
+	case IDBG_REG_NSVOL:
+	case IDBG_REG_NS_UNUSED:
+	case IDBG_REG_NSFRQ:
+	case IDBG_REG_NSLEN:
+		ines_apu_write(pApu, (ines_word_t)(0x400C + (regId - IDBG_REG_NSVOL)), (ines_byte_t)val);
+		return 1;
+	case IDBG_REG_DMFREQ:
+	case IDBG_REG_DMDAC:
+	case IDBG_REG_DMADDR:
+	case IDBG_REG_DMLEN:
+		ines_apu_write(pApu, (ines_word_t)(0x4010 + (regId - IDBG_REG_DMFREQ)), (ines_byte_t)val);
+		return 1;
+	case IDBG_REG_APUCTRL:  ines_apu_write(pApu, 0x4015, (ines_byte_t)val);     return 1;
+	case IDBG_REG_FRAMECTR: ines_apu_write(pApu, 0x4017, (ines_byte_t)val);     return 1;
+
+	/* ---- I/O ---- */
+	case IDBG_REG_OAMDMA:   ines_host_write(pHost, 0x4014, (ines_byte_t)val);   return 1;
+	case IDBG_REG_JOYPAD1:  ines_host_write(pHost, 0x4016, (ines_byte_t)val);   return 1;
+
+	/* ---- 只读项(PPUSTATUS/PPUSCROLL/SCANLINE/VBLANK/TOGGLE/APUSTAT/JOYPAD2/CYCLES) ---- */
+	default:
+		return 0;
+	}
 }
 
 
@@ -311,6 +498,12 @@ int ines_dbg_apply_writes(ines_host_t* pHost)
 		s_write_tail = (s_write_tail + 1) % IDBG_WRITE_QUEUE_SIZE;
 		ines_mutex_unlock(&s_mutex_write);
 
+		if (w.kind == IDBG_WRITE_REGISTER)
+		{
+			count += idbg_apply_reg_write(pHost, w.addr, w.val);
+			continue;
+		}
+
 		p = idbg_host_ptr(pHost, w.space, w.addr);
 		if (p == NULL)
 			continue;
@@ -337,6 +530,7 @@ ines_cstr_t ines_dbg_view_title(ines_int_t viewId)
 	case IDBG_VIEW_MEMORY:    return "内存查看器";
 	case IDBG_VIEW_VMEMORY:   return "图形内存查看器";
 	case IDBG_VIEW_SPMEMORY:  return "精灵内存查看器";
+	case IDBG_VIEW_REGISTER:  return "寄存器查看器";
 	default:                  return "调试窗口";
 	}
 }
@@ -357,13 +551,15 @@ static NSSize idbg_initial_content_size(ines_int_t viewId)
 	case IDBG_VIEW_NAMETABLE: return NSMakeSize(SCREEN_WIDTH * 2, SCREEN_HEIGHT * 2);   // 512x480
 	case IDBG_VIEW_PATTERN:   return NSMakeSize(8 * 16, 8 * 32);                        // 128x256
 	case IDBG_VIEW_PALETTE:   return NSMakeSize(8 * 16, 8 * 2);                         // 128x16
+	// 寄存器查看器: 名称/地址/值/位格/说明 五列, 由字体度量算出整行宽度
+	case IDBG_VIEW_REGISTER:  return [iNESRegisterView suggestedContentSize];
 	// 3 个内存查看器: 由字体度量算出"整行 + 一点空隙"的宽度, 默认打开时无需横向滚动
 	default:                  return [iNESMemoryView suggestedContentSize];
 	}
 }
 
 
-@interface iNESDebugManager () <iNESMemoryViewDelegate, iNESGraphicViewDelegate>
+@interface iNESDebugManager () <iNESMemoryViewDelegate, iNESGraphicViewDelegate, iNESRegisterViewDelegate>
 {
 	// 窗口一经创建即常驻(关闭后再次选择菜单会重新显示, 保留滚动位置等状态),
 	// 因此无需额外的视图引用: contentView 由窗口自身持有。
@@ -439,8 +635,18 @@ static NSSize idbg_initial_content_size(ines_int_t viewId)
 		content      = nil;
 		content_size = idbg_initial_content_size(viewId);
 
+		// 寄存器查看器(CPU / PPU / APU / IO): 名称 + 地址 + 值 + 位格 + 说明
+		if (viewId == IDBG_VIEW_REGISTER)
+		{
+			iNESRegisterView*  regView = [[iNESRegisterView alloc] init];
+
+			regView.snapshot = &_snapshot;
+			regView.delegate = self;
+
+			content = regView;
+		}
 		// 内存查看器(CPU / VRAM / 精灵内存): 十六进制 + ASCII, 可滚动
-		if ((viewId == IDBG_VIEW_MEMORY) || (viewId == IDBG_VIEW_VMEMORY) || (viewId == IDBG_VIEW_SPMEMORY))
+		else if ((viewId == IDBG_VIEW_MEMORY) || (viewId == IDBG_VIEW_VMEMORY) || (viewId == IDBG_VIEW_SPMEMORY))
 		{
 			iNESMemoryView*  memView;
 			ines_int_t       space = IDBG_SPACE_CPU;
@@ -532,6 +738,7 @@ static NSSize idbg_initial_content_size(ines_int_t viewId)
 	[self refreshView:IDBG_VIEW_MEMORY];
 	[self refreshView:IDBG_VIEW_VMEMORY];
 	[self refreshView:IDBG_VIEW_SPMEMORY];
+	[self refreshView:IDBG_VIEW_REGISTER];
 }
 
 - (void)refreshView:(ines_int_t)viewId
@@ -551,6 +758,38 @@ static NSSize idbg_initial_content_size(ines_int_t viewId)
 - (void)memoryView:(iNESMemoryView*)view writeByte:(ines_byte_t)val atAddr:(ines_int_t)addr
 {
 	ines_dbg_post_write(view.space, addr, val);
+}
+
+
+#pragma mark - iNESRegisterViewDelegate
+
+// 视图已按"整值 / 单个位"合并好, 这里只负责投递到模拟线程(帧首应用)
+- (void)registerView:(iNESRegisterView*)view writeReg:(ines_int_t)regId value:(ines_int_t)val
+{
+	ines_dbg_post_reg_write(regId, val);
+}
+
+// $4014 OAMDMA 会立即触发 256 字节 DMA + 514 周期: 写前确认一次(按住 Shift 跳过)
+- (BOOL)registerView:(iNESRegisterView*)view confirmReg:(ines_int_t)regId value:(ines_int_t)val
+{
+	NSAlert*  alert;
+
+	if (regId != IDBG_REG_OAMDMA)
+		return YES;
+
+	if (([NSEvent modifierFlags] & NSEventModifierFlagShift) != 0)
+		return YES;
+
+	alert = [[NSAlert alloc] init];
+	alert.alertStyle  = NSAlertStyleWarning;
+	alert.messageText = @"写入 $4014 (OAMDMA)";
+	alert.informativeText = [NSString stringWithFormat:
+							 @"将立即从 $%02X00 传送 256 字节到精灵内存, 并消耗 514 个 CPU 周期。",
+							 (int)(val & 0xFF)];
+	[alert addButtonWithTitle:@"确定"];
+	[alert addButtonWithTitle:@"取消"];
+
+	return ([alert runModal] == NSAlertFirstButtonReturn);
 }
 
 

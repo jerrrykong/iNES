@@ -145,7 +145,8 @@ set(INES_MAC_OBJC_SOURCES
     "${INES_DIR}/mac/iNESVideo.m"
     "${INES_DIR}/mac/iNESAudio.m"
     "${INES_DIR}/mac/iNESDebug.m"
-    "${INES_DIR}/mac/iNESDebugView.m")
+    "${INES_DIR}/mac/iNESDebugView.m"
+    "${INES_DIR}/mac/iNESRegisterView.m")
 
 set(INES_MAC_C_SOURCES
     "${INES_DIR}/mac/iNESOsd.c"

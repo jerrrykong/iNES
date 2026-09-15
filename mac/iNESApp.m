@@ -787,13 +787,13 @@ static NSString* app_function_key(ines_int_t n)
 			  modifiers:0 tag:0 group:nil];
 	[menu addItem:[NSMenuItem separatorItem]];
 
-	// 调试视图: 6 个独立工具窗口(与 win32 的 IDM_VIEW_* 一一对应, tag 即视图标识)。
+	// 调试视图: 7 个独立工具窗口(与 win32 的 IDM_VIEW_* 一一对应, tag 即视图标识)。
 	// 与 win32 一致: 菜单始终可点, 未载入 ROM 时窗口内为灰色。
-	// "寄存器"在 win32 中是空实现, 这里保持一致。
+	// 第 7 项"寄存器"在 win32 中是空实现, mac 端补齐(见 docs/register-view-plan.md)。
 	root = [self addSubmenuToMenu:menu title:@"调试视图"];
 	{
 		NSArray<NSString*>*  titles = @[@"图形查看…", @"卷轴查看", @"调色板查看…", @"程序内存查看…",
-										@"图案内存查看…", @"精灵内存查看…"];
+										@"图案内存查看…", @"精灵内存查看…", @"寄存器查看…"];
 		ines_int_t           view_id;
 
 		for (view_id = 0; view_id < (ines_int_t)titles.count; view_id++)
@@ -801,9 +801,6 @@ static NSString* app_function_key(ines_int_t n)
 			[self addItemToMenu:root.submenu title:titles[view_id] action:@selector(showDebugView:)
 					  keyEquiv:nil modifiers:0 tag:view_id group:nil];
 		}
-
-		[self addItemToMenu:root.submenu title:@"寄存器…" action:@selector(showUnimplemented:)
-				  keyEquiv:nil modifiers:0 tag:0 group:nil];
 	}
 	item = [self addItemToMenu:menu title:@"联网对战" action:nil keyEquiv:nil modifiers:0 tag:0 group:nil];
 	item.enabled = NO;
