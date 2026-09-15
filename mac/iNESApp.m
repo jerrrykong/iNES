@@ -23,6 +23,7 @@
 #import "iNESConfig.h"
 #import "iNESDebug.h"
 #import "iNESOpenRomDialog.h"
+#import "iNESRegisterView.h"
 
 #import "../comm/log.h"
 
@@ -261,6 +262,8 @@ static int nes_proc(void* ud);
 @property (nonatomic, strong) iNESVideoView*  videoView;
 @property (nonatomic, strong) iNESAudio*      audio;
 @property (nonatomic, copy)   NSString*       pendingRomPath;
+
+@property (nonatomic, strong) id              keyEventMonitor;   // 无修饰键快捷键监听(等价 win32 加速键表)
 
 @property (nonatomic, strong) NSMenu*         recentFilesMenu;
 @property (nonatomic, strong) NSMenu*         saveStateMenu;
@@ -1346,6 +1349,70 @@ static NSString* app_function_key(ines_int_t n)
 	[self setPauseState:NES_STATUS_FRAME_STEP];
 }
 
+// --------------------------------------------------------------------
+// 无修饰键快捷键分发
+// --------------------------------------------------------------------
+// AppKit 只对带 Function 标志的按键(F1-F12/方向键等)做无修饰键的菜单
+// keyEquivalent 匹配; 普通字符键("p"/空格)会直接走 keyDown 文本输入路径,
+// 菜单项永远收不到(实测 F12 全屏可触发而 p/空格不行)。
+// win32 侧靠 TranslateAccelerator 在消息分发前全局拦截(见 win32/iNES.rc
+// 加速键表), 这里用本地事件监听器等价实现: 监听器先于窗口分发执行。
+//   P    -> 暂停/继续(所有窗口)
+//   空格 -> 单帧执行(寄存器视图除外: 其用空格做位切换/光标移动)
+// 文本编辑中(文件面板的输入框等)不拦截, 避免吞掉正常输入。
+- (void)installKeyEventMonitor
+{
+	__weak typeof(self)  weakSelf = self;
+
+	self.keyEventMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown
+																 handler:^NSEvent*(NSEvent* event)
+	{
+		NSUInteger   mods;
+		NSString*    chars;
+		unichar      ch;
+		NSWindow*    win;
+		NSResponder* resp;
+
+		mods = (event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask);
+		if (mods != 0)                          // 仅响应无修饰键
+			return event;
+
+		chars = event.charactersIgnoringModifiers;
+		if ((chars == nil) || (chars.length != 1))
+			return event;
+		ch = [chars characterAtIndex:0];
+
+		win = event.window;
+		if (win == nil)
+			return event;
+
+		// 文本编辑中(键盘焦点是字段编辑器)不拦截
+		resp = win.firstResponder;
+		if ([resp isKindOfClass:[NSTextView class]])
+			return event;
+
+		if ((ch == 'p') || (ch == 'P'))
+		{
+			[weakSelf togglePause:nil];
+			INES_LOG(LOG_DBG, MOD_SYS, ISTR("hotkey P -> pause toggle\n"));
+			return nil;
+		}
+
+		if (ch == ' ')
+		{
+			// 寄存器视图用空格编辑位/移动光标, 放行给视图自身处理
+			if ([win.contentView isKindOfClass:[iNESRegisterView class]])
+				return event;
+
+			[weakSelf frameStep:nil];
+			INES_LOG(LOG_DBG, MOD_SYS, ISTR("hotkey Space -> frame step\n"));
+			return nil;
+		}
+
+		return event;
+	}];
+}
+
 - (IBAction)toggleFullScreen:(id)sender
 {
 	[self.window toggleFullScreen:sender];
@@ -2159,6 +2226,7 @@ static NSString* app_function_key(ines_int_t n)
 - (void)applicationDidFinishLaunching:(NSNotification*)notification
 {
 	[self startup];
+	[self installKeyEventMonitor];
 	[NSApp activateIgnoringOtherApps:YES];
 }
 
