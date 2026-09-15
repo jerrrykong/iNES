@@ -354,6 +354,13 @@ static NSFont* idbg_rv_bold_font(void)
 	ines_int64_t   _prevValue[IDBG_REG_COUNT];            // 变化前的值(算位级 diff)
 	CFTimeInterval _lastChange[IDBG_REG_COUNT];
 	BOOL           _lastValid[IDBG_REG_COUNT];
+	ines_int64_t   _drawnValue[IDBG_REG_COUNT];           // 已标脏的绘制目标值(行级脏判定)
+	BOOL           _drawnValid[IDBG_REG_COUNT];
+	BOOL           _dirtyRow[IDBG_REG_COUNT];             // 待重绘行(累积, 由 drawRect 消费)
+	BOOL           _drawRow[IDBG_REG_COUNT];              // drawRect 本次实际消费的行集
+	ines_int_t     _drawnScrollKey;                       // $2005 说明列派生键(t<<3|fine_x)
+	BOOL           _fullPending;                          // 待整幅重绘
+	BOOL           _lastHadContent;                       // 有无内容(ROM 载入)的切换检测
 	NSString*      _tips;
 	CFTimeInterval _tipsExpire;
 }
@@ -378,6 +385,8 @@ static NSFont* idbg_rv_bold_font(void)
 - (void)toggleBit:(ines_int_t)bit value:(ines_int_t)bitVal;
 - (void)showTips:(NSString*)text;
 - (void)trackChanges;
+- (void)refreshForTick;
+- (void)setNeedsDisplayAll;
 - (void)scrollBy:(ines_int_t)code;
 
 @end
@@ -598,7 +607,7 @@ static NSFont* idbg_rv_bold_font(void)
 	_startLine = pos;
 
 	[self updateScrollers];
-	[self setNeedsDisplay:YES];
+	[self setNeedsDisplayAll];
 }
 
 #pragma mark 行模型
@@ -731,7 +740,7 @@ static NSFont* idbg_rv_bold_font(void)
 	}
 
 	[self ensureCursorVisible];
-	[self setNeedsDisplay:YES];
+	[self setNeedsDisplayAll];
 }
 
 - (void)ensureCursorVisible
@@ -796,7 +805,7 @@ static NSFont* idbg_rv_bold_font(void)
 	if (pDef->wmask == 0)
 	{
 		[self showTips:@"该寄存器只读"];
-		[self setNeedsDisplay:YES];
+		[self setNeedsDisplayAll];
 		return;
 	}
 
@@ -807,13 +816,13 @@ static NSFont* idbg_rv_bold_font(void)
 	{
 		if (![_delegate registerView:self confirmReg:pDef->reg_id value:(ines_int_t)val])
 		{
-			[self setNeedsDisplay:YES];
+			[self setNeedsDisplayAll];
 			return;
 		}
 	}
 
 	[_delegate registerView:self writeReg:pDef->reg_id value:(ines_int_t)val];
-	[self setNeedsDisplay:YES];
+	[self setNeedsDisplayAll];
 }
 
 - (void)commitEdit
@@ -842,7 +851,7 @@ static NSFont* idbg_rv_bold_font(void)
 	if (((pDef->wmask >> bit) & 1) == 0)
 	{
 		[self showTips:@"该位只读"];
-		[self setNeedsDisplay:YES];
+		[self setNeedsDisplayAll];
 		return;
 	}
 
@@ -878,7 +887,7 @@ static NSFont* idbg_rv_bold_font(void)
 	if (_startLine > MAX(0, _totalRows - _rows)) _startLine = MAX(0, _totalRows - _rows);
 
 	[self updateScrollers];
-	[self setNeedsDisplay:YES];
+	[self setNeedsDisplayAll];
 }
 
 - (void)mouseDown:(NSEvent*)event
@@ -908,7 +917,7 @@ static NSFont* idbg_rv_bold_font(void)
 			_folded[group] = !_folded[group];
 			[self rebuildLineMap];
 			[self updateScrollers];
-			[self setNeedsDisplay:YES];
+			[self setNeedsDisplayAll];
 		}
 		return;
 	}
@@ -964,25 +973,25 @@ static NSFont* idbg_rv_bold_font(void)
 		{
 			if ((reg >= 0) && (_bitIndex < s_defs[reg].width - 1))
 				_bitIndex++;
-			[self setNeedsDisplay:YES];
+			[self setNeedsDisplayAll];
 		}
 		else if (_editActive)
 		{
 			if (_editNibble > 0) _editNibble--;
-			[self setNeedsDisplay:YES];
+			[self setNeedsDisplayAll];
 		}
 		return;
 	case 124:   // 右
 		if (_cursorCol == IDBG_RV_CUR_BIT)
 		{
 			if (_bitIndex > 0) _bitIndex--;
-			[self setNeedsDisplay:YES];
+			[self setNeedsDisplayAll];
 		}
 		else if (_editActive)
 		{
 			if ((reg >= 0) && (_editNibble < (s_defs[reg].width / 4) - 1))
 				_editNibble++;
-			[self setNeedsDisplay:YES];
+			[self setNeedsDisplayAll];
 		}
 		return;
 	case 116:   // PageUp
@@ -995,26 +1004,26 @@ static NSFont* idbg_rv_bold_font(void)
 		if (_cursorCol == IDBG_RV_CUR_BIT)
 		{
 			if (reg >= 0) _bitIndex = MIN(s_defs[reg].width, 16) - 1;
-			[self setNeedsDisplay:YES];
+			[self setNeedsDisplayAll];
 		}
 		else
 		{
 			_startLine = 0;
 			[self updateScrollers];
-			[self setNeedsDisplay:YES];
+			[self setNeedsDisplayAll];
 		}
 		return;
 	case 119:   // End
 		if (_cursorCol == IDBG_RV_CUR_BIT)
 		{
 			_bitIndex = 0;
-			[self setNeedsDisplay:YES];
+			[self setNeedsDisplayAll];
 		}
 		else
 		{
 			_startLine = MAX(0, _totalRows - _rows);
 			[self updateScrollers];
-			[self setNeedsDisplay:YES];
+			[self setNeedsDisplayAll];
 		}
 		return;
 	case 36:    // Enter
@@ -1022,7 +1031,7 @@ static NSFont* idbg_rv_bold_font(void)
 		return;
 	case 53:    // Esc
 		[self cancelEdit];
-		[self setNeedsDisplay:YES];
+		[self setNeedsDisplayAll];
 		return;
 	case 48:    // Tab
 		[self cancelEdit];
@@ -1045,7 +1054,7 @@ static NSFont* idbg_rv_bold_font(void)
 
 				_cursorCol = IDBG_RV_CUR_BIT;
 				_bitIndex  = b;
-				[self setNeedsDisplay:YES];
+				[self setNeedsDisplayAll];
 			}
 		}
 		else if (reg >= 0)
@@ -1070,7 +1079,7 @@ static NSFont* idbg_rv_bold_font(void)
 			{
 				[self toggleBit:_bitIndex value:(c == '1') ? 1 : 0];
 				if (_bitIndex > 0) _bitIndex--;               // 便于从高位往低位连续输入
-				[self setNeedsDisplay:YES];
+				[self setNeedsDisplayAll];
 			}
 			else
 				[self showTips:@"只能输入 0 / 1"];
@@ -1120,7 +1129,7 @@ static NSFont* idbg_rv_bold_font(void)
 				if (_editNibble >= digits)
 					[self commitEdit];
 				else
-					[self setNeedsDisplay:YES];
+					[self setNeedsDisplayAll];
 
 				return;
 			}
@@ -1208,9 +1217,117 @@ static NSFont* idbg_rv_bold_font(void)
 	}
 }
 
+// 整幅重绘: 滚动/折叠/选中移动/编辑等结构性变化走这里(与行级脏矩形路径区分)
+- (void)setNeedsDisplayAll
+{
+	_fullPending = YES;
+	[self setNeedsDisplay:YES];
+}
+
+// 供调试管理器 50ms tick 调用: 行级脏判定, 只重绘值变化的行。
+// 暂停且无变化时不产生任何绘制与窗口表面上传, 主线程零开销;
+// 红色高亮过期后补一拍重绘(余量 0.07s > 刷新间隔 0.05s)以清除红色。
+- (void)refreshForTick
+{
+	const ines_dbg_regs_t*  pRegs;
+	CFTimeInterval         now     = CFAbsoluteTimeGetCurrent();
+	BOOL                    content = [self hasContent];
+	NSRect                  contentRect;
+	ines_int_t              iLine;
+	ines_int_t              total;
+	ines_int_t              i;
+
+	if (content != _lastHadContent)
+	{
+		_lastHadContent = content;
+		[self setNeedsDisplayAll];
+		return;
+	}
+
+	if (!content)
+		return;
+
+	// 变化记账(原先在 drawRect 内, 移到这里保证跳过绘制时也持续跟踪)
+	[self trackChanges];
+
+	// Tips 淡出期间需要连续重绘(短促少见, 按整幅处理)
+	if ((_tips != nil) && (now < _tipsExpire))
+	{
+		[self setNeedsDisplayAll];
+		return;
+	}
+
+	pRegs = &_snapshot->regs;
+
+	for (i = 0; i < IDBG_REG_COUNT; i++)
+	{
+		ines_int64_t  v = _lastValue[i];
+		BOOL          dirty;
+
+		dirty = (!_drawnValid[i]) || (v != _drawnValue[i]);
+
+		// 红色高亮回落: 高亮有效期内或刚过期都要重绘
+		if (!dirty && (_lastChange[i] > 0.0) &&
+			((now - _lastChange[i]) < (IDBG_RV_HILITE_TIME + 0.07)))
+			dirty = YES;
+
+		// $2005 卷轴说明列由 t / fine_x 派生, 自身值恒 0, 需单独跟随标脏
+		if (s_defs[i].reg_id == IDBG_REG_PPUSCROLL)
+		{
+			ines_int_t  key = (ines_int_t)(((unsigned)pRegs->t << 3) | (pRegs->fine_x & 0x07));
+
+			if (key != _drawnScrollKey)
+			{
+				_drawnScrollKey = key;
+				dirty = YES;
+			}
+		}
+
+		if (dirty)
+		{
+			_drawnValue[i] = v;
+			_drawnValid[i] = YES;
+		}
+
+		_dirtyRow[i] = (_dirtyRow[i] || dirty);
+	}
+
+	// 脏行 -> 矩形(仅可见范围; 视口外的行滚动时由整幅重绘兜底)
+	contentRect = [self contentRect];
+	total       = _lineCount;
+	if (total - _startLine > _rows)
+		total = _startLine + _rows;
+
+	for (iLine = _startLine; iLine < total; iLine++)
+	{
+		ines_int_t  reg = _lineMap[iLine].reg;
+
+		if ((reg < 0) || !_dirtyRow[reg])
+			continue;
+
+		[self setNeedsDisplayInRect:NSMakeRect(contentRect.origin.x,
+											   contentRect.origin.y + (CGFloat)((iLine - _startLine) + IDBG_RV_HEAD_LINES) * _charH,
+											   contentRect.size.width,
+											   (CGFloat)_charH)];
+	}
+}
+
 static NSString* idbg_rv_str(const char* text)
 {
 	return (text != NULL) ? [NSString stringWithUTF8String:text] : @"";
+}
+
+// 预生成的单字符字符串表(' '..'~'): 位格字母/位号/L-H 标记都是单 ASCII 字符,
+// 等宽字体下单字符宽度恒为 _charW, 免去逐格测量与每次绘制的临时对象分配
+static NSString* s_rv_letters[95] = { NULL };
+
+static NSString* idbg_rv_letter(char c)
+{
+	if ((c < ' ') || (c > '~'))
+		return @"";
+	if (s_rv_letters[c - ' '] == nil)
+		s_rv_letters[c - ' '] = [[NSString alloc] initWithFormat:@"%c", c];
+	return s_rv_letters[c - ' '];
 }
 
 // 单元格填充(选中/只读两维度)
@@ -1257,6 +1374,13 @@ static void idbg_rv_stroke_focus(NSRect rc)
 	ines_int_t                  bitIdx;
 	ines_int_t                  curReg;
 	CFTimeInterval              now;
+	BOOL                        drawFull;
+
+	// 消费待绘集: 整幅(结构变化) 或 行级脏集(refreshForTick 标记)
+	drawFull     = _fullPending;
+	_fullPending = NO;
+	memcpy(_drawRow, _dirtyRow, sizeof(_dirtyRow));
+	memset(_dirtyRow, 0, sizeof(_dirtyRow));
 
 	if ((pSnap == NULL) || pSnap->rom_off)
 	{
@@ -1276,13 +1400,12 @@ static void idbg_rv_stroke_focus(NSRect rc)
 	now     = CFAbsoluteTimeGetCurrent();
 	curReg  = [self curReg];
 
-	[self trackChanges];
-
 	total = _lineCount;
 	if (total - _startLine > _rows)
 		total = _startLine + _rows;
 
-	// ---- 头部 ----
+	// ---- 头部(静态, 仅整幅重绘时画) ----
+	if (drawFull)
 	{
 		CGFloat  y = py;
 
@@ -1294,11 +1417,10 @@ static void idbg_rv_stroke_focus(NSRect rc)
 		// 位号: 每行只 8 位, 头部标 7..0(高低字节行共用同一组位号)
 		for (bitIdx = 0; bitIdx < 8; bitIdx++)
 		{
-			NSString*  s = [NSString stringWithFormat:@"%X", (unsigned int)(7 - bitIdx)];
-			CGFloat    w = [s sizeWithAttributes:_attrs].width;
+			NSString*  s = idbg_rv_letter((char)('0' + (7 - bitIdx)));
 			CGFloat    x = px + (CGFloat)(IDBG_RV_COL_BITS + bitIdx * IDBG_RV_BIT_CELL) * _charW;
 
-			[s drawAtPoint:NSMakePoint(x + ((CGFloat)IDBG_RV_BIT_CELL * _charW - w) / 2.0, y)
+			[s drawAtPoint:NSMakePoint(x + (CGFloat)(IDBG_RV_BIT_CELL - 1) * _charW / 2.0, y)
 			withAttributes:_attrs];
 		}
 
@@ -1320,6 +1442,9 @@ static void idbg_rv_stroke_focus(NSRect rc)
 		{
 			NSString*  title;
 
+			if (!drawFull)                          // 组标题静态, 仅整幅重绘
+				continue;
+
 			[[NSColor controlBackgroundColor] setFill];
 			NSRectFill(NSMakeRect(px, y, content.size.width, (CGFloat)_charH));
 
@@ -1328,6 +1453,10 @@ static void idbg_rv_stroke_focus(NSRect rc)
 			[title drawAtPoint:NSMakePoint(px, y) withAttributes:_attrs];
 			continue;
 		}
+
+		// 行级裁剪: 非脏行直接跳过(本次 drawRect 只画被标记的行)
+		if (!drawFull && !_drawRow[reg])
+			continue;
 
 		{
 			const ines_rv_def_t*  pDef  = &s_defs[reg];
@@ -1378,7 +1507,8 @@ static void idbg_rv_stroke_focus(NSRect rc)
 					attrs = (changed ? _attrsRed : _attrs);
 
 				{
-					CGFloat  w = [text sizeWithAttributes:attrs].width;
+					// 等宽字体 + 纯 ASCII: 宽度 = 字符数 * _charW, 免测量
+					CGFloat  w = (CGFloat)text.length * _charW;
 					CGFloat  x = rc.origin.x + rc.size.width - w - _charW * 0.5;
 
 					[text drawAtPoint:NSMakePoint(x, y) withAttributes:attrs];
@@ -1419,7 +1549,7 @@ static void idbg_rv_stroke_focus(NSRect rc)
 				// 高低字节标记(仅 16 位寄存器)
 				if (width == 16)
 				{
-					NSString*  tag = [NSString stringWithFormat:@"%c", (sub ? 'H' : 'L')];
+					NSString*  tag = idbg_rv_letter(sub ? 'H' : 'L');
 
 					[tag drawAtPoint:NSMakePoint(px + IDBG_RV_COL_TAG * _charW, y)
 						withAttributes:_attrsNote];
@@ -1449,11 +1579,10 @@ static void idbg_rv_stroke_focus(NSRect rc)
 					else
 						attrs = one ? _attrsBit1 : _attrsBit0;
 
-					s = [NSString stringWithFormat:@"%c", letter];
+					s = idbg_rv_letter(letter);
 					{
-						CGFloat  w = [s sizeWithAttributes:attrs].width;
-
-						[s drawAtPoint:NSMakePoint(bx + (brc.size.width - w) / 2.0, y)
+						// 单字符宽度恒为 _charW, 免测量
+						[s drawAtPoint:NSMakePoint(bx + (brc.size.width - _charW) / 2.0, y)
 						withAttributes:attrs];
 					}
 

@@ -748,7 +748,12 @@ static NSSize idbg_initial_content_size(ines_int_t viewId)
 	if ((window == nil) || !window.visible)
 		return;
 
-	[window.contentView setNeedsDisplay:YES];
+	// 寄存器查看器: 行级脏判定, 只重绘值变化的行(暂停时零重绘);
+	// 其余视图维持原 50ms 全量重绘
+	if (viewId == IDBG_VIEW_REGISTER)
+		[(iNESRegisterView*)window.contentView refreshForTick];
+	else
+		[window.contentView setNeedsDisplay:YES];
 }
 
 

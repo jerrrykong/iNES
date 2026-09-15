@@ -51,6 +51,10 @@
 // 未载入 ROM 时是否有内容可显示
 - (BOOL)hasContent;
 
+// 供调试管理器 50ms tick 调用: 行级脏判定, 只重绘值变化的行
+// (暂停且无变化时不产生任何绘制与窗口表面上传)
+- (void)refreshForTick;
+
 @end
 
 
