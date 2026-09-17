@@ -7,6 +7,15 @@
 #include <time.h>
 
 
+// 联网对战的缓冲帧数(定义在 iNES.c)。原实现只把 1~5 填进下拉框却从未写回,
+// 选择项实际不生效, 这里在点"开始"时写回(只有"服务器"侧可设, 与下拉框的可用
+// 状态一致; cache_add_mine() 按 net_cache_num 定位写入槽位, 故必须夹到合法范围)。
+extern  ines_int_t  net_cache_num;
+
+#define NETPLAY_CACHE_MIN   1
+#define NETPLAY_CACHE_MAX   5
+
+
 static int s_is_server = 0;
 static int s_status = NET_ST_NONE;
 static time_t  s_status_time = 0;
@@ -140,6 +149,22 @@ static VOID dlgNetPlay_OnStartConnect(HWND hDlg)
 		MessageBox(hDlg, ISTR("error input port"), ISTR("iNes"), MB_OK|MB_ICONSTOP);
 		return;
 	}
+
+	// 写回"缓冲帧数"(仅服务器侧可设)
+	if(IsDlgButtonChecked(hDlg, IDC_RAD_SERVER))
+	{
+		int  iSel = (int)SendDlgItemMessage(hDlg, IDC_CMB_CACHE, CB_GETCURSEL, 0, 0);
+
+		if(iSel >= 0)
+			net_cache_num = iSel + 1;
+
+		if(net_cache_num < NETPLAY_CACHE_MIN)
+			net_cache_num = NETPLAY_CACHE_MIN;
+
+		if(net_cache_num > NETPLAY_CACHE_MAX)
+			net_cache_num = NETPLAY_CACHE_MAX;
+	}
+
 	net_close();
 
 	s_is_server = IsDlgButtonChecked(hDlg, IDC_RAD_SERVER);

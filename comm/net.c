@@ -146,7 +146,9 @@ static int net_check_read(socket_t  sock)
 	tv.tv_sec = 0;
 	tv.tv_usec = 1;
 
-	n = select(sock, &rfds, NULL, NULL, &tv);
+	// POSIX 的 nfds 必须是"最大描述符 + 1", 传 sock 会让 select 监听 0..sock-1 而
+	// 恰好漏掉本 socket, 结果恒为 0(永不可读); Windows 下 nfds 被忽略, 行为不变。
+	n = select(sock + 1, &rfds, NULL, NULL, &tv);
 
 	if(n > 0)
 		return 1;
@@ -170,7 +172,8 @@ static int net_check_write(socket_t  sock)
 	tv.tv_sec = 0;
 	tv.tv_usec = 1;
 
-	n = select(sock, NULL, &wfds, NULL, &tv);
+	// 同上: nfds 必须是 sock + 1
+	n = select(sock + 1, NULL, &wfds, NULL, &tv);
 
 	if(n > 0)
 		return 1;

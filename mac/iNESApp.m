@@ -24,8 +24,10 @@
 #import "iNESDebug.h"
 #import "iNESOpenRomDialog.h"
 #import "iNESRegisterView.h"
+#import "iNESNetPlayDialog.h"
 
 #import "../comm/log.h"
+#import "iNESNetPlaySession.h"
 
 #include <stdio.h>
 #include <time.h>
@@ -84,6 +86,9 @@ typedef struct _ines_ctl_
 	ines_int_t   mute;            // 0 / 1
 	ines_int_t   osd;             // 0 / 1, 是否绘制 CPU 占用率
 	ines_dword_t keys;            // IKEY_* 位掩码
+	ines_int_t   net_play;        // 0 / 1, 是否处于联网对战(主线程开始对战时置 1, 模拟线程结束时置 0)
+	ines_int_t   net_play_start;  // 请求模拟线程进入联网(做一次双方同步的硬复位)
+	ines_int_t   net_ctrl;        // 联网时待发送的控制码(菜单把复位转成它), 0 表示无
 
 	// ---- 模拟线程 -> 主线程: 状态快照 ----
 	ines_int_t   status;          // NES_STATUS_*
@@ -384,6 +389,7 @@ static NSString* app_function_key(ines_int_t n)
 	ines_set_log_stamp_func(app_log_stamp_func);
 	ines_mutex_init(&s_mutex_ctl);
 	ines_mutex_init(&s_mutex_output);
+	np_init();
 
 	memset(&s_ctl, 0, sizeof(s_ctl));
 	s_ctl.save_state = APP_STATE_NONE;
@@ -451,6 +457,7 @@ static NSString* app_function_key(ines_int_t n)
 	[[iNESDebugManager sharedManager] closeAll];
 
 	ines_host_free(&host);
+	np_fini();
 
 	ines_mutex_fini(&s_mutex_output);
 	ines_mutex_fini(&s_mutex_ctl);
@@ -651,6 +658,8 @@ static NSString* app_function_key(ines_int_t n)
 			  modifiers:NSEventModifierFlagCommand tag:0 group:nil];
 	[self addItemToMenu:menu title:@"卸载ROM" action:@selector(closeROM:) keyEquiv:@"u"
 			  modifiers:NSEventModifierFlagCommand tag:0 group:nil];
+	[self addItemToMenu:menu title:@"联网对战…" action:@selector(startNetPlay:) keyEquiv:nil
+			  modifiers:0 tag:0 group:nil];
 	[menu addItem:[NSMenuItem separatorItem]];
 
 	root = [self addSubmenuToMenu:menu title:@"最近文件"];
@@ -805,9 +814,6 @@ static NSString* app_function_key(ines_int_t n)
 					  keyEquiv:nil modifiers:0 tag:view_id group:nil];
 		}
 	}
-	item = [self addItemToMenu:menu title:@"联网对战" action:nil keyEquiv:nil modifiers:0 tag:0 group:nil];
-	item.enabled = NO;
-
 	// ------------------ 帮助 ------------------
 	root = [self addSubmenuToMenu:main_menu title:@"帮助"];
 	[self addItemToMenu:root.submenu title:@"关于 iNES" action:@selector(showAbout:) keyEquiv:nil
@@ -1004,6 +1010,11 @@ static NSString* app_function_key(ines_int_t n)
 	SEL         action = item.action;
 	ines_int_t  status = [self currentStatus];
 	BOOL        rom_loaded = (status != NES_STATUS_OFF);
+	ines_int_t  net_play;
+
+	ines_mutex_lock(&s_mutex_ctl);
+	net_play = s_ctl.net_play;
+	ines_mutex_unlock(&s_mutex_ctl);
 
 	if ([group isEqualToString:APP_GROUP_SCALE])
 	{
@@ -1037,7 +1048,8 @@ static NSString* app_function_key(ines_int_t n)
 		ines_char_t  title[INES_MAX_TITLE];
 		ines_char_t  path[INES_MAX_PATH];
 
-		if (!rom_loaded)
+		// 联网对战中禁止读档(与 win32 的 OnMenuLoadState 一致)
+		if (!rom_loaded || net_play)
 			return NO;
 
 		[self copyCurrentRomTitle:title length:sizeof(title)];
@@ -1070,12 +1082,15 @@ static NSString* app_function_key(ines_int_t n)
 		return YES;
 	}
 
+	if (action == @selector(startNetPlay:))
+		return (rom_loaded && !net_play);
+
 	if ((action == @selector(closeROM:))
 	 || (action == @selector(hardReset:))
 	 || (action == @selector(softReset:))
 	 || (action == @selector(frameStep:))
 	 || (action == @selector(takeSnapshot:)))
-		return rom_loaded;
+	 return rom_loaded;
 
 	return YES;
 }
@@ -1314,7 +1329,13 @@ static NSString* app_function_key(ines_int_t n)
 		return;
 
 	ines_mutex_lock(&s_mutex_ctl);
-	s_ctl.hard_reset = 1;
+
+	// 联网时复位必须发给对端, 由双方在同一帧执行(等价 win32 的 NET_CTRL_CODE_HARDRESET)
+	if (s_ctl.net_play)
+		s_ctl.net_ctrl = NET_CTRL_CODE_HARDRESET;
+	else
+		s_ctl.hard_reset = 1;
+
 	ines_mutex_unlock(&s_mutex_ctl);
 }
 
@@ -1324,10 +1345,53 @@ static NSString* app_function_key(ines_int_t n)
 		return;
 
 	ines_mutex_lock(&s_mutex_ctl);
-	s_ctl.soft_reset = 1;
+
+	if (s_ctl.net_play)
+		s_ctl.net_ctrl = NET_CTRL_CODE_SOFTRESET;
+	else
+		s_ctl.soft_reset = 1;
+
 	ines_mutex_unlock(&s_mutex_ctl);
 
 	[self setPauseState:0];
+}
+
+/**
+ * 联网对战(文件菜单): 与 win32 的 IDM_NET_PLAY 一致 ——
+ * 先完成连接与校验(ROM 的 crc32 必须一致), 校验通过后双方各做一次硬复位再开始。
+ */
+- (IBAction)startNetPlay:(id)sender
+{
+	ines_int_t  in_play = 0;
+
+	if ([self currentStatus] == NES_STATUS_OFF)
+	{
+		[self showAlert:@"网络对战" message:@"请先载入一个 ROM。"];
+		return;
+	}
+
+	ines_mutex_lock(&s_mutex_ctl);
+	in_play = s_ctl.net_play;
+	ines_mutex_unlock(&s_mutex_ctl);
+
+	if (in_play)
+	{
+		[self showAlert:@"网络对战" message:@"已经在联网对战中。"];
+		return;
+	}
+
+	if (![iNESNetPlayDialog runModalWithCrc32:[self currentRomCrc32] owner:self.window])
+		return;
+
+	// 进入联网: 帧缓存已由会话模块预置(等价 win32 的 net_cache_size = net_cache_num),
+	// 这里只请求模拟线程补一次双方同步的硬复位(win32 的 OnMenuHardReset)。
+	ines_mutex_lock(&s_mutex_ctl);
+	s_ctl.net_play       = 1;
+	s_ctl.net_play_start = 1;
+	ines_mutex_unlock(&s_mutex_ctl);
+
+	INES_LOG(LOG_NTY, MOD_SYS, ISTR("netplay: start as %s, cache_num=%d\n"),
+			 np_is_server() ? ISTR("server") : ISTR("client"), np_cache_num());
 }
 
 - (IBAction)togglePause:(id)sender
@@ -1710,7 +1774,26 @@ static NSString* app_function_key(ines_int_t n)
 						waitUntilDone:NO];
 }
 
-- (void)loadROMOnThread:(ines_cstr_t)path
+/** 结束联网对战(模拟线程): 关链路并清标志, 等价 win32 的 net_close() + is_net_play = 0。 */
+- (void)endNetPlayOnThread
+{
+	ines_int_t  was = 0;
+
+	ines_mutex_lock(&s_mutex_ctl);
+	was            = s_ctl.net_play;
+	s_ctl.net_play = 0;
+	s_ctl.net_ctrl = 0;
+	ines_mutex_unlock(&s_mutex_ctl);
+
+	if (was)
+	{
+		np_end();
+		INES_LOG(LOG_NTY, MOD_SYS, ISTR("netplay: ended\n"));
+	}
+}
+
+/** 载入 ROM 的核心流程(不触碰联网状态; 联网时的硬复位走这里, 见 hardResetOnThread)。 */
+- (void)loadRomCoreOnThread:(ines_cstr_t)path
 {
 	// 先完整卸载上一个 ROM(会保存 SRAM)
 	if (host.status != NES_STATUS_OFF)
@@ -1751,6 +1834,13 @@ static NSString* app_function_key(ines_int_t n)
 	[self notifyRomLoadFailed:path];
 }
 
+/** 打开一个 ROM: 等价 win32 的 NesOpenFile() —— 一律先结束联网对战。 */
+- (void)loadROMOnThread:(ines_cstr_t)path
+{
+	[self endNetPlayOnThread];
+	[self loadRomCoreOnThread:path];
+}
+
 - (void)closeROMOnThread
 {
 	if (host.status == NES_STATUS_OFF)
@@ -1780,7 +1870,7 @@ static NSString* app_function_key(ines_int_t n)
 	app_str_copy(rom_path, sizeof(rom_path), s_rom_file_path);
 
 	[self closeROMOnThread];
-	[self loadROMOnThread:rom_path];
+	[self loadRomCoreOnThread:rom_path];
 }
 
 - (void)saveStateOnThread:(ines_int_t)index
@@ -1885,6 +1975,10 @@ static NSString* app_function_key(ines_int_t n)
 		ines_int_t   do_close;
 		ines_int_t   do_hard;
 		ines_int_t   do_soft;
+		ines_int_t   net_play;        // 本帧是否处于联网对战
+		ines_int_t   net_play_start;  // 请求进入联网(做一次双方同步的硬复位)
+		ines_int_t   net_ctrl_req;    // 本方本帧要发给对端的控制码
+		ines_int_t   this_ctrl = 0;   // 本帧要执行的控制码(来自帧缓存, 双方同帧生效)
 		ines_int_t   do_stop = 0;
 
 		@autoreleasepool
@@ -1902,6 +1996,10 @@ static NSString* app_function_key(ines_int_t n)
 			do_close = s_ctl.close_request;  s_ctl.close_request = 0;
 			do_hard  = s_ctl.hard_reset;     s_ctl.hard_reset    = 0;
 			do_soft  = s_ctl.soft_reset;     s_ctl.soft_reset    = 0;
+
+			net_play_start = s_ctl.net_play_start; s_ctl.net_play_start = 0;
+			net_ctrl_req   = s_ctl.net_ctrl;       s_ctl.net_ctrl       = 0;
+			net_play       = s_ctl.net_play;
 			save_req = s_ctl.save_state;     s_ctl.save_state    = APP_STATE_NONE;
 			load_req = s_ctl.load_state;     s_ctl.load_state    = APP_STATE_NONE;
 
@@ -1918,10 +2016,21 @@ static NSString* app_function_key(ines_int_t n)
 
 			// ---- 2) 执行请求(host 只在本线程被访问) ----
 			if (do_close)
+			{
+				[self endNetPlayOnThread];   // 等价 win32 的 OnMenuClose()
 				[self closeROMOnThread];
+				net_play = 0;
+			}
 
 			if (do_load)
-				[self loadROMOnThread:s_load_path];
+			{
+				[self loadROMOnThread:s_load_path];   // 内部先结束联网(等价 win32 的 NesOpenFile)
+				net_play = 0;
+			}
+
+			// 联网对战开始: 双方各做一次硬复位, 从同一状态起跑(等价 win32 的 OnMenuHardReset)
+			if (net_play_start)
+				[self hardResetOnThread];
 
 			if (do_hard)
 				[self hardResetOnThread];
@@ -1937,6 +2046,10 @@ static NSString* app_function_key(ines_int_t n)
 
 			if (load_req != APP_STATE_NONE)
 				[self loadStateOnThread:load_req];
+
+			// ---- 2.5) 联网: 帧首收包(等价 win32 的 recv_frame(), 位置与 win32 一致) ----
+			if (net_play)
+				np_frame_begin();
 
 			// ---- 3) 空闲处理 ----
 			if (host.status == NES_STATUS_OFF)
@@ -2010,12 +2123,17 @@ static NSString* app_function_key(ines_int_t n)
 			// 本帧起点: 既用于下一帧的节拍, 也用于统计本帧的 CPU 消耗
 			last_frame_time = app_cur_time_us();
 
+			// ---- 4.5) 联网: 缓存为空表示"网络卡", 本帧不推进(等价 win32 的 net_cache_size == 0) ----
+			if (net_play && !np_input_ready())
+				continue;
+
 			// ---- 5) 输入(连发按键按帧相位交替, 等价 win32 的 key_flash_count) ----
 			if (++key_flash_count >= APP_KEY_FLASH_FREQ)
 				key_flash_count = 0;
 
 			{
-				ines_int_t  main_keys = 0;
+				ines_int_t  main_keys   = 0;
+				ines_int_t  second_keys = 0;
 
 				if (keys & IKEY_A)      main_keys |= JOYPAD_KEY_A;
 				if (keys & IKEY_B)      main_keys |= JOYPAD_KEY_B;
@@ -2032,7 +2150,17 @@ static NSString* app_function_key(ines_int_t n)
 					if (keys & IKEY_TURBO_B) main_keys |= JOYPAD_KEY_B;
 				}
 
-				ines_joypad_update_bits(&host.joypad, main_keys, 0);
+				if (net_play)
+				{
+					// 本方输入延后 net_cache_num 帧生效, 取回的是本帧双方的输入
+					if (0 != np_frame_input((ines_byte_t)main_keys, (ines_byte_t)net_ctrl_req,
+											&main_keys, &second_keys, &this_ctrl))
+						continue;   // 缓存意外为空, 本帧不推进
+
+					net_ctrl_req = 0;   // 控制码只发一帧(等价 win32 的 ctrl_key_state = 0)
+				}
+
+				ines_joypad_update_bits(&host.joypad, main_keys, second_keys);
 			}
 
 			// ---- 6) 跑一帧前: 应用调试视图提交的内存写入 ----
@@ -2091,6 +2219,20 @@ static NSString* app_function_key(ines_int_t n)
 				ines_dbg_capture(&host);
 
 				diag_render_us += (app_cur_time_us() - t_mark);   // ---- 临时诊断 ----
+			}
+
+			// ---- 6.5) 联网: 控制码由双方在同一帧执行(等价 win32 的 this_ctrl 处理) ----
+			if (net_play)
+			{
+				if (this_ctrl == NET_CTRL_CODE_SOFTRESET)
+				{
+					ines_host_reset(&host);
+					[self publishHostState];
+				}
+				else if (this_ctrl == NET_CTRL_CODE_HARDRESET)
+				{
+					[self hardResetOnThread];
+				}
 			}
 
 			// ---- 7) 统计与周期性落盘 ----
