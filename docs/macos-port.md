@@ -123,7 +123,7 @@
 
 ### 4.5 菜单与快捷键
 
-对齐 `win32/iNES.rc`，菜单项文本与快捷键保持一致。联网对战菜单项在 M1 置灰（M2 待做）；"调试视图"子菜单的 6 个视图已在 M2 接通（见 §8.5），"寄存器"与 win32 一致保持未实现；"载入 ROM…"（Cmd+O）在 M2 已由 `NSOpenPanel` 直选文件改为与 win32 一致的文件夹 + 属性列表管理器（见 §8.6）。
+对齐 `win32/iNES.rc`，菜单项文本与快捷键保持一致。联网对战菜单项已在 M2 接通（位置在"卸载 ROM"之后、"最近文件"之前，见 §8.7）；"调试视图"子菜单的 6 个视图已在 M2 接通（见 §8.5），"寄存器"与 win32 一致保持未实现；"载入 ROM…"（Cmd+O）在 M2 已由 `NSOpenPanel` 直选文件改为与 win32 一致的文件夹 + 属性列表管理器（见 §8.6）。
 
 | 功能 | 快捷键 |
 |---|---|
@@ -164,7 +164,7 @@
 | 阶段 | 交付 |
 |---|---|
 | M1 可玩 | 构建、平台层、主窗口、视频、音频、键盘、菜单（打开/卸载/复位/暂停/单帧/缩放/静音/音量/截图/日志级别/CPU TRACE）、即时存档读档、`config.ini`、拖放 ROM |
-| M2 完整 | 6 个调试视图（已完成，见 §8.5）、联网对战、手柄、全屏增强（最近文件已在 M1 提前实现） |
+| M2 完整 | 6 个调试视图（已完成，见 §8.5）、载人 ROM 文件夹管理器（已完成，见 §8.6）、联网对战（已完成，见 §8.7）、手柄、全屏增强（最近文件已在 M1 提前实现） |
 | M3 打磨 | Metal 渲染、Universal2、签名与公证 |
 
 ## 7. 风险
@@ -308,3 +308,39 @@ cmake -S . -B project/build && cmake --build project/build            # Release
 | 初始目录兜底 | 当前工作目录 | 用户主目录（应用包的 cwd 恒为 `/`，无意义） |
 
 验证：`cmake --build project/build` 构建零警告。列表的排序、双击加载、切换文件夹等交互需人工确认。
+
+### 8.7 M2：联网对战
+
+对应 `win32/dlgNetPlay.c` 的界面与 `win32/iNES.c` 的帧缓存逻辑。新增（已加入 `CMakeLists.txt`）：
+
+| 文件 | 职责 |
+|---|---|
+| `mac/iNESNetPlaySession.h` / `.c` | 会话层（C）：握手校验、延迟线帧缓存、主副手柄路由、控制码收发 |
+| `mac/iNESNetPlayDialog.h` / `.m` | 对话框（ObjC，ARC）：运行方式、地址、端口、缓冲帧数、状态提示 |
+
+前置修复（P0，不修在 macOS 上根本连不上）：`comm/net.c` 的 `net_check_read()` 里 `select()` 的 `nfds` 在 POSIX 下必须是"最大描述符 + 1"，原代码传的是 `sock`（取值恒为 1）→ 描述符 > 1 时**当前 socket 恰好落在监听范围之外**，`select` 永远返回 0（永不可读）→ 服务端永远 `accept` 不到、客户端永远连不上。改为 `sock + 1`；Windows 忽略 `nfds`，行为不变。
+
+协议与帧同步（与 win32 逐条一致）：
+
+- 握手：客户机发 `NET_CMD_START`（带本方 ROM 的 `crc32`），服务端回 `NET_CMD_START_RSP`，`code` 回校验结果（CRC 不一致即拒绝），并用**预留未用**的 `fno` 字段的**高 32 位**回传"缓冲帧数"，客户端据此对齐（两端缓冲帧数严格一致）。
+- 每帧：`struct _net_frame{ cmd, joypad, ctrl }`，4 字节。
+- 延迟线（强同步的核心）：缓存 `NP_CACHE_MAX`（5）项，本帧把**本方输入**写到下标 `net_cache_num` 处、把**对端包**追加到下标 `net_cache_size` 处，消费 `net_cache[0]` 后整体前移。两端在同一帧取到的输入完全相同 → 帧号一致 + 输入一致 → 状态一致。
+- 主/副手柄：服务端=主手柄、客户端=副手柄，由会话层判定，UI 不参与。
+- 控制码：联网中的"重新上电 / 软件复位"**不再本地执行**，改为把 `NET_CTRL_CODE_HARDRESET` / `NET_CTRL_CODE_SOFTRESET` 随帧发给对端，双方在同一帧执行（对应 win32 的 `this_ctrl` 处理）。
+- 联网中禁止读档；打开 / 关闭 ROM 一律先结束联网（等价 win32 的 `NesOpenFile()` / `OnMenuClose()`）。
+- 进入联网时双方各做一次硬复位，从同一状态起跑。此后缓存耗尽（`net_cache_size == 0`）表示"网络卡"，本帧不推进；**这不是断线**，按用户决定不实现重连（见 §8.4 遗留）。
+
+界面与线程模型：
+
+- 运行方式单选（`NSMatrix` 无线框居中，等价 win32 的 `BS_AUTORADIOBUTTON` 组）+ 地址 / 端口 / 缓冲帧数（1~5，默认 4）+ 开始 / 取消 + 状态文本；与 win32 相同，地址与端口**不写 `config.ini`**。
+- 50ms `NSTimer` 驱动握手轮询（对齐 win32 的 `SetTimer(50ms)`），必须挂 `NSRunLoopCommonModes`，否则模态循环下不触发（同 §8.6）。
+- 握手成功后关闭对话框并只置 `net_play_start` 请求；随后的**硬复位由模拟线程执行**（`host` 只被模拟线程独占），UI 线程不碰 `host`。
+- `validateMenuItem:` 在联网中禁掉读档组与"联网对战…"入口。
+
+同批修复的 win32 bug：`win32/dlgNetPlay.c` 的"缓冲帧数"下拉此前未写回 `net_cache_num`，现补上并夹取到 1~5；mac 侧由会话层在握手时同步，两端语义一致。
+
+验证：
+
+- `cmake --build project/build --target iNES` 构建零警告。
+- 双进程自测：`comm/net.c`（listen / connect + START / START_RSP + 双向各 5 帧）；会话模块 40 帧，两端逐帧的 `main/second` **完全一致**（前 `net_cache_num` 帧为空，对应 win32 的预置空帧）。
+- 端到端：app 作服务端 + 测试客户端接入 → 日志 `netplay: listen at ...` → `connected, run as server, cache_num=4` → `start as server` → 重新载入 ROM（双方同步的硬复位）；对端退出后 app 卡帧等待且不崩溃，与 win32 的"网络卡"表现一致。
