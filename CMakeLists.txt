@@ -5,19 +5,31 @@
 #   iNES.vcproj         -> 目标 iNES    (Win32 GUI 模拟器, 输出 iNES[_d].exe)
 #   iNesCore_DLL.vcproj -> 目标 inescore(模拟核心共享库, 输出 inescore.dll/.so)
 #
-# 用法示例(在仓库根目录执行, project/ 已被 .gitignore 忽略):
-#   cmake -S . -B project/build                 # 默认 Release(全优化)
-#   cmake --build project/build -j              # 单配置生成器无需 --config
-#   构建产物默认输出到仓库 bin/ 目录(与原 VC 工程一致)
+# 用法示例(在仓库根目录执行; 原 VC2008 工程目录 project/ 未被 git 跟踪(.gitignore)且本机副本已删除,
+# 下面第 4~6 行提到它只是说明本脚本的移植来源):
+#   cmake -S . -B build                          # 配置, 生成 build/ 构建树
+#   cmake --build build --config Release         # Release -> bin/iNES.exe
+#   cmake --build build --config Debug           # Debug   -> bin/iNES_d.exe
+#   构建产物统一输出到仓库 bin/ 目录(与原 VC 工程一致)
 #
-# 需要调试时请显式指定, 并使用独立的构建目录(避免与 Release 缓存互相污染):
-#   cmake -S . -B project/build-dbg -DCMAKE_BUILD_TYPE=Debug
-#   cmake --build project/build-dbg -j
+# Windows 上默认生成器为 "Visual Studio 17 2022"(多配置: Debug/Release/MinSizeRel/RelWithDebInfo),
+# 构建类型由 --config 决定: **不带 --config 时默认构建 Debug**。因此"只看到 Debug 产物刷新、
+# Release 还是旧的"是预期行为, 更新 Release 必须显式 --config Release
+# (也可在配置时传 -DCMAKE_DEFAULT_BUILD_TYPE=Release 改掉默认值, 需 CMake 3.29+)。
+# 单配置生成器(Unix Makefiles / Ninja)才不需要 --config, 构建类型由 CMAKE_BUILD_TYPE 决定
+# (默认 Release); 只有这类生成器切换 Debug/Release 才需要用独立构建目录, 避免缓存互相污染。
+#
+# x64(已评估安全):
+#   cmake -S . -B build-x64 -A x64
+#   cmake --build build-x64 --config Release
 #
 # 注意事项:
 #   1) 与原始 VC 工程一致: iNES.exe 按 Unicode 字符集编译, inescore 按
 #      多字节(MBCS)字符集编译, 因此 core/comm 会被分别编译进两个目标。
-#   2) 本脚本以 Windows/MSVC 为主要目标; UNIX 上仅构建 inescore 共享库
+#   2) 所有配置都输出到同一个 bin/: iNES 用 DEBUG_POSTFIX="_d" 区分(iNES.exe / iNES_d.exe),
+#      而 inescore 的输出名不带配置后缀, Debug/Release 的 inescore.dll 会互相覆盖
+#      (详见下面的 ines_set_output_dirs)。
+#   3) 本脚本以 Windows/MSVC 为主要目标; UNIX 上仅构建 inescore 共享库
 #      (对应 Android/jni/Android.mk 的做法, 为尽力支持而未经过充分验证)。
 # =====================================================================
 
@@ -67,7 +79,9 @@ endif()
 # -DCMAKE_BUILD_TYPE=Debug(或 RelWithDebInfo/MinSizeRel)时才按指定值构建。
 #
 # 注意: 多配置生成器(Visual Studio / Xcode / Ninja Multi-Config)的构建类型
-#       由 --config 决定, 不受本变量影响, 仍需 cmake --build <dir> --config Release
+#       由 --config 决定, 不受本变量影响, 仍需 cmake --build <dir> --config Release;
+#       且不带 --config 时默认构建的是 Debug(实测 VS 2022 如此), 想改默认值请配
+#       CMAKE_DEFAULT_BUILD_TYPE(CMake 3.29+)。
 # ---------------------------------------------------------------------
 if(NOT CMAKE_CONFIGURATION_TYPES)
     if(NOT CMAKE_BUILD_TYPE)
@@ -181,6 +195,12 @@ endif()
 
 # ---------------------------------------------------------------------
 # 辅助函数: 输出目录对齐原工程 bin/ 布局
+#
+# 四种配置都指向同一个 bin/(与原 VC 工程一致, 不按配置分子目录)。由此带来一个
+# 已知行为: 输出名不带配置后缀的目标, 其产物会被后构建的配置覆盖 ——
+#   iNES:     用 DEBUG_POSTFIX="_d" 区分(iNES.exe / iNES_d.exe)
+#   inescore: 无后缀, Debug 与 Release 都是 inescore.dll(含 .lib/.exp/.pdb),
+#             两者互相覆盖, bin/ 下始终只保留最后构建的那一份, 这是有意沿用原工程行为。
 # ---------------------------------------------------------------------
 function(ines_set_output_dirs TGT)
     set_target_properties(${TGT} PROPERTIES

@@ -213,7 +213,7 @@
 ### 8.3 验证
 
 ```
-cmake -S . -B project/build && cmake --build project/build            # Release
+cmake -S . -B build && cmake --build build                            # Release
 # iNES.app 与 libinescore.dylib 均构建成功；mac 前端零警告
 ./bin/iNES.app/Contents/MacOS/iNES bin/ROM/4人麻将.nes
 ```
@@ -307,7 +307,7 @@ cmake -S . -B project/build && cmake --build project/build            # Release
 | 表头排序箭头 | 代码设置了 `HDF_SORTUP` / `HDF_SORTDOWN`，但**实际不会显示**：本工程没有 manifest（仓库内无 `.manifest`、`iNES.rc` 无 `RT_MANIFEST` 资源、无 `/manifestdependency`、CMake 亦未配置），进程按 comctl32 v5 加载，v5 不识别这两个格式位。`dlgOpenRom.c` 的注释也写明"宿主程序没有导入 comctl32.dll"（只有 v5 才需要显式 `InitCommonControlsEx`）与"该箭头需要 comctl32 v6 才会被绘制" | 使用 `NSTableView` 原生排序指示器，表头自动绘制升/降序箭头 |
 | 初始目录兜底 | 当前工作目录 | 用户主目录（应用包的 cwd 恒为 `/`，无意义） |
 
-验证：`cmake --build project/build` 构建零警告。列表的排序、双击加载、切换文件夹等交互需人工确认。
+验证：`cmake --build build` 构建零警告。列表的排序、双击加载、切换文件夹等交互需人工确认。
 
 ### 8.7 M2：联网对战
 
@@ -341,7 +341,7 @@ cmake -S . -B project/build && cmake --build project/build            # Release
 
 验证：
 
-- `cmake --build project/build --target iNES` 构建零警告。
+- `cmake --build build --target iNES` 构建零警告。
 - 双进程自测：`comm/net.c`（listen / connect + START / START_RSP + 双向各 5 帧）；会话模块 40 帧，两端逐帧的 `main/second` **完全一致**（前 `net_cache_num` 帧为空，对应 win32 的预置空帧）。
 - 端到端：app 作服务端 + 测试客户端接入 → 日志 `netplay: listen at ...` → `connected, run as server, cache_num=4` → `start as server` → 重新载入 ROM（双方同步的硬复位）；对端退出后 app 卡帧等待且不崩溃，与 win32 的"网络卡"表现一致。
 

@@ -337,7 +337,7 @@ typedef struct {
 
 ## 9. 验证方式（本机可直接做）
 
-1. `cmake --build project/build -j` 构建 `iNES.app`（mac 目标可编译、可运行）。
+1. `cmake --build build -j` 构建 `iNES.app`（mac 目标可编译、可运行）。
    —— 2026-09-15 已跑通：`make -j8` 零错误零告警；载入 `bin/ROM/90tank.nes` 后经「工具 → 调试视图 →
    寄存器查看…」打开窗口，标题「寄存器查看器」，CPU/PPU/APU 各行值、位格字母、说明列渲染正常。
 2. `osascript` 点菜单「工具 → 调试视图 → 寄存器…」打开窗口；读窗口 `size` / `position` 校验初始布局
