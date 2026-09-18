@@ -117,6 +117,7 @@ set(INES_CORE_SOURCES
 # comm 公共库(iNES.vcproj 与 iNesCore_DLL.vcproj 均包含 buf/log/net/platform)
 set(INES_COMMON_COMM_SOURCES
     "${INES_DIR}/comm/buf.c"
+    "${INES_DIR}/comm/lan.c"
     "${INES_DIR}/comm/log.c"
     "${INES_DIR}/comm/net.c"
     "${INES_DIR}/comm/platform.c")
@@ -147,7 +148,8 @@ set(INES_MAC_OBJC_SOURCES
     "${INES_DIR}/mac/iNESDebug.m"
     "${INES_DIR}/mac/iNESDebugView.m"
     "${INES_DIR}/mac/iNESRegisterView.m"
-    "${INES_DIR}/mac/iNESNetPlayDialog.m")
+    "${INES_DIR}/mac/iNESNetPlayDialog.m"
+    "${INES_DIR}/mac/iNESLanLobby.m")
 
 set(INES_MAC_C_SOURCES
     "${INES_DIR}/mac/iNESOsd.c"

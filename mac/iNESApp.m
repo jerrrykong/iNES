@@ -25,6 +25,7 @@
 #import "iNESOpenRomDialog.h"
 #import "iNESRegisterView.h"
 #import "iNESNetPlayDialog.h"
+#import "iNESLanLobby.h"
 
 #import "../comm/log.h"
 #import "iNESNetPlaySession.h"
@@ -660,6 +661,8 @@ static NSString* app_function_key(ines_int_t n)
 			  modifiers:NSEventModifierFlagCommand tag:0 group:nil];
 	[self addItemToMenu:menu title:@"联网对战…" action:@selector(startNetPlay:) keyEquiv:nil
 			  modifiers:0 tag:0 group:nil];
+	[self addItemToMenu:menu title:@"局域网快速对战…" action:@selector(startLanQuickMatch:) keyEquiv:nil
+			  modifiers:0 tag:0 group:nil];
 	[menu addItem:[NSMenuItem separatorItem]];
 
 	root = [self addSubmenuToMenu:menu title:@"最近文件"];
@@ -1082,7 +1085,8 @@ static NSString* app_function_key(ines_int_t n)
 		return YES;
 	}
 
-	if (action == @selector(startNetPlay:))
+	if ((action == @selector(startNetPlay:))
+	 || (action == @selector(startLanQuickMatch:)))
 		return (rom_loaded && !net_play);
 
 	if ((action == @selector(closeROM:))
@@ -1391,6 +1395,56 @@ static NSString* app_function_key(ines_int_t n)
 	ines_mutex_unlock(&s_mutex_ctl);
 
 	INES_LOG(LOG_NTY, MOD_SYS, ISTR("netplay: start as %s, cache_num=%d\n"),
+			 np_is_server() ? ISTR("server") : ISTR("client"), np_cache_num());
+}
+
+/**
+ * 局域网快速对战(文件菜单): 与 startNetPlay: 的区别只在于"怎么找到对端" ——
+ * 面板内部完成发布/发现与角色指派(先发布者 = 服务端, 后加入者 = 客户机),
+ * 配对成功后的开场流程(硬复位 + 置 net_play)与手动模式完全一致。
+ */
+- (IBAction)startLanQuickMatch:(id)sender
+{
+	ines_int_t   in_play = 0;
+	ines_char_t  title[256];
+	NSString*    romName;
+
+	if ([self currentStatus] == NES_STATUS_OFF)
+	{
+		[self showAlert:@"局域网快速对战" message:@"请先载入一个 ROM。"];
+		return;
+	}
+
+	ines_mutex_lock(&s_mutex_ctl);
+	in_play = s_ctl.net_play;
+	ines_mutex_unlock(&s_mutex_ctl);
+
+	if (in_play)
+	{
+		[self showAlert:@"局域网快速对战" message:@"已经在联网对战中。"];
+		return;
+	}
+
+	title[0] = 0;
+	[self copyCurrentRomTitle:title length:(ines_size_t)sizeof(title)];
+
+	romName = (title[0] != 0) ? [NSString stringWithUTF8String:title] : nil;
+
+	if (romName == nil)
+		romName = @"";
+
+	if (![iNESLanLobby runModalWithCrc32:[self currentRomCrc32]
+								 romName:romName
+								   owner:self.window])
+		return;
+
+	// 与 startNetPlay: 一致: 帧缓存已由会话模块预置, 这里只请求一次双方同步的硬复位
+	ines_mutex_lock(&s_mutex_ctl);
+	s_ctl.net_play       = 1;
+	s_ctl.net_play_start = 1;
+	ines_mutex_unlock(&s_mutex_ctl);
+
+	INES_LOG(LOG_NTY, MOD_SYS, ISTR("lanplay: start as %s, cache_num=%d\n"),
 			 np_is_server() ? ISTR("server") : ISTR("client"), np_cache_num());
 }
 

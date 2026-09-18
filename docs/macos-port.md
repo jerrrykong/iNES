@@ -344,3 +344,34 @@ cmake -S . -B project/build && cmake --build project/build            # Release
 - `cmake --build project/build --target iNES` 构建零警告。
 - 双进程自测：`comm/net.c`（listen / connect + START / START_RSP + 双向各 5 帧）；会话模块 40 帧，两端逐帧的 `main/second` **完全一致**（前 `net_cache_num` 帧为空，对应 win32 的预置空帧）。
 - 端到端：app 作服务端 + 测试客户端接入 → 日志 `netplay: listen at ...` → `connected, run as server, cache_num=4` → `start as server` → 重新载入 ROM（双方同步的硬复位）；对端退出后 app 卡帧等待且不崩溃，与 win32 的"网络卡"表现一致。
+
+### 8.8 M2：局域网快速配对（快速对战）
+
+设计方案：`docs/lan-quick-match-plan.md`。与 §8.7 的手动模式**并存**，两者共用同一套会话层（`mac/iNESNetPlaySession`），差别只在"怎么找到对端"。
+
+| 文件 | 职责 |
+|---|---|
+| `comm/lan.h` / `.c` | 发现层（跨平台 C）：UDP 8892 广播 beacon、非阻塞收包、房间表（去重 / 自身过滤 / 3s TTL） |
+| `mac/iNESLanLobby.h` / `.m` | 面板（ObjC，ARC）：昵称 + 本机 ROM + 房间列表 + 加入 / 关闭，500ms 定时器驱动 |
+| `comm/net.c` | 新增 `net_get_local_port()`：`net_listen()` 传 0 时由系统分配端口，取回后写进 beacon（避免多实例抢 8891） |
+
+规则（用户拍板）：**先发布者 = 服务端**（有控制权，加入无需其确认）；**后加入者 = 客户机**（不可协商，想当主机就自己发布）；只有相同 ROM（`crc32`）的房间可选；配对成功即双方硬复位开打；对战中的房间不再广播、不再进入列表；列表不显示 IP；昵称持久化在 `config.ini` 的 `[netplay] nickname`，首次自动生成 `Player xxxx`。
+
+实现要点：
+
+- 面板一打开即以服务端身份 `np_begin(1, ..., 8891, crc, 4)` 并广播；500ms 定时器里的 `np_poll()` 顺带完成"有人连入 → accept → 握手"，不需要额外的等待循环。
+- 点"加入"：先 `lan_close()` 停广播，再 `np_begin(0, ip, port, crc, 0)`；`net_connect()` 内部会 `net_close()` 关掉本方监听，因此**后加入者不可能被别人接入**（即不可能意外变成服务端）。
+- 握手失败一律 `resumeHosting()`：结束会话 → 重新监听 + 重新广播，继续等下一个人。
+- 广播与列表刷新都在主线程，与对战期时间互斥 → 不加线程、不加锁（沿用会话层对 `comm/net.c` 非线程安全的约定）。
+- 跨平台细节：POSIX 用 `SO_REUSEPORT`、Windows 用 `SO_REUSEADDR` 才能让同机多实例同时绑 8892（广播报文会复制到每个绑定者）。
+
+**坑（必记）**：开打后**不能**关闭监听 socket。`comm/net.c` 的 `net_is_server()` 以"监听 socket 是否存在"为判据，而 `np_frame_input()` 用它决定主/副手柄路由；关掉会让服务端按客户机取值（**手柄反转**）。监听 socket 统一由 `np_end()` 关闭，且已有连接时 `net_is_connected()` 不会再 accept。
+
+验证（2026-09-18 全部 PASS）：
+
+- `/tmp/lanprobe.c` 双进程互见 / 自身过滤 / TTL 剔除 / 同机多实例共存。
+- 服务端被动接入：`/tmp/npsession c 127.0.0.1 8891 <crc>` → `lan: paired, run as server` → `lanplay: start as server, cache_num=4`。
+- 客户机主动加入：`/tmp/lanhost`（广播 + 会话层监听的假服务端）作服务端 → app 选中加入 → `lan: discovery closed` → `netplay: connect at ...:9001` → `lan: paired, run as client`。
+- ROM 不同的房间：照常显示并标注"ROM 不同"，加入按钮 disabled。
+
+自测工具（临时，不入库）：`/tmp/lanprobe.c`（发现层）、`/tmp/lanhost.c`（广播 + 会话层监听的假服务端）、`/tmp/npsession.c`（会话层客户端 / 服务端）。

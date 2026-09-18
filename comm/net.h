@@ -84,6 +84,13 @@ int net_del_recv_data(int len);
 int net_recv(void* date, int len);
 int net_send(void* date, int len);
 
+/**
+ * 取监听 socket 的实际端口。
+ * net_listen() 传 0 时由系统分配端口, 必须靠本函数取回后才能告诉对端。
+ *
+ * @return 实际端口(主机序); 未监听时为 0
+ */
+net_port_t net_get_local_port();
 
 int net_close();
 

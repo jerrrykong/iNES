@@ -25,6 +25,9 @@ typedef  int  socket_t;
 static  socket_t  s_sock_listen = INVALID_SOCKET;
 static  socket_t  s_sock_conn = INVALID_SOCKET;
 
+// 监听 socket 的实际端口(net_listen 传 0 时由系统分配, 需靠它取回后告知对端)
+static  net_port_t  s_listen_port = 0;
+
 static char  s_recv_buffer[1024];
 static int   s_recv_len = 0; 
 //static char  s_send_buffer[1024];
@@ -65,6 +68,7 @@ int net_init()
 #endif
 	s_sock_listen = INVALID_SOCKET;
 	s_sock_conn = INVALID_SOCKET;
+	s_listen_port = 0;
 	s_recv_len = 0;
 	s_net_last_err[0] = 0;
 	return 0;
@@ -255,7 +259,25 @@ int net_listen(net_saddr_t  saddr, net_port_t  port)
 
 	s_sock_listen = sock;
 
-	INES_LOG(LOG_ERR, MOD_NET, ISTR("socket start listen at %s:%d\n"), saddr, port);
+	// 取实际端口: 调用方可能传 0 让系统分配(避免多实例端口冲突)
+	{
+		struct sockaddr_in  local;
+#ifdef WIN32
+		int                 local_len;
+#elif defined(INES_POSIX)
+		socklen_t           local_len;
+#endif
+
+		local_len = sizeof(local);
+		memset(&local, 0, sizeof(local));
+
+		if(0 == getsockname(sock, (struct sockaddr*)&local, &local_len))
+			s_listen_port = (net_port_t)ntohs(local.sin_port);
+		else
+			s_listen_port = (net_port_t)port;
+	}
+
+	INES_LOG(LOG_ERR, MOD_NET, ISTR("socket start listen at %s:%d\n"), saddr, s_listen_port);
 	s_net_last_err[0] = 0;
 
 	return 0;
@@ -451,6 +473,11 @@ int net_send(void* data, int len)
 	return n;
 }
 
+net_port_t net_get_local_port()
+{
+	return s_listen_port;
+}
+
 int net_close()
 {
 	if(s_sock_conn != INVALID_SOCKET)
@@ -465,6 +492,7 @@ int net_close()
 		s_sock_listen = INVALID_SOCKET;
 	}
 
+	s_listen_port = 0;
 	s_recv_len = 0;
 
 	return 0;
