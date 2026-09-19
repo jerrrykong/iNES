@@ -20,6 +20,7 @@
 
 #include "lan.h"
 #include "log.h"
+#include "net.h"      // NET_VER(广播里带上本端协议版本, 供对端判断是否可加入)
 
 #ifdef WIN32
 #include <WinSock2.h>
@@ -212,14 +213,15 @@ static void lan_room_update(const lan_beacon_t* b, ines_dword_t addr)
 		r = lan_room_alloc(b->peer_id);
 		lan_addr_str(addr, ip, (int)sizeof(ip));
 
-		INES_LOG(LOG_NTY, MOD_NET, ISTR("lan: room found, ip=%s port=%d cache=%d\n"),
-				 ip, (int)ntohs(b->tcp_port), (int)b->cache_num);
+		INES_LOG(LOG_NTY, MOD_NET, ISTR("lan: room found, ip=%s port=%d cache=%d ver=%u\n"),
+				 ip, (int)ntohs(b->tcp_port), (int)b->cache_num, (unsigned)ntohl(b->net_ver));
 	}
 
 	r->crc32     = ntohl(b->crc32);
 	r->tcp_port  = ntohs(b->tcp_port);
 	r->region    = b->region;
 	r->cache_num = b->cache_num;
+	r->net_ver   = ntohl(b->net_ver);
 	r->addr      = addr;
 	r->last_seen = (ines_dword_t)time(NULL);
 
@@ -554,6 +556,9 @@ int lan_advertise(ines_dword_t crc32, ines_word_t tcp_port, ines_byte_t region,
 
 	// 缓冲帧数随 beacon 广播: 加入方以房主的值为准
 	b.cache_num = cache_num;
+
+	// 协议版本: 不同版本不可加入(旧版不填该字段 -> 读回 0)
+	b.net_ver = htonl((ines_dword_t)NET_VER);
 
 	// 逐个活动接口发**子网定向广播**: 由路由表选路, 每个网段都能收到;
 	// 有限广播在 Windows 上只走一个接口(见文件头说明), 故不作为首选。

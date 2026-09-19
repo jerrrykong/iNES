@@ -164,6 +164,7 @@ ines_int_t      key_flash_count = 0; // up to n frames
 ines_int_t      main_key_state = 0;
 ines_int_t      second_key_state = 0;
 ines_int_t      ctrl_key_state = 0;
+ines_int_t      sync_ctrl_req  = 0;   // 联机读档失败后待提交的控制码(硬复位), 见 OnIdleSyncState
 ines_char_t     lastest_open_files[10][1024]; // 最近打开的10个文件
 
 HWND   hMainWnd = NULL;
@@ -239,6 +240,12 @@ LONGLONG            GetNESCPUCycles(void);
 ines_cstr_t getSavePath( ines_str_t szPath, size_t szLen);
 ines_cstr_t getStatePath(int index, ines_str_t szPath, size_t szLen);
 ines_cstr_t getRelativeFilePath( ines_str_t szPath, size_t szLen, ines_cstr_t  fileName);
+
+// 联机读档(状态同步): 主机发起, 两端载入同一份存档字节流
+VOID            OnMenuSyncState(int index);
+int             OnIdleSyncState(void);
+static int      ines_state_load_mem(const void* buf, int len, void* user);
+static int      ines_state_sign(ines_dword_t* out_sign, void* user);
 
 //  profile r/w
 #define  GET_CONFIG_STR(sec, key, def)  GetConfigStr((sec), (key), (def))
@@ -336,6 +343,10 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
 	// 加载配置
 	audio_volume = GetConfigInt(ISTR("audio"), ISTR("volume"), 80);
 	audio_mute   = GetConfigInt(ISTR("audio"), ISTR("mute"), 0);
+
+	// 联机读档: 注册"从内存载入存档"与"算状态摘要"回调。
+	// 主机和从机都要注册 —— 从机收到存档后同样要载入并回摘要。
+	np_sync_set_handler(ines_state_load_mem, ines_state_sign, NULL);
 
 	// 最近打开的文件
 	LoadHistories();
@@ -1172,6 +1183,13 @@ VOID OnIdle()
 
 	if(is_net_play)
 	{
+		// 状态同步(联机读档): 同步期间双方冻结; 结果可能结束联网(链路断开/超时)
+		if(OnIdleSyncState())
+			return;
+
+		if(np_sync_state() == NP_SYNC_BUSY)
+			return;
+
 		// 如果网络缓冲空了,则等待(帧缓存由 comm/npsession 持有)
 		if(!np_input_ready())
 		{
@@ -1353,6 +1371,13 @@ VOID OnIdle()
 
 	if(is_net_play)
 	{
+		// 联机读档失败 -> 提交硬复位(只发一帧, 由延迟线保证双方同帧执行)
+		if(sync_ctrl_req != 0)
+		{
+			ctrl_key_state = sync_ctrl_req;
+			sync_ctrl_req  = 0;
+		}
+
 		// 提交本方输入并取回本帧实际使用的输入(帧缓存与手柄路由由 comm/npsession 负责,
 		// 与 macOS 端 np_frame_input() 完全一致)
 		np_frame_input((ines_byte_t)main_key_state, (ines_byte_t)ctrl_key_state,
@@ -2298,10 +2323,11 @@ VOID OnMenuLoadState(int index)
 	if(host.status == NES_STATUS_OFF)
 		return;
 
-	// 连网游戏不能加载进度(读档无法与对端同步, 主机也不行)
+	// 联网对战: 只有主机能发起读档, 且必须同步给对端 —— 本机不立即载入,
+	// 由 np_sync 在收齐对端结果后统一载入, 保证两端载入的是同一份字节流
 	if(is_net_play)
 	{
-		MessageBox(hMainWnd, ISTR("联网对战中不能载入存档。"), szTitle, MB_OK|MB_ICONINFORMATION);
+		OnMenuSyncState(index);
 		return;
 	}
 
@@ -2326,6 +2352,258 @@ VOID OnMenuLoadState(int index)
 
 	fclose(fSave);
 
+}
+
+
+// 联机读档(状态同步) —— 详见 docs/netplay-state-sync-plan.md
+
+// 读档字节流的临时缓冲: 同一时刻只会有一个同步在进行
+static ines_byte_t  s_sync_buf[NP_SYNC_MAX_SIZE];
+
+/** CRC32(IEEE 802.3): 算"两端是否载入了同一份状态"的摘要。 */
+static ines_dword_t ines_crc32_mem(ines_dword_t crc, const void* data, size_t len)
+{
+	static ines_dword_t  table[256];
+	static int           inited = 0;
+	const ines_byte_t*   p = (const ines_byte_t*)data;
+	size_t               i;
+	int                  j;
+
+	if(!inited)
+	{
+		for(j = 0; j < 256; j++)
+		{
+			ines_dword_t  c = (ines_dword_t)j;
+			int           k;
+
+			for(k = 0; k < 8; k++)
+				c = (c & 1) ? (0xedb88320u ^ (c >> 1)) : (c >> 1);
+
+			table[j] = c;
+		}
+
+		inited = 1;
+	}
+
+	if((p == NULL) || (len == 0))
+		return crc;
+
+	for(i = 0; i < len; i++)
+		crc = table[(crc ^ p[i]) & 0xff] ^ (crc >> 8);
+
+	return crc;
+}
+
+/**
+ * np_sync 的载入回调: 把对端发来的字节流写成临时文件, 再走 ines_load_state()。
+ * 从机**不写自己的槽位**(需求: 不覆盖从机本地存档), 用完即删。
+ */
+static int ines_state_load_mem(const void* buf, int len, void* user)
+{
+	ines_char_t  szPath[INES_MAX_PATH];
+	FILE*        fp;
+	int          rc;
+
+	(void)user;
+
+	if((buf == NULL) || (len <= 0))
+		return -1;
+
+	getRelativeFilePath(szPath, count_of(szPath), ISTR("state\\.sync.tmp"));
+
+	fp = _tfopen(szPath, ISTR("wb"));
+
+	if(fp == NULL)
+		return -1;
+
+	if(fwrite(buf, 1, (size_t)len, fp) != (size_t)len)
+	{
+		fclose(fp);
+		_tremove(szPath);
+		return -1;
+	}
+
+	fclose(fp);
+
+	fp = _tfopen(szPath, ISTR("rb"));
+
+	if(fp == NULL)
+	{
+		_tremove(szPath);
+		return -1;
+	}
+
+	rc = ines_load_state(&host, fp);
+
+	fclose(fp);
+	_tremove(szPath);
+
+	if(rc != 0)
+		INES_LOG(LOG_ERR, MOD_SYS, ISTR("netplay: load sync state failed!\n"));
+
+	return (rc == 0) ? 0 : -1;
+}
+
+/**
+ * np_sync 的摘要回调: RAM + 名称表 + OAM + 帧号 + CPU 寄存器。
+ * 某个 mapper 的 savestate 若不完整, 两端算出来的值必然不同 —— 立刻走硬件复位,
+ * 而不是跑几帧之后才发现 desync。
+ */
+static int ines_state_sign(ines_dword_t* out_sign, void* user)
+{
+	ines_dword_t  crc = 0xffffffffu;
+
+	(void)user;
+
+	if(out_sign == NULL)
+		return -1;
+
+	crc = ines_crc32_mem(crc, host.cpu.RAM, sizeof(host.cpu.RAM));
+	crc = ines_crc32_mem(crc, host.ppu.name_table, sizeof(host.ppu.name_table));
+	crc = ines_crc32_mem(crc, host.ppu.sp_RAM, sizeof(host.ppu.sp_RAM));
+	crc = ines_crc32_mem(crc, &host.frame_count, sizeof(host.frame_count));
+	crc = ines_crc32_mem(crc, &host.cpu.reg_A, sizeof(host.cpu.reg_A));
+	crc = ines_crc32_mem(crc, &host.cpu.reg_X, sizeof(host.cpu.reg_X));
+	crc = ines_crc32_mem(crc, &host.cpu.reg_Y, sizeof(host.cpu.reg_Y));
+	crc = ines_crc32_mem(crc, &host.cpu.reg_P, sizeof(host.cpu.reg_P));
+	crc = ines_crc32_mem(crc, &host.cpu.reg_SP, sizeof(host.cpu.reg_SP));
+	crc = ines_crc32_mem(crc, &host.cpu.reg_PC, sizeof(host.cpu.reg_PC));
+
+	*out_sign = crc ^ 0xffffffffu;
+
+	return 0;
+}
+
+/**
+ * 联网读档(仅主机可用): 把存档字节流交给会话层同步给从机。
+ *
+ * 本机**不立即载入** —— 由 np_sync 在收齐对端结果后统一载入, 两端才是同一份状态。
+ * 本地校验失败(槽位为空 / 读不出来 / 过大)时只提示: 还没发包、状态没变,
+ * 既不冻结也不复位, 对战继续。
+ */
+VOID OnMenuSyncState(int index)
+{
+	ines_char_t  szPath[INES_MAX_PATH];
+	FILE*        fSave = NULL;
+	long         size  = 0;
+
+	if(host.status == NES_STATUS_OFF)
+		return;
+
+	if(!np_is_server())
+	{
+		MessageBox(hMainWnd, ISTR("联网对战中只有主机可以载入存档。"), szTitle, MB_OK|MB_ICONINFORMATION);
+		return;
+	}
+
+	if(np_sync_state() != NP_SYNC_NONE)
+	{
+		MessageBox(hMainWnd, ISTR("正在同步存档，请稍候。"), szTitle, MB_OK|MB_ICONINFORMATION);
+		return;
+	}
+
+	// 本地校验: 该槽位没有可用存档
+	if(0 == GetSaveStateTime(index))
+	{
+		MessageBox(hMainWnd, ISTR("该槽位没有可用存档。"), szTitle, MB_OK|MB_ICONINFORMATION);
+		return;
+	}
+
+	getStatePath(index, szPath, count_of(szPath));
+
+	fSave = _tfopen(szPath, ISTR("rb"));
+
+	if(fSave == NULL)
+	{
+		MessageBox(hMainWnd, ISTR("存档读取失败。"), szTitle, MB_OK|MB_ICONWARNING);
+		return;
+	}
+
+	if((fseek(fSave, 0, SEEK_END) != 0) || ((size = ftell(fSave)) <= 0))
+	{
+		fclose(fSave);
+		MessageBox(hMainWnd, ISTR("存档读取失败。"), szTitle, MB_OK|MB_ICONWARNING);
+		return;
+	}
+
+	fseek(fSave, 0, SEEK_SET);
+
+	if((size <= 0) || (size > NP_SYNC_MAX_SIZE))
+	{
+		fclose(fSave);
+		MessageBox(hMainWnd, ISTR("存档过大，无法同步。"), szTitle, MB_OK|MB_ICONWARNING);
+		return;
+	}
+
+	if(fread(s_sync_buf, 1, (size_t)size, fSave) != (size_t)size)
+	{
+		fclose(fSave);
+		MessageBox(hMainWnd, ISTR("存档读取失败。"), szTitle, MB_OK|MB_ICONWARNING);
+		return;
+	}
+
+	fclose(fSave);
+
+	// np_sync_begin() 内部会拷一份, s_sync_buf 可立即复用
+	if(0 != np_sync_begin(s_sync_buf, (int)size))
+	{
+		MessageBox(hMainWnd, ISTR("存档同步发起失败。"), szTitle, MB_OK|MB_ICONWARNING);
+		return;
+	}
+
+	INES_LOG(LOG_INF, MOD_SYS, ISTR("netplay: sync state %d, %ld bytes\n"), index, size);
+}
+
+/**
+ * 推进状态同步并取走结果(每帧调用一次)。
+ *
+ *   NP_SYNC_BUSY  : 同步中, 双方冻结(调用方跳过本帧);
+ *   NP_SYNC_OK    : 成功, 继续对战;
+ *   NP_SYNC_RESET : 载入失败 -> 主机提交硬复位, **连接保持**;
+ *   NP_SYNC_FAILED: 链路断开 / 超时 -> 结束联网。
+ *
+ * @return 非 0 表示已结束联网。
+ */
+int OnIdleSyncState(void)
+{
+	ines_int_t  st = np_sync_state();
+
+	if(st == NP_SYNC_NONE)
+		return 0;
+
+	if(st == NP_SYNC_BUSY)
+	{
+		np_sync_poll();   // 主机推进发送; 从机全程在 np_frame_begin() 里被动应答
+		return 0;
+	}
+
+	np_sync_clear();      // 结果只消费一次
+
+	if(st == NP_SYNC_OK)
+	{
+		UpdateAllViews();
+		return 0;
+	}
+
+	if(st == NP_SYNC_RESET)
+	{
+		// 只有主机提交: 走 ctrl + 延迟线, 双方在同一逻辑帧复位
+		if(np_is_server())
+			sync_ctrl_req = NET_CTRL_CODE_HARDRESET;
+
+		MessageBox(hMainWnd, ISTR("存档载入失败，已复位重开。"), szTitle, MB_OK|MB_ICONINFORMATION);
+		return 0;
+	}
+
+	// NP_SYNC_FAILED: 同步中断(链路断开 / 超时) —— 状态可能已分叉, 只能结束联网
+	np_end();
+	is_net_play = 0;
+
+	UpdateTitle();
+
+	MessageBox(hMainWnd, ISTR("存档同步失败，已结束联网。"), szTitle, MB_OK|MB_ICONWARNING);
+
+	return 1;
 }
 
 
@@ -2423,6 +2701,11 @@ VOID UpdateMenuLoadState(HMENU hMenu, UINT nPos, int index)
 			bEnable = TRUE;
 		}
 	}
+
+	// 联网对战: 只有**主机**能发起读档(会把存档同步给对端); 从机灰显,
+	// 同步进行中也短暂禁用, 避免重复发起(与 macOS 端的 validateMenuItem 一致)
+	if(is_net_play && ((!np_is_server()) || (np_sync_state() != NP_SYNC_NONE)))
+		bEnable = FALSE;
 
 	info.cbSize = sizeof(info);
 	info.fMask = MIIM_STATE|MIIM_TYPE;

@@ -29,9 +29,10 @@
 // 默认对战端口: 被占用时自动改用系统分配端口(与"网络对战…"对话框的默认值一致)
 #define LOBBY_PORT         8891
 
-// 昵称在 config.ini 中的位置
+// 昵称 / 缓冲帧数在 config.ini 中的位置
 #define LOBBY_CFG_SECTION  ISTR("netplay")
 #define LOBBY_CFG_NICKKEY  ISTR("nickname")
+#define LOBBY_CFG_CACHEKEY ISTR("cache_num")
 
 
 @interface iNESLanLobby () <NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate>
@@ -46,6 +47,7 @@
 	ines_byte_t    _peerId[16];
 	ines_dword_t   _crc32;
 	NSString*      _romName;
+	int            _cacheNum;          // 本机作为房主时的缓冲帧数(config.ini, 发布后固定)
 
 	lan_room_t     _rooms[LAN_ROOM_MAX];
 	int            _roomCount;
@@ -69,6 +71,23 @@
 {
 	return [NSString stringWithFormat:@"Player %04d",
 			(int)(arc4random_uniform(9000) + 1000)];
+}
+
+/**
+ * 本机作为房主时的缓冲帧数: 取 config.ini 的 [netplay] cache_num,
+ * 未配置(或越界)时用 NP_CACHE_DEFAULT。加入方不用这个数 —— 以房主下发的为准。
+ */
++ (int)hostCacheNum
+{
+	int  n = (int)GetConfigInt(LOBBY_CFG_SECTION, LOBBY_CFG_CACHEKEY, NP_CACHE_DEFAULT);
+
+	if (n < NP_CACHE_MIN)
+		n = NP_CACHE_MIN;
+
+	if (n > NP_CACHE_MAX)
+		n = NP_CACHE_MAX;
+
+	return n;
 }
 
 /**
@@ -185,6 +204,7 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 
 	_crc32     = crc32;
 	_romName   = (romName != nil) ? romName : @"";
+	_cacheNum  = [iNESLanLobby hostCacheNum];
 	_roomCount = 0;
 	_lastAdv   = 0;
 	_connected = NO;
@@ -235,8 +255,8 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 	// ---- 说明 ----
 	{
 		NSTextField*  hint = lobby_make_label(
-			[NSString stringWithFormat:@"已发布到局域网（缓冲 %d 帧，发布后固定）。加入他人房间后，本机作为副手柄（客户机）。",
-					  NP_CACHE_DEFAULT],
+			[NSString stringWithFormat:@"已发布到局域网（缓冲 %d 帧，发布后固定；可在 config.ini 的 [netplay] cache_num 调整）。加入他人房间后，本机作为副手柄（客户机）。",
+					  _cacheNum],
 			NSMakeRect(18, 264, 424, 17));
 
 		hint.textColor = [NSColor secondaryLabelColor];
@@ -259,18 +279,22 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 	{
 		NSTableColumn*  c1 = [[NSTableColumn alloc] initWithIdentifier:@"nick"];
 		NSTableColumn*  c2 = [[NSTableColumn alloc] initWithIdentifier:@"rom"];
-		NSTableColumn*  c3 = [[NSTableColumn alloc] initWithIdentifier:@"cache"];
+		NSTableColumn*  c3 = [[NSTableColumn alloc] initWithIdentifier:@"ver"];
+		NSTableColumn*  c4 = [[NSTableColumn alloc] initWithIdentifier:@"cache"];
 
 		c1.title = @"昵称";
-		c1.width = 118.0;
+		c1.width = 110.0;
 		c2.title = @"ROM";
-		c2.width = 216.0;
-		c3.title = @"缓冲";
-		c3.width = 56.0;
+		c2.width = 176.0;
+		c3.title = @"版本";
+		c3.width = 68.0;
+		c4.title = @"缓冲";
+		c4.width = 56.0;
 
 		[_table addTableColumn:c1];
 		[_table addTableColumn:c2];
 		[_table addTableColumn:c3];
+		[_table addTableColumn:c4];
 	}
 
 	scroll.documentView = _table;
@@ -316,10 +340,10 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 		return NO;
 	}
 
-	rc = np_begin(1, NULL, LOBBY_PORT, _crc32, NP_CACHE_DEFAULT);
+	rc = np_begin(1, NULL, LOBBY_PORT, _crc32, _cacheNum);
 
 	if (rc != 0)
-		rc = np_begin(1, NULL, 0, _crc32, NP_CACHE_DEFAULT);   // 8891 被占用
+		rc = np_begin(1, NULL, 0, _crc32, _cacheNum);   // 8891 被占用
 
 	if (rc != 0)
 	{
@@ -394,6 +418,13 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 	if (_rooms[row].crc32 != _crc32)
 	{
 		[self setInfo:@"ROM 不同，无法加入。"];
+		return;
+	}
+
+	// 版本不同: 列表里已灰显, 这里再拦一次(双击可能被拖选/键盘触发)
+	if (_rooms[row].net_ver != (ines_dword_t)NET_VER)
+	{
+		[self setInfo:@"协议版本不一致，请升级到相同版本后再联机。"];
 		return;
 	}
 
@@ -485,7 +516,7 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 			lan_advertise(_crc32, (ines_word_t)_listenPort, 0,
 						  [[self currentNick] UTF8String],
 						  [lobby_clip_utf8(_romName, LAN_ROM_MAX) UTF8String],
-						  (ines_byte_t)NP_CACHE_DEFAULT);
+						  (ines_byte_t)_cacheNum);
 
 			_lastAdv = now;
 		}
@@ -552,6 +583,18 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 	if ([column.identifier isEqualToString:@"nick"])
 		return [NSString stringWithUTF8String:_rooms[row].nick];
 
+	// 协议版本: 与本机不同则标注出来(选中被 shouldSelectRow 拦掉)
+	if ([column.identifier isEqualToString:@"ver"])
+	{
+		if (_rooms[row].net_ver == (ines_dword_t)NET_VER)
+			return [NSString stringWithFormat:@"%u", (unsigned)NET_VER];
+
+		// 0 = 旧版 beacon 未携带该字段
+		return (_rooms[row].net_ver != 0)
+			 ? [NSString stringWithFormat:@"%u（需升级）", (unsigned)_rooms[row].net_ver]
+			 : @"旧版（需升级）";
+	}
+
 	// 缓冲帧数由房主发布时确定(对端未携带该字段时显示 --)
 	if ([column.identifier isEqualToString:@"cache"])
 	{
@@ -571,7 +614,20 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 	}
 }
 
-/** ROM 不同的房间灰字显示。 */
+/**
+ * 该房间能否加入: ROM 相同 **且** 协议版本相同。
+ * 版本不同的房间一律不可选 —— 连上也会被握手拒绝, 不如在列表里就拦住。
+ */
+- (BOOL)rowJoinable:(NSInteger)row
+{
+	if ((row < 0) || (row >= _roomCount))
+		return NO;
+
+	return ((_rooms[row].crc32 == _crc32)
+		 && (_rooms[row].net_ver == (ines_dword_t)NET_VER)) ? YES : NO;
+}
+
+/** 不可加入的房间(ROM 不同 / 版本不同)灰字显示。 */
 - (void)tableView:(NSTableView*)tableView
   willDisplayCell:(id)cell
    forTableColumn:(NSTableColumn*)column
@@ -583,19 +639,23 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 	if (![cell respondsToSelector:@selector(setTextColor:)])
 		return;
 
-	[cell setTextColor:(_rooms[row].crc32 == _crc32)
+	[cell setTextColor:[self rowJoinable:row]
 		 ? [NSColor labelColor] : [NSColor tertiaryLabelColor]];
 }
 
-/** 只有 ROM 相同的房间可选(需求: 不同 ROM 可见但不可选)。 */
+/** 只有 ROM 相同且版本相同的房间可选(需求: 不可连的房间可见但不可选)。 */
 - (BOOL)tableView:(NSTableView*)tableView shouldSelectRow:(NSInteger)row
 {
-	BOOL  ok = ((row >= 0) && (row < _roomCount) && (_rooms[row].crc32 == _crc32));
+	BOOL  ok = [self rowJoinable:row];
 
 	_joinButton.enabled = ok;
 
 	if (!ok && (row >= 0) && (row < _roomCount))
-		[self setInfo:@"ROM 不同，无法加入。"];
+	{
+		[self setInfo:(_rooms[row].net_ver != (ines_dword_t)NET_VER)
+			 ? @"协议版本不一致，请升级到相同版本后再联机。"
+			 : @"ROM 不同，无法加入。"];
+	}
 
 	return ok;
 }

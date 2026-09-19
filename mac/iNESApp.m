@@ -200,6 +200,131 @@ static void app_state_path(ines_cstr_t title, ines_int_t index, ines_str_t out, 
 	ines_snprintf(out, outLen, ISTR("%s/%s.st%d"), s_state_dir, title, (int)index);
 }
 
+// ---- 联机读档(状态同步) ----
+
+// 载入失败后由模拟线程提交的控制码(硬复位), 见 pollStateSyncOnThread
+static ines_int_t  s_sync_ctrl_req = 0;
+
+/** CRC32(IEEE 802.3): 算"两端是否载入了同一份状态"的摘要。 */
+static ines_dword_t app_crc32(ines_dword_t crc, const void* data, size_t len)
+{
+	static ines_dword_t  table[256];
+	static int           inited = 0;
+	const ines_byte_t*   p = (const ines_byte_t*)data;
+	size_t               i;
+	int                  j;
+
+	if (!inited)
+	{
+		for (j = 0; j < 256; j++)
+		{
+			ines_dword_t  c = (ines_dword_t)j;
+			int           k;
+
+			for (k = 0; k < 8; k++)
+				c = (c & 1) ? (0xedb88320u ^ (c >> 1)) : (c >> 1);
+
+			table[j] = c;
+		}
+
+		inited = 1;
+	}
+
+	if ((p == NULL) || (len == 0))
+		return crc;
+
+	for (i = 0; i < len; i++)
+		crc = table[(crc ^ p[i]) & 0xff] ^ (crc >> 8);
+
+	return crc;
+}
+
+/** 同步用的临时存档文件: <即时存档目录>/.sync.tmp */
+static void app_sync_tmp_path(ines_str_t out, ines_size_t outLen)
+{
+	ines_snprintf(out, outLen, ISTR("%s/.sync.tmp"), s_state_dir);
+}
+
+/**
+ * np_sync 的载入回调: 把对端发来的字节流写成临时文件, 再走 ines_host_load_state()。
+ * 从机**不写自己的槽位**(需求: 不覆盖从机本地存档), 用完即删。
+ */
+static int app_state_load_mem(const void* buf, int len, void* user)
+{
+	ines_char_t  path[INES_MAX_PATH];
+	FILE*        fp;
+	int          rc;
+
+	(void)user;
+
+	if ((buf == NULL) || (len <= 0))
+		return -1;
+
+	app_sync_tmp_path(path, sizeof(path));
+
+	fp = fopen(path, "wb");
+
+	if (fp == NULL)
+		return -1;
+
+	if (fwrite(buf, 1, (size_t)len, fp) != (size_t)len)
+	{
+		fclose(fp);
+		remove(path);
+		return -1;
+	}
+
+	fclose(fp);
+
+	fp = fopen(path, "rb");
+
+	if (fp == NULL)
+	{
+		remove(path);
+		return -1;
+	}
+
+	rc = ines_host_load_state(&host, fp);
+
+	fclose(fp);
+	remove(path);
+
+	if (rc != 0)
+		INES_LOG(LOG_ERR, MOD_SYS, ISTR("netplay: load sync state failed!\n"));
+
+	return (rc == 0) ? 0 : -1;
+}
+
+/**
+ * np_sync 的摘要回调: RAM + 名称表 + OAM + 帧号 + CPU 寄存器。
+ * 某个 mapper 的 savestate 若不完整, 两端算出来的值必然不同 —— 立刻走硬件复位,
+ * 而不是跑几帧之后才发现 desync。
+ */
+static int app_state_sign(ines_dword_t* out_sign, void* user)
+{
+	ines_dword_t  crc = 0xffffffffu;
+
+	(void)user;
+
+	if (out_sign == NULL)
+		return -1;
+
+	crc = app_crc32(crc, host.cpu.RAM, sizeof(host.cpu.RAM));
+	crc = app_crc32(crc, host.ppu.name_table, sizeof(host.ppu.name_table));
+	crc = app_crc32(crc, host.ppu.sp_RAM, sizeof(host.ppu.sp_RAM));
+	crc = app_crc32(crc, &host.frame_count, sizeof(host.frame_count));
+	crc = app_crc32(crc, &host.cpu.reg_A, sizeof(host.cpu.reg_A));
+	crc = app_crc32(crc, &host.cpu.reg_X, sizeof(host.cpu.reg_X));
+	crc = app_crc32(crc, &host.cpu.reg_Y, sizeof(host.cpu.reg_Y));
+	crc = app_crc32(crc, &host.cpu.reg_P, sizeof(host.cpu.reg_P));
+	crc = app_crc32(crc, &host.cpu.reg_SP, sizeof(host.cpu.reg_SP));
+	crc = app_crc32(crc, &host.cpu.reg_PC, sizeof(host.cpu.reg_PC));
+
+	*out_sign = crc ^ 0xffffffffu;
+
+	return 0;
+}
+
 // 即时存档文件头(与 core/nes.c 的 ines_state_header_t 前 16 字节布局一致)
 #pragma pack(push, 1)
 typedef struct _app_state_head_
@@ -316,6 +441,8 @@ static int nes_proc(void* ud);
 - (void)hardResetOnThread;
 - (void)saveStateOnThread:(ines_int_t)index;
 - (void)loadStateOnThread:(ines_int_t)index;
+- (void)syncStateOnThread:(ines_int_t)index;
+- (BOOL)pollStateSyncOnThread;
 - (void)publishHostState;
 - (void)clearScreenOnThread;
 - (void)notifyRomLoaded:(ines_cstr_t)path;
@@ -1090,8 +1217,15 @@ static NSString* app_function_key(ines_int_t n)
 		ines_char_t  title[INES_MAX_TITLE];
 		ines_char_t  path[INES_MAX_PATH];
 
-		// 联网对战中禁止读档(与 win32 的 OnMenuLoadState 一致)
-		if (!rom_loaded || net_play)
+		// 联网对战中只有**主机**能读档(会把存档同步给对端); 从机灰显。
+		// 同步进行中也短暂禁用, 避免重复发起。
+		if (!rom_loaded)
+			return NO;
+
+		if ((net_play != 0) && (np_is_server() == 0))
+			return NO;
+
+		if (np_sync_state() != NP_SYNC_NONE)
 			return NO;
 
 		[self copyCurrentRomTitle:title length:sizeof(title)];
@@ -2046,6 +2180,14 @@ static NSString* app_function_key(ines_int_t n)
 	if (host.status == NES_STATUS_OFF)
 		return;
 
+	// 联网对战: 只有主机能发起读档, 且必须"同步给对端" —— 本机不立即载入,
+	// 由 np_sync 在收齐对端结果后统一载入, 保证两端载入的是同一份字节流
+	if (np_state() == NP_ST_PLAYING)
+	{
+		[self syncStateOnThread:index];
+		return;
+	}
+
 	app_state_path(szROMTitle, index, path, sizeof(path));
 
 	fp = fopen(path, "rb");
@@ -2061,6 +2203,147 @@ static NSString* app_function_key(ines_int_t n)
 		INES_LOG(LOG_NTY, MOD_SYS, ISTR("Load state from '%s' OK!\n"), path);
 
 	fclose(fp);
+}
+
+/**
+ * 联网读档(仅主机可用): 把存档字节流交给会话层同步给从机。
+ *
+ * 本机**不立即载入** —— 由 np_sync 在收齐对端结果后统一载入, 两端才是同一份状态。
+ * 本地校验失败(槽位为空 / 与当前 ROM 不符 / 读不出来)时只提示: 还没发包、状态没变,
+ * 既不冻结也不复位, 对战继续。
+ */
+- (void)syncStateOnThread:(ines_int_t)index
+{
+	ines_char_t   path[INES_MAX_PATH];
+	FILE*         fp   = NULL;
+	long          size = 0;
+	void*         buf  = NULL;
+
+	if (np_is_server() == 0)
+	{
+		[self showToast:@"联网对战中只有主机可以载入存档。"];
+		return;
+	}
+
+	if (np_sync_state() != NP_SYNC_NONE)
+	{
+		[self showToast:@"正在同步存档，请稍候。"];
+		return;
+	}
+
+	app_state_path(szROMTitle, index, path, sizeof(path));
+
+	// 本地校验(与菜单可用性一致: 文件头 magic + ROM crc32)
+	if (0 == app_state_file_time(path, [self currentRomCrc32]))
+	{
+		[self showToast:[NSString stringWithFormat:@"存档 %d 不存在或与当前 ROM 不符。", (int)index]];
+		return;
+	}
+
+	fp = fopen(path, "rb");
+
+	if (fp == NULL)
+	{
+		[self showToast:@"存档读取失败。"];
+		return;
+	}
+
+	if ((fseek(fp, 0, SEEK_END) != 0) || ((size = ftell(fp)) <= 0))
+	{
+		fclose(fp);
+		[self showToast:@"存档读取失败。"];
+		return;
+	}
+
+	fseek(fp, 0, SEEK_SET);
+
+	if (size > NP_SYNC_MAX_SIZE)
+	{
+		fclose(fp);
+		[self showToast:@"存档过大，无法同步。"];
+		return;
+	}
+
+	buf = malloc((size_t)size);
+
+	if (buf == NULL)
+	{
+		fclose(fp);
+		return;
+	}
+
+	if (fread(buf, 1, (size_t)size, fp) != (size_t)size)
+	{
+		free(buf);
+		fclose(fp);
+		[self showToast:@"存档读取失败。"];
+		return;
+	}
+
+	fclose(fp);
+
+	// np_sync_begin() 内部会拷一份, 这里可以立刻释放
+	if (0 != np_sync_begin(buf, (int)size))
+	{
+		free(buf);
+		[self showToast:@"存档同步发起失败。"];
+		return;
+	}
+
+	free(buf);
+
+	INES_LOG(LOG_NTY, MOD_SYS, ISTR("netplay: sync state slot %d, %ld bytes\n"), (int)index, size);
+
+	[self showToast:@"正在同步存档…"];
+}
+
+/**
+ * 推进状态同步并取走结果(模拟线程每帧调用一次)。
+ *
+ * - NP_SYNC_BUSY : 同步中, 双方冻结(调用方跳过本帧);
+ * - NP_SYNC_OK   : 成功, 继续对战;
+ * - NP_SYNC_RESET: 载入失败 -> 主机提交硬复位, **连接保持**;
+ * - NP_SYNC_FAILED: 链路断开/超时 -> 结束联网。
+ *
+ * @return YES 表示已结束联网(调用方需把 net_play 置 0); NO 表示继续。
+ */
+- (BOOL)pollStateSyncOnThread
+{
+	ines_int_t  st = np_sync_state();
+
+	if (st == NP_SYNC_NONE)
+		return NO;
+
+	if (st == NP_SYNC_BUSY)
+	{
+		np_sync_poll();   // 主机推进发送; 从机全程在 np_frame_begin() 里被动应答
+		return NO;
+	}
+
+	np_sync_clear();      // 结果只消费一次
+
+	if (st == NP_SYNC_OK)
+	{
+		[self publishHostState];
+		[self showToast:@"存档已同步，继续对战。"];
+		return NO;
+	}
+
+	if (st == NP_SYNC_RESET)
+	{
+		// 只有主机提交: 走现有的 ctrl + 延迟线, 双方在同一逻辑帧复位
+		if (np_is_server() != 0)
+			s_sync_ctrl_req = NET_CTRL_CODE_HARDRESET;
+
+		[self showToast:@"存档载入失败，已复位重开。"];
+		return NO;
+	}
+
+	// NP_SYNC_FAILED: 同步中断(链路断开 / 超时) —— 状态可能已分叉, 只能结束联网
+	[self endNetPlayOnThread];   // 内部已刷新标题
+
+	[self showToast:@"存档同步失败，已结束联网。"];
+	return YES;
 }
 
 // 模拟线程主循环: 等价 win32 前端的 OnIdle(帧循环 + 输入)与 OnPaint
@@ -2295,9 +2578,23 @@ static NSString* app_function_key(ines_int_t n)
 			// 本帧起点: 既用于下一帧的节拍, 也用于统计本帧的 CPU 消耗
 			last_frame_time = app_cur_time_us();
 
-			// ---- 4.5) 联网: 缓存为空表示"网络卡", 本帧不推进(等价 win32 的 net_cache_size == 0) ----
-			if (net_play && !np_input_ready())
-				continue;
+			// ---- 4.5) 联网: 状态同步(联机读档)期间双方冻结; 缓存为空表示"网络卡", 本帧不推进 ----
+			if (net_play)
+			{
+				// 同步结果: 可能结束联网(链路断开/超时)
+				if ([self pollStateSyncOnThread])
+				{
+					net_play = 0;
+					continue;
+				}
+
+				// 同步进行中: 双方都不推进帧(画面静止), 只推进同步流程
+				if (np_sync_state() == NP_SYNC_BUSY)
+					continue;
+
+				if (!np_input_ready())   // 等价 win32 的 net_cache_size == 0
+					continue;
+			}
 
 			// ---- 4.55) P0 验证: 按键改为"本帧真正开始前"采样(与 win32 OnIdle 时序一致) ----
 			ines_mutex_lock(&s_mutex_ctl);
@@ -2357,6 +2654,13 @@ static NSString* app_function_key(ines_int_t n)
 
 				if (net_play)
 				{
+					// 联机读档失败 -> 提交硬复位(只发一帧, 由延迟线保证双方同帧执行)
+					if (s_sync_ctrl_req != 0)
+					{
+						net_ctrl_req    = s_sync_ctrl_req;
+						s_sync_ctrl_req = 0;
+					}
+
 					// 本方输入延后 net_cache_num 帧生效, 取回的是本帧双方的输入
 					if (0 != np_frame_input((ines_byte_t)main_keys, (ines_byte_t)net_ctrl_req,
 											&main_keys, &second_keys, &this_ctrl))
@@ -2587,6 +2891,11 @@ static NSString* app_function_key(ines_int_t n)
 {
 	[self startup];
 	[self installKeyEventMonitor];
+
+	// 联机读档: 注册"从内存载入存档"与"算状态摘要"回调。
+	// 主机和从机都要注册 —— 从机收到存档后同样要载入并回摘要。
+	np_sync_set_handler(app_state_load_mem, app_state_sign, NULL);
+
 	[NSApp activateIgnoringOtherApps:YES];
 }
 

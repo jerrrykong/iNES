@@ -38,6 +38,8 @@
 // iNES.c 提供的配置读写与当前 ROM 标题
 extern ines_cstr_t  GetConfigStr(ines_cstr_t sec, ines_cstr_t key, ines_cstr_t def);
 extern void         SetConfigStr(ines_cstr_t sec, ines_cstr_t key, ines_cstr_t val);
+extern ines_int_t   GetConfigInt(ines_cstr_t sec, ines_cstr_t key, ines_int_t def);
+extern void         SetConfigInt(ines_cstr_t sec, ines_cstr_t key, ines_int_t val);
 extern ines_char_t  szROMTitle[INES_MAX_PATH];
 
 
@@ -92,7 +94,16 @@ BOOL dlgLanMatch_DoModal(HINSTANCE hInstance, HWND hParentWnd, ines_dword_t crc3
 	s_listen_port = 0;
 	s_connected   = 0;
 	s_joining     = 0;
-	s_cache_num   = NP_CACHE_DEFAULT;
+
+	// 本机作为房主时的缓冲帧数: config.ini 的 [netplay] cache_num, 未配置则用默认。
+	// 加入方不用这个数 —— 以房主下发的为准(两端必须一致)。
+	s_cache_num   = (int)GetConfigInt(LANMATCH_CFG_SECTION, ISTR("cache_num"), NP_CACHE_DEFAULT);
+
+	if(s_cache_num < NP_CACHE_MIN)
+		s_cache_num = NP_CACHE_MIN;
+
+	if(s_cache_num > NP_CACHE_MAX)
+		s_cache_num = NP_CACHE_MAX;
 	s_has_sel     = 0;
 	s_fail_msg[0] = 0;
 
@@ -330,6 +341,18 @@ static void dlgLanMatch_RefreshList(HWND hDlg)
 
 		ListView_SetItemText(hwndList, i, 1, text);
 
+		// 协议版本: 与本机不同 -> 标注出来(选中被 OnItemChanged 拦掉, 不可加入)
+		if(s_rooms[i].net_ver == (ines_dword_t)NET_VER)
+			ines_snprintf(text, count_of(text), ISTR("%u"), (unsigned)NET_VER);
+		else if(s_rooms[i].net_ver != 0)
+			ines_snprintf(text, count_of(text), ISTR("%u（需升级）"), (unsigned)s_rooms[i].net_ver);
+		else
+			ines_strncpy(text, ISTR("旧版（需升级）"), count_of(text) - 1);   // beacon 未携带该字段
+
+		text[count_of(text) - 1] = 0;
+
+		ListView_SetItemText(hwndList, i, 2, text);
+
 		// 缓冲帧数: 对端未携带该字段(旧版本)时显示 --
 		if((s_rooms[i].cache_num >= NP_CACHE_MIN) && (s_rooms[i].cache_num <= NP_CACHE_MAX))
 			ines_snprintf(text, count_of(text), ISTR("%d 帧"), (int)s_rooms[i].cache_num);
@@ -338,7 +361,7 @@ static void dlgLanMatch_RefreshList(HWND hDlg)
 
 		text[count_of(text) - 1] = 0;
 
-		ListView_SetItemText(hwndList, i, 2, text);
+		ListView_SetItemText(hwndList, i, 3, text);
 	}
 
 	// 按 peer_id 恢复选中(列表每次刷新都重建, 行号会变)
@@ -396,6 +419,13 @@ static void dlgLanMatch_OnJoin(HWND hDlg)
 	if(s_rooms[row].crc32 != s_crc32)
 	{
 		dlgLanMatch_SetInfo(hDlg, ISTR("ROM 不同，无法加入。"));
+		return;
+	}
+
+	// 协议版本必须相同(不同版本连上也会被握手拒绝, 这里直接拦住并提示升级)
+	if(s_rooms[row].net_ver != (ines_dword_t)NET_VER)
+	{
+		dlgLanMatch_SetInfo(hDlg, ISTR("协议版本不一致，请升级到相同版本后再联机。"));
 		return;
 	}
 
@@ -600,20 +630,26 @@ static BOOL dlgLanMatch_OnInitDialog(HWND hDlg)
 	memset(&col, 0, sizeof(col));
 	col.mask     = LVCF_TEXT|LVCF_WIDTH|LVCF_SUBITEM;
 	col.pszText  = ISTR("昵称");
-	col.cx       = 130;
+	col.cx       = 120;
 	col.iSubItem = 0;
 	ListView_InsertColumn(hwndList, 0, &col);
 
 	col.pszText  = ISTR("ROM");
-	col.cx       = 214;
+	col.cx       = 180;
 	col.iSubItem = 1;
 	ListView_InsertColumn(hwndList, 1, &col);
+
+	// 协议版本(与本机不同的房间不可加入)
+	col.pszText  = ISTR("版本");
+	col.cx       = 68;
+	col.iSubItem = 2;
+	ListView_InsertColumn(hwndList, 2, &col);
 
 	// 缓冲帧数(房主发布时确定, 不可协商)
 	col.pszText  = ISTR("缓冲");
 	col.cx       = 56;
-	col.iSubItem = 2;
-	ListView_InsertColumn(hwndList, 2, &col);
+	col.iSubItem = 3;
+	ListView_InsertColumn(hwndList, 3, &col);
 
 	EnableWindow(GetDlgItem(hDlg, IDOK), FALSE);
 
@@ -660,13 +696,20 @@ static BOOL dlgLanMatch_OnItemChanged(HWND hDlg, NMLISTVIEW* pnm)
 		return FALSE;
 	}
 
+	if(s_rooms[row].net_ver != (ines_dword_t)NET_VER)
+	{
+		EnableWindow(GetDlgItem(hDlg, IDOK), FALSE);
+		dlgLanMatch_SetInfo(hDlg, ISTR("协议版本不一致，请升级到相同版本后再联机。"));
+		return FALSE;
+	}
+
 	EnableWindow(GetDlgItem(hDlg, IDOK), TRUE);
 	dlgLanMatch_RefreshInfo(hDlg);
 
 	return FALSE;
 }
 
-/** ROM 不同的房间灰字显示。 */
+/** 不可加入的房间(ROM 不同 / 版本不同)灰字显示。 */
 static BOOL dlgLanMatch_OnCustomDraw(HWND hDlg, NMLVCUSTOMDRAW* pcd)
 {
 	DWORD  row;
@@ -685,7 +728,8 @@ static BOOL dlgLanMatch_OnCustomDraw(HWND hDlg, NMLVCUSTOMDRAW* pcd)
 
 	row = (DWORD)pcd->nmcd.dwItemSpec;
 
-	if((row < (DWORD)s_room_count) && (s_rooms[row].crc32 != s_crc32))
+	if((row < (DWORD)s_room_count)
+	 && ((s_rooms[row].crc32 != s_crc32) || (s_rooms[row].net_ver != (ines_dword_t)NET_VER)))
 		pcd->clrText = GetSysColor(COLOR_GRAYTEXT);
 
 	SetWindowLongPtr(hDlg, DWLP_MSGRESULT, (LONG_PTR)CDRF_NEWFONT);

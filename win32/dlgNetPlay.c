@@ -16,6 +16,9 @@
 #define NETPLAY_MSG_MAX   256
 
 
+// iNES.c 提供的配置读取(缓冲帧数在 config.ini 的 [netplay] cache_num)
+extern ines_int_t  GetConfigInt(ines_cstr_t sec, ines_cstr_t key, ines_int_t def);
+
 static int           s_is_server  = 0;
 static int           s_connecting = 0;
 static ines_dword_t  s_crc32      = 0;
@@ -186,22 +189,16 @@ static VOID dlgNetPlay_OnStartConnect(HWND hDlg)
 		return;
 	}
 
-	// 缓冲帧数只有服务端侧可设(与下拉框的可用状态一致); 客户端以服务端下发的为准
-	iCache = NP_CACHE_DEFAULT;
+	// 缓冲帧数一律从 config.ini 的 [netplay] cache_num 读取(与 mac 端一致;
+	// 未配置时用 NP_CACHE_DEFAULT)。客户端传多少都无效 —— 以服务端下发的为准,
+	// 两端必须一致, 所以不能有"各用各的默认值"这种情况。
+	iCache = (int)GetConfigInt(ISTR("netplay"), ISTR("cache_num"), NP_CACHE_DEFAULT);
 
-	if(IsDlgButtonChecked(hDlg, IDC_RAD_SERVER))
-	{
-		int  iSel = (int)SendDlgItemMessage(hDlg, IDC_CMB_CACHE, CB_GETCURSEL, 0, 0);
+	if(iCache < NP_CACHE_MIN)
+		iCache = NP_CACHE_MIN;
 
-		if(iSel >= 0)
-			iCache = iSel + NP_CACHE_MIN;
-
-		if(iCache < NP_CACHE_MIN)
-			iCache = NP_CACHE_MIN;
-
-		if(iCache > NP_CACHE_MAX)
-			iCache = NP_CACHE_MAX;
-	}
+	if(iCache > NP_CACHE_MAX)
+		iCache = NP_CACHE_MAX;
 
 	s_is_server = IsDlgButtonChecked(hDlg, IDC_RAD_SERVER) ? 1 : 0;
 

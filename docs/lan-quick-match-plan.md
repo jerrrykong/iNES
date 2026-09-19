@@ -49,7 +49,7 @@
 
 | 项目 | 归属 | 现状 |
 |---|---|---|
-| 缓冲帧数（1~5，默认 4） | **服务端**下发 | `np_begin(cache_num)` 仅服务端生效；客户端以 `START_RSP.fno` 高 32 位对齐（已实现） |
+| 缓冲帧数（1~5，默认 4） | **服务端**下发 | `np_begin(cache_num)` 仅服务端生效；客户端以 `START_RSP.fno` 高 32 位对齐（已实现）。**来源统一为服务端 `config.ini` 的 `[netplay] cache_num`，两端 UI 都不提供下拉框** |
 | TCP 端口 / 受理谁的接入 | **服务端** | 见 F2 的自动端口 |
 | 开始时的硬复位 | 双方各自执行 | 沿用 `net_play_start` 现有逻辑，本次不改 |
 | 软/硬复位控制码 | 任一方均可提交 | `NET_CTRL_CODE_SOFTRESET / HARDRESET` 现既有行为，本次不改 |
@@ -319,7 +319,8 @@ struct _lan_beacon {
 
 **已确认（用户 2026-09-19，均已实现）**
 
-4. **缓冲帧数不再在对战对话框里选**：底部下拉框容易被误读成"加入时才选的参数"，一律用默认 `NP_CACHE_DEFAULT`(4)；后续如需可调，放到"设置"对话框。
+4. **缓冲帧数不再在 UI 里选**：底部下拉框容易被误读成"加入时才选的参数"。**两端一致：mac 与 win32 都不提供下拉框**，值一律来自 `config.ini` 的 `[netplay] cache_num`（无配置用 `NP_CACHE_DEFAULT`(4)，钳位 1~5）；UI 只作只读显示。后续如需可调，放到"设置"对话框。
+   - 2026-09-19 补拍板：win32 的「联网对战…」`IDC_CMB_CACHE` 与局域网面板 `IDC_LANMATCH_CMB_CACHE` 一并取消（原来只取消了 mac 的），实施步骤见 `docs/win32-netplay-handoff.md` §5.1 / §5.2。
 5. **缓冲帧数在房间列表里显示**（新增"缓冲"列，房主发布时随 beacon 一起广播），发布后不可修改：加入方以房主的值为准。
 6. beacon 新增 `cache_num` 字段（占用原 `pad` 1 字节，报文仍为定长 128 字节）。
 
@@ -420,7 +421,7 @@ struct _lan_beacon {
 | Q1 | 会话层 | **A**：`mac/iNESNetPlaySession.{h,c}` 下沉为 `comm/npsession.{h,c}`，两端共用；win32 手动「联网对战」与新的快速对战都走 `np_*`，`win32/iNES.c` 的 `send_frame/recv_frame/cache_*` 全部替换 |
 | Q2 | 房间列表控件 | ListView（`LVS_REPORT` + `NM_CUSTOMDRAW` 灰显），双击加入 |
 | Q3 | `comm/lan.c` 的 UTF-8 转换 | **允许**：`UNICODE` 分支改用 `WideCharToMultiByte(CP_UTF8)` / `MultiByteToWideChar(CP_UTF8)` |
-| Q4 | 缓冲帧数 | win32 面板**提供 1~5 下拉框**（mac 面板没有此项，属两端 UI 差异）；客户端仍按 `START_RSP.fno` 高 32 位对齐 |
+| Q4 | 缓冲帧数 | ~~win32 面板提供 1~5 下拉框~~ → **2026-09-19 改：两端一致，都不提供下拉框**（唯一来源是 `config.ini [netplay] cache_num`，UI 只读显示）；客户端仍按 `START_RSP.fno` 高 32 位对齐 |
 | Q5 | 手动模式 | 随 Q1=A 一并改走会话层 |
 | Q6 | 同机双开 | 接受 win32 上不可行（Windows `SO_REUSEADDR` 语义），自测用手动 IP + 真机 |
 | Q7 | 菜单与提示 | 新命令 `IDM_LAN_MATCH`(32903)，文案「局域网快速对战(&L)」放在「联网对战」下面；未载入 ROM 沿用 MessageBox 提示 |
@@ -440,7 +441,7 @@ struct _lan_beacon {
 | `mac/iNESNetPlaySession.{h,c}` | **删除**（内容迁到 `comm/`） |
 | `mac/iNESLanLobby.m`、`mac/iNESNetPlayDialog.m`、`mac/iNESApp.m` | include 改为 `#include "../comm/npsession.h"`，注释同步 |
 | `comm/lan.c` | `#ifdef UNICODE` 的 `wcstombs/mbstowcs` → `WideCharToMultiByte(CP_UTF8)` / `MultiByteToWideChar(CP_UTF8)`（中文昵称/ROM 名不再乱码） |
-| `win32/dlgLanMatch.{c,h}` | **新文件**：快速对战对话框（昵称 + 本机 ROM + 房间 ListView + 缓冲帧数下拉 + 加入/关闭），500ms 定时器推进握手与发现，1s 广播一次 |
+| `win32/dlgLanMatch.{c,h}` | **新文件**：快速对战对话框（昵称 + 本机 ROM + 房间 ListView + 缓冲帧数**只读显示** + 加入/关闭），500ms 定时器推进握手与发现，1s 广播一次 |
 | `win32/dlgNetPlay.c` | 手动模式改为 `np_begin / np_poll` 驱动（50ms 定时器不变），本地状态机与 `net_cache_num` extern 依赖删除 |
 | `win32/iNES.c` | `net_init()` → `np_init()`；`OnIdle` 帧循环改走 `np_frame_begin / np_input_ready / np_frame_input`；删除 `send_frame/recv_frame/cache_*` 与 `net_cache[]`、`net_cache_size`、`net_cache_num`；`net_close()` → `np_end()`（关 ROM/退出/暂停切换）；新增 `IDM_LAN_MATCH`；`WM_DESTROY` 加 `np_fini()` |
 | `win32/iNES.rc` | 新增 `IDD_LANMATCH` 对话框 + 「局域网快速对战(&L)」菜单项（BOM 已复查保留） |
@@ -468,7 +469,7 @@ struct _lan_beacon {
 
 - **win32 同机双开互见大概率不成立**：Windows 的 `SO_REUSEADDR` 不等于 POSIX `SO_REUSEPORT`，多 socket 绑同一 UDP 端口时广播只投递给其中一个。自测请用两台真机，或手动 IP 模式连 `127.0.0.1`。
 - **Windows 防火墙**会对 UDP 8892 / TCP 8891 的入站弹询问，需用户允许（专用网络）；程序不做放行（需提权 `netsh`）。
-- win32 面板多一个"缓冲帧数 1~5"下拉框（mac 面板没有），这是 Q4 明确接受的两端 UI 差异；改动它会立即以新值重新发布。
+- ~~win32 面板多一个"缓冲帧数 1~5"下拉框（mac 面板没有），这是 Q4 明确接受的两端 UI 差异~~ → **2026-09-19 拍板改为两端一致：都不提供下拉框**，唯一来源是 `config.ini` 的 `[netplay] cache_num`。win32 的两个下拉框（`IDC_CMB_CACHE` / `IDC_LANMATCH_CMB_CACHE`）改为只读文本，实施步骤见 `docs/win32-netplay-handoff.md` §5.1 / §5.2。
 
 ### 15.5 单向可见修复：广播改为"按接口定向广播"（2026-09-19）
 

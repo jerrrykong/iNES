@@ -6,6 +6,7 @@
 // =====================================================================
 
 #import "iNESNetPlayDialog.h"
+#import "iNESConfig.h"
 
 #include "../comm/npsession.h"
 
@@ -19,8 +20,11 @@
 #define NPDLG_IP_DEFAULT   @"127.0.0.1"
 #define NPDLG_PORT_DEFAULT @"8891"
 
-// 缓冲帧数不再由本对话框选择: 统一用默认值(与 win32 的 net_cache_num 初值一致),
-// 后续如需调整放到"设置"里 —— 放在对战对话框底部容易被误读成"加入时才选的参数"。
+// 缓冲帧数不在这里选择: 取 config.ini 的 [netplay] cache_num(未配置则用默认),
+// 后续在"设置"里提供修改入口 —— 放在对战对话框底部容易被误读成"加入时才选的参数"。
+// 客户端该参数无效: 一律以服务端下发的值为准(两端必须一致)。
+#define NPDLG_CFG_SECTION   ISTR("netplay")
+#define NPDLG_CFG_CACHEKEY  ISTR("cache_num")
 
 
 @interface iNESNetPlayDialog () <NSWindowDelegate>
@@ -242,7 +246,15 @@ static NSButton* npdlg_make_button(NSString* title, NSRect frame, BOOL isDefault
 	}
 
 	isServer = (_radioServer.state == NSControlStateValueOn);
-	cacheNum = NP_CACHE_DEFAULT;   // 客户端该参数无效, 以服务端下发的为准
+
+	// 缓冲帧数取本机配置; 客户端传多少都无效(以服务端下发的为准), 服务端用它发布房间
+	cacheNum = (int)GetConfigInt(NPDLG_CFG_SECTION, NPDLG_CFG_CACHEKEY, NP_CACHE_DEFAULT);
+
+	if (cacheNum < NP_CACHE_MIN)
+		cacheNum = NP_CACHE_MIN;
+
+	if (cacheNum > NP_CACHE_MAX)
+		cacheNum = NP_CACHE_MAX;
 
 	if (0 != np_begin(isServer ? 1 : 0, [_ipField.stringValue UTF8String], port, _crc32, cacheNum))
 	{

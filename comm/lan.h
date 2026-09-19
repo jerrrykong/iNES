@@ -51,7 +51,8 @@ struct _lan_beacon {
 	ines_byte_t  peer_id[16];           // 进程级随机 id: 房间主键 + 过滤自身
 	ines_byte_t  nick[LAN_NICK_MAX];    // 昵称(UTF-8, 不补 0)
 	ines_byte_t  rom[LAN_ROM_MAX];      // ROM 文件名(UTF-8, 不补 0)
-	ines_byte_t  pad[10];               // 补齐到 128 字节
+	ines_dword_t net_ver;               // 本端联网协议版本(NET_VER): 不同版本不可加入
+	ines_byte_t  pad[6];                // 补齐到 128 字节
 };
 
 typedef struct _lan_beacon  lan_beacon_t;
@@ -66,6 +67,7 @@ struct _lan_room {
 	ines_word_t  tcp_port;
 	ines_byte_t  region;
 	ines_byte_t  cache_num;                 // 房主的缓冲帧数(0 = 对端未携带)
+	ines_dword_t net_ver;                   // 对端的联网协议版本(0 = 旧版未携带)
 	ines_dword_t addr;                      // 对端 IPv4(网络序)
 	ines_dword_t last_seen;                 // 上次收到 beacon 的时间(time(NULL))
 	ines_char_t  nick[LAN_NICK_MAX + 1];

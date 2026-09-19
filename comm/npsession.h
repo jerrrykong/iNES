@@ -126,6 +126,85 @@ int  np_frame_input(ines_byte_t mine_joypad, ines_byte_t mine_ctrl,
 					ines_int_t* out_main, ines_int_t* out_second, ines_int_t* out_ctrl);
 
 
+// =====================================================================
+// 状态同步(联机读档) —— 详见 docs/netplay-state-sync-plan.md
+//
+// 只有主机(服务端)能发起: 把存档字节流分片发给从机, 双方载入**同一份**字节流,
+// 载入成功后一起解冻继续对战。冻结期双方都不推进帧(前端见 NP_SYNC_BUSY 后跳过
+// doframe), 但**仍要继续调用** np_frame_begin() 与 np_sync_poll(), 否则收不到包。
+//
+// 失败处理(需求拍板):
+//   * 任一方载入不成功 -> NP_SYNC_RESET: **连接保持**, 主机在解冻后的首帧提交
+//     NET_CTRL_CODE_HARDRESET(走现有 ctrl + 延迟线, 双方同帧复位);
+//   * 只有链路断开 / 超时才 NP_SYNC_FAILED(此时状态可能已经分叉, 前端结束联网)。
+// =====================================================================
+
+// np_sync_state() 的取值
+#define NP_SYNC_NONE     0   // 无同步
+#define NP_SYNC_BUSY     1   // 同步进行中(双方冻结)
+#define NP_SYNC_OK       2   // 成功, 继续对战
+#define NP_SYNC_RESET    3   // 载入失败, 需要硬件复位(仅主机执行, 从机忽略)
+#define NP_SYNC_FAILED   4   // 链路断开/超时, 前端应结束联网
+
+// 单片载荷上限(接收缓冲 1024B, 留余量)
+#define NP_SYNC_CHUNK      512
+// 每帧最多发几片: 冻结期单帧不宜发太多, 100KB 存档约 25 帧(0.4s)
+#define NP_SYNC_CHUNKS     8
+// 存档总长上限(超出则从机 reject)
+#define NP_SYNC_MAX_SIZE   (512 * 1024)
+// 同步超时(秒)
+#define NP_SYNC_TIMEOUT    5
+// 存档格式版本(与 core/nes.c 的 INES_STATE_HEADER_VERSION 对齐)
+#define NP_STATE_VER       1
+
+/**
+ * 从内存载入存档。会话层不认识 core, 由前端提供(通常是"写临时文件 -> ines_load_state")。
+ *
+ * @param buf  存档字节流
+ * @param len  字节数
+ * @param user np_sync_set_handler() 传入的上下文
+ * @return 0 载入成功; 非 0 失败
+ */
+typedef int (*np_state_load_fn)(const void* buf, int len, void* user);
+
+/**
+ * 算当前状态的摘要(用于两端比对"是否载入了同一份状态")。可为 NULL —— 为 NULL 时
+ * 只做传输层 crc32 校验, 不做语义校验。
+ *
+ * @param out_sign [out] 摘要
+ * @param user     上下文
+ * @return 0 成功; 非 0 失败
+ */
+typedef int (*np_state_sign_fn)(ines_dword_t* out_sign, void* user);
+
+/** 注册载入/摘要回调(应在联网开始前后各注册一次均可, 只保存函数指针)。 */
+void np_sync_set_handler(np_state_load_fn load, np_state_sign_fn sign, void* user);
+
+/**
+ * 主机发起一次状态同步(把整份存档字节流发给从机)。
+ *
+ * @param buf 存档字节流(内部会拷一份, 调用后可立即释放)
+ * @param len 字节数(> 0 且 <= NP_SYNC_MAX_SIZE)
+ * @return 0 已发起(进入 NP_SYNC_BUSY); -1 未在对战中 / 非主机 / 参数非法 / 已在同步中
+ */
+int  np_sync_begin(const void* buf, int len);
+
+/**
+ * 推进同步(模拟线程每帧调用一次; 从机无需调用, 它在 np_frame_begin() 里被动应答)。
+ * 负责: 分片发送、超时判定、收尾。
+ */
+void np_sync_poll(void);
+
+/** 当前同步状态, 取值 NP_SYNC_*。 */
+int  np_sync_state(void);
+
+/** 取走结果后把状态清回 NP_SYNC_NONE(前端消费一次结果后调用)。 */
+void np_sync_clear(void);
+
+/** 取消进行中的同步(退出联网/换 ROM 等), 不发包, 只释放内部缓冲。 */
+void np_sync_cancel(void);
+
+
 #ifdef __cplusplus
 };
 #endif

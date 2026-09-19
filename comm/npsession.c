@@ -9,7 +9,9 @@
 //
 // 关于 START_RSP.fno: 该字段在 win32 里从未使用(预留), 这里把高 32 位用作
 // "服务端的缓冲帧数", 客户端据此对齐 —— 两端 net_cache_num 不一致时, 双方的
-// 输入延迟不同, 帧号会出现恒定偏移。旧版对端不填该字段(读回 0), 故沿用默认值。
+// 输入延迟不同, 帧号会出现恒定偏移。**客户端必须采用服务端下发的值**: 读到
+// 0(旧版未携带)或越界时, 一律视为版本过旧, 拒绝连接(而不是沿用本地默认值)。
+// code != 0 时该字段改为回传服务端 NET_VER, 供客户端提示"本机 x / 对端 y"。
 // =====================================================================
 
 #include "npsession.h"
@@ -20,6 +22,7 @@
 #include <windows.h>
 #endif
 
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
@@ -37,6 +40,20 @@ static int           s_cache_num  = NP_CACHE_DEFAULT;
 static ines_dword_t  s_crc32      = 0;
 static time_t        s_state_time = 0;
 static int           s_peer_quit  = 0;    // 收到过对端的 NET_CMD_QUIT(由 np_peer_quit() 取走)
+
+// 状态同步(联机读档): 见下方"状态同步"一节
+static int           s_sync_step  = 0;    // SYNC_* 子状态
+static int           s_sync_host  = 0;    // 本方是否发起方(主机)
+static int           s_sync_ret   = NP_SYNC_NONE;
+static ines_byte_t*  s_sync_buf   = NULL;
+static ines_dword_t  s_sync_len   = 0;
+static ines_dword_t  s_sync_got   = 0;
+static ines_dword_t  s_sync_crc   = 0;
+static time_t        s_sync_time  = 0;
+
+static np_state_load_fn  s_load_fn  = NULL;
+static np_state_sign_fn  s_sign_fn  = NULL;
+static void*             s_load_ctx = NULL;
 
 // 帧缓存: 31~24 控制码, 15~8 副手柄, 7~0 主手柄(与 win32 的 net_cache 同构)
 static ines_dword_t  s_cache[NP_CACHE_SLOTS];
@@ -108,6 +125,21 @@ static void np_reset(int do_close)
 	s_cache_size = 0;
 	s_peer_quit  = 0;
 
+	// 同步中的存档缓冲也要一起释放(退出联网/换 ROM 时会在任意阶段被打断)
+	if (s_sync_buf != NULL)
+	{
+		free(s_sync_buf);
+		s_sync_buf = NULL;
+	}
+
+	s_sync_step = 0;
+	s_sync_host = 0;
+	s_sync_ret  = NP_SYNC_NONE;
+	s_sync_len  = 0;
+	s_sync_got  = 0;
+	s_sync_crc  = 0;
+	s_sync_time = 0;
+
 	memset(s_cache, 0, sizeof(s_cache));
 }
 
@@ -143,6 +175,354 @@ static int np_is_timeout(void)
 {
 	return (s_state_time != 0)
 		&& ((s_state_time + NP_HANDSHAKE_TIMEOUT) < time(NULL));
+}
+
+
+// ---------------------------------------------------------------------
+// 状态同步(联机读档)
+//
+// 主机: np_sync_begin() -> 发 REQ -> (RSP ready) -> 分片发 DATA -> 收 DONE
+//       -> 自己载入同一份字节流并比对摘要 -> 发 GO(go/reset)
+// 从机: 收 REQ -> 回 RSP -> 收 DATA -> 载入 -> 回 DONE(ok, sign) -> 收 GO
+//
+// 任何一步"载入不成功" -> 主机解冻后首帧提交 NET_CTRL_CODE_HARDRESET, **连接保持**。
+// ---------------------------------------------------------------------
+
+// 内部子状态
+#define SYNC_IDLE       0
+#define SYNC_WAIT_RSP   1   // 主机: 已发 REQ
+#define SYNC_SEND       2   // 主机: 分片发送中
+#define SYNC_WAIT_DONE  3   // 主机: 已发完
+#define SYNC_RECV_DATA  4   // 从机: 收 DATA
+#define SYNC_WAIT_GO    5   // 从机: 已回 DONE
+
+/** CRC32(IEEE 802.3), 用于校验传输的存档字节流。 */
+static ines_dword_t np_crc32(const void* data, int len)
+{
+	static ines_dword_t   table[256];
+	static int            inited = 0;
+	const ines_byte_t*    p   = (const ines_byte_t*)data;
+	ines_dword_t          crc = 0xffffffffu;
+	int                   i;
+	int                   j;
+
+	// 表只在首次调用时生成: 联网期间只会由模拟线程/主线程各调一次,
+	// 即便竞态也只是重复写入相同的常量值
+	if (!inited)
+	{
+		for (i = 0; i < 256; i++)
+		{
+			ines_dword_t  c = (ines_dword_t)i;
+
+			for (j = 0; j < 8; j++)
+				c = (c & 1) ? (0xedb88320u ^ (c >> 1)) : (c >> 1);
+
+			table[i] = c;
+		}
+
+		inited = 1;
+	}
+
+	if ((p == NULL) || (len <= 0))
+		return 0;
+
+	for (i = 0; i < len; i++)
+		crc = table[(crc ^ p[i]) & 0xff] ^ (crc >> 8);
+
+	return crc ^ 0xffffffffu;
+}
+
+/** 释放内部缓冲并把子状态机复位(不改变对外的 s_sync_ret)。 */
+static void np_sync_free(void)
+{
+	if (s_sync_buf != NULL)
+	{
+		free(s_sync_buf);
+		s_sync_buf = NULL;
+	}
+
+	s_sync_step = SYNC_IDLE;
+	s_sync_host = 0;
+	s_sync_len  = 0;
+	s_sync_got  = 0;
+	s_sync_crc  = 0;
+	s_sync_time = 0;
+}
+
+/** 结束一次同步(结果由 np_sync_state() 交给前端)。 */
+static void np_sync_finish(int result)
+{
+	s_sync_ret = result;
+
+	np_sync_free();
+
+	INES_LOG(LOG_NTY, MOD_NET, ISTR("netplay: state sync %s\n"),
+			 (result == NP_SYNC_OK)    ? ISTR("ok")
+			 : ((result == NP_SYNC_RESET) ? ISTR("failed -> hard reset")
+										  : ISTR("failed -> link broken")));
+}
+
+/** 发一个同步包(失败只记日志: 链路问题会由超时/连接检查兜住)。 */
+static void np_sync_send(const void* pkg, int len)
+{
+	if (net_send_all(pkg, len) != len)
+		INES_LOG(LOG_ERR, MOD_NET, ISTR("netplay: state sync send failed : %s\n"), net_get_last_error());
+}
+
+/** 从机: 回 DONE。 */
+static void np_sync_send_done(int code, ines_dword_t sign)
+{
+	struct _net_state_done  done;
+
+	memset(&done, 0, sizeof(done));
+	done.cmd  = NET_CMD_STATE_DONE;
+	done.code = (ines_byte_t)code;
+	done.sign = sign;
+
+	np_sync_send(&done, (int)sizeof(done));
+}
+
+/** 主机: 处理 RSP / DONE。返回 1 表示已消费一个包。 */
+static int np_sync_host_recv(void)
+{
+	ines_byte_t  cmd;
+
+	if (s_sync_step == SYNC_IDLE)
+		return 0;
+
+	if (0 != net_pick_recv_data(&cmd, (int)sizeof(cmd)))
+		return 0;
+
+	if (cmd == NET_CMD_STATE_RSP)
+	{
+		struct _net_state_rsp  rsp;
+
+		if (0 != net_pick_recv_data(&rsp, (int)sizeof(rsp)))
+			return 0;
+
+		net_del_recv_data((int)sizeof(rsp));
+
+		if (s_sync_step != SYNC_WAIT_RSP)
+			return 1;
+
+		if (rsp.code != 0)
+		{
+			INES_LOG(LOG_WAR, MOD_NET, ISTR("netplay: peer rejected state sync, code=%d\n"),
+					 (int)rsp.code);
+			np_sync_finish(NP_SYNC_RESET);
+			return 1;
+		}
+
+		s_sync_step = SYNC_SEND;
+		s_sync_time = time(NULL);
+		return 1;
+	}
+
+	if (cmd == NET_CMD_STATE_DONE)
+	{
+		struct _net_state_done  done;
+
+		if (0 != net_pick_recv_data(&done, (int)sizeof(done)))
+			return 0;
+
+		net_del_recv_data((int)sizeof(done));
+
+		if (s_sync_step != SYNC_WAIT_DONE)
+			return 1;
+
+		{
+			struct _net_state_go  go;
+			ines_dword_t          sign = 0;
+
+			memset(&go, 0, sizeof(go));
+			go.cmd = NET_CMD_STATE_GO;
+
+			// 主机自己载入同一份字节流, 再与从机的状态摘要比对;
+			// 任一步失败(或摘要不一致) -> GO(reset), 双方同帧硬复位, 连接保持
+			if ((done.code == 0)
+			 && (s_load_fn != NULL)
+			 && (0 == s_load_fn(s_sync_buf, (int)s_sync_len, s_load_ctx))
+			 && ((s_sign_fn == NULL) || (0 == s_sign_fn(&sign, s_load_ctx)))
+			 && (sign == done.sign))
+			{
+				go.code = 0;
+				np_sync_send(&go, (int)sizeof(go));
+				np_sync_finish(NP_SYNC_OK);
+			}
+			else
+			{
+				INES_LOG(LOG_WAR, MOD_NET,
+						 ISTR("netplay: state sync mismatch (peer=%u, mine=%u)\n"),
+						 (unsigned)done.sign, (unsigned)sign);
+
+				go.code = 1;
+				np_sync_send(&go, (int)sizeof(go));
+				np_sync_finish(NP_SYNC_RESET);
+			}
+		}
+		return 1;
+	}
+
+	// 其余 STATE_*(不该由主机收到的): 整包丢弃, 避免卡住接收缓冲
+	if (cmd >= NET_CMD_STATE_REQ)
+	{
+		net_del_recv_data((int)sizeof(cmd));
+		return 1;
+	}
+
+	return 0;
+}
+
+/** 从机: 处理 REQ / DATA / GO。返回 1 表示已消费一个包。 */
+static int np_sync_client_recv(void)
+{
+	ines_byte_t  cmd;
+
+	if (0 != net_pick_recv_data(&cmd, (int)sizeof(cmd)))
+		return 0;
+
+	if (cmd == NET_CMD_STATE_REQ)
+	{
+		struct _net_state_req  req;
+		struct _net_state_rsp  rsp;
+		ines_byte_t            code = 0;
+
+		if (0 != net_pick_recv_data(&req, (int)sizeof(req)))
+			return 0;
+
+		net_del_recv_data((int)sizeof(req));
+
+		if (s_sync_step != SYNC_IDLE)
+			return 1;   // 已在同步中: 忽略重复的 REQ
+
+		if ((req.total_len == 0) || (req.total_len > NP_SYNC_MAX_SIZE))
+			code = 1;
+		else if (req.state_ver != NP_STATE_VER)
+			code = 1;
+		else
+		{
+			s_sync_buf = (ines_byte_t*)malloc((size_t)req.total_len);
+
+			if (s_sync_buf == NULL)
+				code = 1;
+		}
+
+		memset(&rsp, 0, sizeof(rsp));
+		rsp.cmd  = NET_CMD_STATE_RSP;
+		rsp.code = code;
+
+		np_sync_send(&rsp, (int)sizeof(rsp));
+
+		if (code != 0)
+		{
+			// 本方状态没变; 主机收到 reject 后同样走复位, 两端保持一致
+			np_sync_finish(NP_SYNC_RESET);
+			return 1;
+		}
+
+		s_sync_len  = req.total_len;
+		s_sync_got  = 0;
+		s_sync_crc  = req.crc32;
+		s_sync_step = SYNC_RECV_DATA;
+		s_sync_ret  = NP_SYNC_BUSY;      // 冻结: 前端跳过 doframe
+		s_sync_time = time(NULL);
+
+		INES_LOG(LOG_NTY, MOD_NET, ISTR("netplay: state sync recv %u bytes\n"),
+				 (unsigned)s_sync_len);
+		return 1;
+	}
+
+	if (cmd == NET_CMD_STATE_DATA)
+	{
+		ines_byte_t  head[3];
+		int          len;
+
+		if (0 != net_pick_recv_data(head, (int)sizeof(head)))
+			return 0;
+
+		len = (int)head[1] | ((int)head[2] << 8);
+
+		if ((len <= 0) || (len > NP_SYNC_CHUNK))
+		{
+			// 长度非法: 无法定位下一个包, 只能放弃(前端按异常结束联网)
+			net_del_recv_data((int)sizeof(head));
+			np_sync_send_done(1, 0);
+			np_sync_finish(NP_SYNC_FAILED);
+			return 1;
+		}
+
+		{
+			ines_byte_t  tmp[NP_SYNC_CHUNK + 8];
+
+			if (0 != net_pick_recv_data(tmp, 3 + len))
+				return 0;             // 还没收全, 留到下一帧
+
+			net_del_recv_data(3 + len);
+
+			if ((s_sync_step != SYNC_RECV_DATA) || (s_sync_buf == NULL))
+				return 1;
+
+			if ((s_sync_got + (ines_dword_t)len) > s_sync_len)
+			{
+				np_sync_send_done(1, 0);
+				np_sync_finish(NP_SYNC_RESET);
+				return 1;
+			}
+
+			memcpy(s_sync_buf + s_sync_got, tmp + 3, (size_t)len);
+			s_sync_got += (ines_dword_t)len;
+			s_sync_time = time(NULL);
+
+			if (s_sync_got >= s_sync_len)
+			{
+				ines_dword_t  sign = 0;
+
+				// 收齐: 传输层 crc32 -> 载入 -> 算状态摘要
+				if ((np_crc32(s_sync_buf, (int)s_sync_len) != s_sync_crc)
+				 || (s_load_fn == NULL)
+				 || (0 != s_load_fn(s_sync_buf, (int)s_sync_len, s_load_ctx))
+				 || ((s_sign_fn != NULL) && (0 != s_sign_fn(&sign, s_load_ctx))))
+				{
+					np_sync_send_done(1, 0);
+					np_sync_finish(NP_SYNC_RESET);
+				}
+				else
+				{
+					np_sync_send_done(0, sign);
+					s_sync_step = SYNC_WAIT_GO;
+					s_sync_time = time(NULL);
+				}
+			}
+		}
+		return 1;
+	}
+
+	if (cmd == NET_CMD_STATE_GO)
+	{
+		struct _net_state_go  go;
+
+		if (0 != net_pick_recv_data(&go, (int)sizeof(go)))
+			return 0;
+
+		net_del_recv_data((int)sizeof(go));
+
+		if (s_sync_step != SYNC_WAIT_GO)
+			return 1;
+
+		// code=1: 主机随后会提交硬复位控制码(延迟线保证双方同帧执行),
+		//         **本方不能自行复位**, 否则帧号会错位
+		np_sync_finish((go.code == 0) ? NP_SYNC_OK : NP_SYNC_RESET);
+		return 1;
+	}
+
+	// 其余 STATE_*(不该由从机收到的): 整包丢弃
+	if (cmd >= NET_CMD_STATE_REQ)
+	{
+		net_del_recv_data((int)sizeof(cmd));
+		return 1;
+	}
+
+	return 0;
 }
 
 
@@ -364,8 +744,13 @@ int np_poll(char* msg, ines_size_t len)
 					}
 					else if (nst.ver != NET_VER)
 					{
+						// 失败路径 fno 空闲: 回传本机(服务端)版本, 让对端能显示双方版本号
 						rsp.code = 1;
-						np_copy_tstr(text, count_of(text), ISTR("版本不匹配!"));
+						rsp.fno  = (ines_int64_t)NET_VER;
+
+						ines_snprintf(text, count_of(text),
+									  ISTR("版本不一致(本机 %u / 对端 %u), 请升级到相同版本!"),
+									  (unsigned)NET_VER, (unsigned)nst.ver);
 						np_fail(text, &rsp, (int)sizeof(rsp));
 						rc = NP_POLL_FAILED;
 					}
@@ -457,19 +842,21 @@ int np_poll(char* msg, ines_size_t len)
 					}
 					else if (rsp.code == 0)
 					{
-						// 服务端下发的缓冲帧数(高 32 位); 0 表示旧版对端, 沿用默认值
+						// 服务端下发的缓冲帧数(高 32 位): **必须采用**, 不可用本地默认值 ——
+						// 两端帧数不同 -> 输入延迟不同 -> 帧号恒定偏移。
+						// 读到 0(旧版未携带)或越界 -> 一律拒绝(等价"版本过旧")。
 						ines_dword_t  peer_cache = (ines_dword_t)(rsp.fno >> 32);
 
-						if ((peer_cache >= NP_CACHE_MIN) && (peer_cache <= NP_CACHE_MAX))
+						if ((peer_cache < NP_CACHE_MIN) || (peer_cache > NP_CACHE_MAX))
 						{
-							s_cache_num = (int)peer_cache;
+							np_copy_tstr(text, count_of(text),
+										 ISTR("对端版本过旧(未下发缓冲帧数), 请升级到相同版本!"));
+							np_fail(text, NULL, 0);
+							rc = NP_POLL_FAILED;
+							break;
 						}
-						else if (peer_cache != 0)
-						{
-							INES_LOG(LOG_WAR, MOD_NET,
-									 ISTR("netplay: peer cache_num %u out of range, keep %d\n"),
-									 peer_cache, s_cache_num);
-						}
+
+						s_cache_num = (int)peer_cache;
 
 						np_enter_playing();
 
@@ -478,7 +865,11 @@ int np_poll(char* msg, ines_size_t len)
 					}
 					else if (rsp.code == 1)
 					{
-						np_copy_tstr(text, count_of(text), ISTR("版本不匹配!"));
+						ines_dword_t  peer_ver = (ines_dword_t)(rsp.fno & 0xffffffffu);
+
+						ines_snprintf(text, count_of(text),
+									  ISTR("版本不一致(本机 %u / 对端 %u), 请升级到相同版本!"),
+									  (unsigned)NET_VER, (unsigned)peer_ver);
 						np_fail(text, NULL, 0);
 						rc = NP_POLL_FAILED;
 					}
@@ -529,6 +920,23 @@ void np_frame_begin(void)
 	while ((0 == flag) && (0 == net_pick_recv_data(&cmd, (int)sizeof(cmd))))
 	{
 		flag = 1;
+
+		// 状态同步包: 只由同步状态机处理(其余命令字落回下面的 switch)
+		if ((s_sync_step != SYNC_IDLE) || (cmd >= NET_CMD_STATE_REQ))
+		{
+			int  used = (s_sync_host != 0) ? np_sync_host_recv() : np_sync_client_recv();
+
+			if (used != 0)
+			{
+				flag = 0;      // 已消费一个包, 继续解析下一个
+				continue;
+			}
+
+			// STATE_* 但数据没收全(变长的 DATA 最常见): 留在缓冲里等下一帧,
+			// 绝不能落进 default 分支(那样会按 1 字节丢弃, 把包拆坏)
+			if (cmd >= NET_CMD_STATE_REQ)
+				break;
+		}
 
 		switch (cmd)
 		{
@@ -615,4 +1023,154 @@ int np_frame_input(ines_byte_t mine_joypad, ines_byte_t mine_ctrl,
 		*out_ctrl = (ines_int_t)((value >> 24) & 0xff);
 
 	return 0;
+}
+
+
+// ---------------------------------------------------------------------
+// 状态同步(联机读档) —— 对外接口
+// ---------------------------------------------------------------------
+
+void np_sync_set_handler(np_state_load_fn load, np_state_sign_fn sign, void* user)
+{
+	s_load_fn  = load;
+	s_sign_fn  = sign;
+	s_load_ctx = user;
+}
+
+int np_sync_begin(const void* buf, int len)
+{
+	struct _net_state_req  req;
+
+	if ((buf == NULL) || (len <= 0) || (len > NP_SYNC_MAX_SIZE))
+		return -1;
+
+	// 只有主机(监听方)能发起, 且必须已在对战中
+	if ((s_state != NP_ST_PLAYING) || (net_is_server() == 0))
+		return -1;
+
+	if (s_sync_step != SYNC_IDLE)
+		return -1;
+
+	s_sync_buf = (ines_byte_t*)malloc((size_t)len);
+	if (s_sync_buf == NULL)
+		return -1;
+
+	memcpy(s_sync_buf, buf, (size_t)len);
+
+	s_sync_host = 1;
+	s_sync_len  = (ines_dword_t)len;
+	s_sync_got  = 0;
+	s_sync_crc  = np_crc32(buf, len);
+	s_sync_step = SYNC_WAIT_RSP;
+	s_sync_ret  = NP_SYNC_BUSY;       // 冻结: 前端跳过 doframe
+	s_sync_time = time(NULL);
+
+	memset(&req, 0, sizeof(req));
+	req.cmd       = NET_CMD_STATE_REQ;
+	req.slot      = 0;
+	req.total_len = s_sync_len;
+	req.crc32     = s_sync_crc;
+	req.state_ver = NP_STATE_VER;
+
+	if (net_send_all(&req, (int)sizeof(req)) != (int)sizeof(req))
+	{
+		np_sync_finish(NP_SYNC_FAILED);
+		return -1;
+	}
+
+	INES_LOG(LOG_NTY, MOD_NET, ISTR("netplay: state sync begin, %d bytes\n"), len);
+
+	return 0;
+}
+
+void np_sync_poll(void)
+{
+	if (s_sync_step == SYNC_IDLE)
+		return;
+
+	if (s_state != NP_ST_PLAYING)
+	{
+		np_sync_cancel();
+		return;
+	}
+
+	if (0 == net_is_connected())
+	{
+		np_sync_finish(NP_SYNC_FAILED);
+		return;
+	}
+
+	if (s_sync_host != 0)
+	{
+		if (s_sync_step == SYNC_SEND)
+		{
+			int  i;
+
+			// 每帧最多 NP_SYNC_CHUNKS 片: 冻结期单帧不宜发太久(100KB 约 25 帧)
+			for (i = 0; (i < NP_SYNC_CHUNKS) && (s_sync_got < s_sync_len); i++)
+			{
+				ines_byte_t  tmp[NP_SYNC_CHUNK + 8];
+				int          n = (int)(s_sync_len - s_sync_got);
+
+				if (n > NP_SYNC_CHUNK)
+					n = NP_SYNC_CHUNK;
+
+				tmp[0] = NET_CMD_STATE_DATA;
+				tmp[1] = (ines_byte_t)(n & 0xff);
+				tmp[2] = (ines_byte_t)((n >> 8) & 0xff);
+
+				memcpy(tmp + 3, s_sync_buf + s_sync_got, (size_t)n);
+
+				if (net_send_all(tmp, 3 + n) != (3 + n))
+				{
+					np_sync_finish(NP_SYNC_FAILED);
+					return;
+				}
+
+				s_sync_got += (ines_dword_t)n;
+			}
+
+			if (s_sync_got >= s_sync_len)
+			{
+				s_sync_step = SYNC_WAIT_DONE;
+				s_sync_time = time(NULL);
+			}
+
+			// 发送阶段不判超时: net_send_all() 自带 5 秒超时并返回失败
+			return;
+		}
+
+		// 等 RSP / DONE: 超时即"两端状态无法保证一致" -> 硬件复位(连接保持)
+		if ((s_sync_time != 0) && ((s_sync_time + NP_SYNC_TIMEOUT) < time(NULL)))
+		{
+			INES_LOG(LOG_ERR, MOD_NET, ISTR("netplay: state sync timeout (step=%d)\n"), s_sync_step);
+			np_sync_finish(NP_SYNC_RESET);
+		}
+
+		return;
+	}
+
+	// 从机: 卡在"收数据 / 等 GO"说明主机侧异常, 状态可能已分叉 -> 交前端结束联网
+	if ((s_sync_time != 0) && ((s_sync_time + NP_SYNC_TIMEOUT) < time(NULL)))
+	{
+		INES_LOG(LOG_ERR, MOD_NET, ISTR("netplay: state sync timeout (step=%d)\n"), s_sync_step);
+		np_sync_finish(NP_SYNC_FAILED);
+	}
+}
+
+int np_sync_state(void)
+{
+	return s_sync_ret;
+}
+
+void np_sync_clear(void)
+{
+	s_sync_ret = NP_SYNC_NONE;
+}
+
+void np_sync_cancel(void)
+{
+	np_sync_free();
+
+	s_sync_ret = NP_SYNC_NONE;
 }

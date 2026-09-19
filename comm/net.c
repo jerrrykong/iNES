@@ -473,6 +473,68 @@ int net_send(void* data, int len)
 	return n;
 }
 
+/** 等 socket 变为可写, 最多 ms 毫秒; 返回 >0 可写, 0 超时, -1 出错。 */
+static int net_wait_write(socket_t sock, int ms)
+{
+	struct timeval  tv;
+	fd_set          wfds;
+
+	if(sock == INVALID_SOCKET)
+		return -1;
+
+	FD_ZERO(&wfds);
+	FD_SET(sock, &wfds);
+
+	tv.tv_sec  = ms / 1000;
+	tv.tv_usec = (ms % 1000) * 1000;
+
+	// 同 net_check_write(): POSIX 的 nfds 必须是"最大描述符 + 1"
+	return select(sock + 1, NULL, &wfds, NULL, &tv);
+}
+
+int net_send_all(const void* data, int len)
+{
+	const char*  p     = (const char*)data;
+	int          sent  = 0;
+	int          spent = 0;      // 已等待的毫秒数
+
+	if((data == NULL) || (len <= 0))
+		return -1;
+
+	if(s_sock_conn == INVALID_SOCKET)
+		return -1;
+
+	// 非阻塞 socket: send() 一次可能只发出一部分, 发送缓冲满时返回 -1(EWOULDBLOCK)。
+	// 因此循环"等可写 -> send -> 累计进度", 5 秒仍发不完即放弃(对端多半已经断开)。
+	while(sent < len)
+	{
+		if(net_check_write(s_sock_conn) || (net_wait_write(s_sock_conn, 5) > 0))
+		{
+			int  n = (int)send(s_sock_conn, p + sent, len - sent, 0);
+
+			if(n > 0)
+			{
+				sent += n;
+				spent = 0;
+				continue;
+			}
+		}
+
+		spent += 5;
+
+		if(spent >= 5000)
+			break;
+	}
+
+	if(sent != len)
+	{
+		net_error();
+		return -1;
+	}
+
+	return sent;
+}
+
 net_port_t net_get_local_port()
 {
 	return s_listen_port;
