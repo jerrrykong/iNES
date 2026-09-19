@@ -1,7 +1,7 @@
 // =====================================================================
-// iNES macOS 前端 —— 联网对战会话(实现)
+// 联网对战会话层(实现) —— win32 / macOS 共用
 //
-// 逻辑逐条对标 win32:
+// 逻辑逐条对标 win32 原始实现:
 //   * 握手: win32/dlgNetPlay.c 的 dlgNetPlay_TimedCheck()
 //           (服务端等 START 后回 START_RSP; 客户端连上即发 START 等 START_RSP)
 //   * 帧:   win32/iNES.c 的 send_frame() / recv_frame() / cache_add_mine()
@@ -9,12 +9,16 @@
 //
 // 关于 START_RSP.fno: 该字段在 win32 里从未使用(预留), 这里把高 32 位用作
 // "服务端的缓冲帧数", 客户端据此对齐 —— 两端 net_cache_num 不一致时, 双方的
-// 输入延迟不同, 帧号会出现恒定偏移。win32 不读该字段, 故互通无影响。
+// 输入延迟不同, 帧号会出现恒定偏移。旧版对端不填该字段(读回 0), 故沿用默认值。
 // =====================================================================
 
-#include "iNESNetPlaySession.h"
+#include "npsession.h"
 
-#include "../comm/log.h"
+#include "log.h"
+
+#ifdef WIN32
+#include <windows.h>
+#endif
 
 #include <string.h>
 #include <time.h>
@@ -42,17 +46,53 @@ static int           s_cache_size = 0;
 // 内部工具
 // ---------------------------------------------------------------------
 
-// 安全的文本拷贝(始终以 0 结尾)
-static void np_copy_text(char* dst, ines_size_t len, const char* src)
+/** 平台原生字符串之间的拷贝(内部用), 始终以 0 结尾。 */
+static void np_copy_tstr(ines_str_t dst, ines_size_t len, ines_cstr_t src)
 {
 	if ((dst == NULL) || (len <= 0))
 		return;
 
 	if (src == NULL)
-		src = "";
+		src = ISTR("");
 
 	ines_strncpy(dst, src, len - 1);
 	dst[len - 1] = 0;
+}
+
+/**
+ * 把平台原生字符串(win32: 宽字符 / macOS: UTF-8)拷成 **UTF-8 char**, 始终以 0 结尾。
+ *
+ * 提示文本对外统一 UTF-8, 界面层再各自转成可显示的字符串 —— 这样同一份会话层
+ * 在 Unicode(win32 GUI)与非 Unicode(macOS / inescore)目标下都能给出正确的中文提示。
+ */
+static void np_copy_utf8(char* dst, ines_size_t len, ines_cstr_t src)
+{
+	if ((dst == NULL) || (len <= 0))
+		return;
+
+	if (src == NULL)
+		src = ISTR("");
+
+#ifdef UNICODE
+	if (0 == WideCharToMultiByte(CP_UTF8, 0, src, -1, dst, (int)(len - 1), NULL, NULL))
+		dst[0] = 0;
+
+	dst[len - 1] = 0;
+#else
+	{
+		ines_size_t  i;
+
+		for (i = 0; (i + 1) < len; i++)
+		{
+			dst[i] = (char)src[i];
+
+			if (src[i] == 0)
+				break;
+		}
+
+		dst[len - 1] = 0;
+	}
+#endif
 }
 
 // 结束会话并清空帧缓存(不重复关链路以外的副作用)
@@ -71,17 +111,17 @@ static void np_reset(int do_close)
 
 // 握手失败: 按 win32 的 dlgNetPlay_ConnectError() 的顺序处理
 // (先回错误响应包, 再关链路, 最后把原因交给界面)
-static void np_fail(const char* msg, const void* rsp_data, int rsp_len)
+static void np_fail(ines_cstr_t msg, const void* rsp_data, int rsp_len)
 {
 	if ((rsp_data != NULL) && (rsp_len > 0))
 		net_send((void*)rsp_data, rsp_len);
 
 	np_reset(1);
 
-	INES_LOG(LOG_ERR, MOD_NET, ISTR("netplay: %s\n"), (msg != NULL) ? msg : "");
+	INES_LOG(LOG_ERR, MOD_NET, ISTR("netplay: %s\n"), (msg != NULL) ? msg : ISTR(""));
 }
 
-// 握手成功: 与 win32 的 IDM_NET_PLAY 处理一致, 预置 net_cache_num 个空帧
+// 握手成功: 与 win32 的 IDM_NET_PLAY 处理一致, 预置 cache_num 个空帧
 static void np_enter_playing(void)
 {
 	s_state      = NP_ST_PLAYING;
@@ -192,7 +232,7 @@ void np_end(void)
 	INES_LOG(LOG_NTY, MOD_NET, ISTR("netplay: stopped\n"));
 }
 
-int np_begin(int is_server, const char* ip, int port, ines_dword_t crc32, int cache_num)
+int np_begin(int is_server, ines_cstr_t ip, int port, ines_dword_t crc32, int cache_num)
 {
 	int  rc;
 
@@ -211,7 +251,7 @@ int np_begin(int is_server, const char* ip, int port, ines_dword_t crc32, int ca
 	if (s_is_server)
 		rc = net_listen((net_saddr_t)ISTR("0.0.0.0"), (net_port_t)port);
 	else
-		rc = net_connect((net_saddr_t)((ip != NULL) ? ip : "127.0.0.1"), (net_port_t)port);
+		rc = net_connect((net_saddr_t)((ip != NULL) ? ip : ISTR("127.0.0.1")), (net_port_t)port);
 
 	if (0 != rc)
 	{
@@ -227,7 +267,7 @@ int np_begin(int is_server, const char* ip, int port, ines_dword_t crc32, int ca
 
 	INES_LOG(LOG_NTY, MOD_NET, ISTR("netplay: %s at %s:%d, cache_num=%d\n"),
 			 s_is_server ? ISTR("listen") : ISTR("connect"),
-			 s_is_server ? ISTR("0.0.0.0") : ((ip != NULL) ? ip : ""),
+			 s_is_server ? ISTR("0.0.0.0") : ((ip != NULL) ? ip : ISTR("")),
 			 port, s_cache_num);
 
 	return 0;
@@ -257,7 +297,7 @@ int np_poll(char* msg, ines_size_t len)
 
 	if (s_state == NP_ST_NONE)
 	{
-		np_copy_text(msg, len, text);
+		np_copy_utf8(msg, len, text);
 		return NP_POLL_PENDING;
 	}
 
@@ -268,14 +308,14 @@ int np_poll(char* msg, ines_size_t len)
 		case NP_ST_WAIT_CONN:
 			if (!net_is_connected())
 			{
-				np_copy_text(text, sizeof(text), ISTR("等待客户端的连接..."));
+				np_copy_tstr(text, count_of(text), ISTR("等待客户端的连接..."));
 				break;
 			}
 
 			s_state      = NP_ST_WAIT_START;
 			s_state_time = time(NULL);
 
-			np_copy_text(text, sizeof(text), ISTR("连接成功，等待验证..."));
+			np_copy_tstr(text, count_of(text), ISTR("连接成功，等待验证..."));
 			break;
 
 		case NP_ST_WAIT_START:
@@ -293,21 +333,21 @@ int np_poll(char* msg, ines_size_t len)
 
 					if (nst.cmd != NET_CMD_START)
 					{
-						np_copy_text(text, sizeof(text), ISTR("连接错误!"));
+						np_copy_tstr(text, count_of(text), ISTR("连接错误!"));
 						np_fail(text, NULL, 0);
 						rc = NP_POLL_FAILED;
 					}
 					else if (nst.ver != NET_VER)
 					{
 						rsp.code = 1;
-						np_copy_text(text, sizeof(text), ISTR("版本不匹配!"));
+						np_copy_tstr(text, count_of(text), ISTR("版本不匹配!"));
 						np_fail(text, &rsp, (int)sizeof(rsp));
 						rc = NP_POLL_FAILED;
 					}
 					else if (nst.crc32 != s_crc32)
 					{
 						rsp.code = 2;
-						np_copy_text(text, sizeof(text), ISTR("ROM不匹配!"));
+						np_copy_tstr(text, count_of(text), ISTR("ROM不匹配!"));
 						np_fail(text, &rsp, (int)sizeof(rsp));
 						rc = NP_POLL_FAILED;
 					}
@@ -315,13 +355,13 @@ int np_poll(char* msg, ines_size_t len)
 					{
 						rsp.code    = 0;
 						rsp.is_ntsc = 1;
-						// 高 32 位: 服务端的缓冲帧数(win32 不使用 fno, 互通无影响)
+						// 高 32 位: 服务端的缓冲帧数(旧版对端不读该字段, 互通无影响)
 						rsp.fno     = ((ines_int64_t)s_cache_num) << 32;
 
 						net_send(&rsp, (int)sizeof(rsp));
 						np_enter_playing();
 
-						np_copy_text(text, sizeof(text), ISTR("连接成功!"));
+						np_copy_tstr(text, count_of(text), ISTR("连接成功!"));
 						rc = NP_POLL_OK;
 					}
 					break;
@@ -330,7 +370,7 @@ int np_poll(char* msg, ines_size_t len)
 
 			if (np_is_timeout())
 			{
-				np_copy_text(text, sizeof(text), ISTR("客户端验证超时!"));
+				np_copy_tstr(text, count_of(text), ISTR("客户端验证超时!"));
 				np_fail(text, NULL, 0);
 				rc = NP_POLL_FAILED;
 			}
@@ -347,7 +387,7 @@ int np_poll(char* msg, ines_size_t len)
 		case NP_ST_WAIT_CONN:
 			if (net_is_connect_failed())
 			{
-				np_copy_text(text, sizeof(text), net_get_last_error());
+				np_copy_tstr(text, count_of(text), net_get_last_error());
 				np_fail(text, NULL, 0);
 				rc = NP_POLL_FAILED;
 				break;
@@ -355,7 +395,7 @@ int np_poll(char* msg, ines_size_t len)
 
 			if (!net_is_connected())
 			{
-				np_copy_text(text, sizeof(text), ISTR("正在连接到服务器..."));
+				np_copy_tstr(text, count_of(text), ISTR("正在连接到服务器..."));
 				break;
 			}
 
@@ -373,7 +413,7 @@ int np_poll(char* msg, ines_size_t len)
 			s_state      = NP_ST_WAIT_START;
 			s_state_time = time(NULL);
 
-			np_copy_text(text, sizeof(text), ISTR("连接成功，等待验证..."));
+			np_copy_tstr(text, count_of(text), ISTR("连接成功，等待验证..."));
 			break;
 
 		case NP_ST_WAIT_START:
@@ -386,7 +426,7 @@ int np_poll(char* msg, ines_size_t len)
 
 					if (rsp.cmd != NET_CMD_START_RSP)
 					{
-						np_copy_text(text, sizeof(text), ISTR("连接错误!"));
+						np_copy_tstr(text, count_of(text), ISTR("连接错误!"));
 						np_fail(text, NULL, 0);
 						rc = NP_POLL_FAILED;
 					}
@@ -408,24 +448,24 @@ int np_poll(char* msg, ines_size_t len)
 
 						np_enter_playing();
 
-						np_copy_text(text, sizeof(text), ISTR("连接成功!"));
+						np_copy_tstr(text, count_of(text), ISTR("连接成功!"));
 						rc = NP_POLL_OK;
 					}
 					else if (rsp.code == 1)
 					{
-						np_copy_text(text, sizeof(text), ISTR("版本不匹配!"));
+						np_copy_tstr(text, count_of(text), ISTR("版本不匹配!"));
 						np_fail(text, NULL, 0);
 						rc = NP_POLL_FAILED;
 					}
 					else if (rsp.code == 2)
 					{
-						np_copy_text(text, sizeof(text), ISTR("ROM不匹配!"));
+						np_copy_tstr(text, count_of(text), ISTR("ROM不匹配!"));
 						np_fail(text, NULL, 0);
 						rc = NP_POLL_FAILED;
 					}
 					else
 					{
-						np_copy_text(text, sizeof(text), ISTR("连接错误!"));
+						np_copy_tstr(text, count_of(text), ISTR("连接错误!"));
 						np_fail(text, NULL, 0);
 						rc = NP_POLL_FAILED;
 					}
@@ -435,7 +475,7 @@ int np_poll(char* msg, ines_size_t len)
 
 			if (np_is_timeout())
 			{
-				np_copy_text(text, sizeof(text), ISTR("服务器验证超时!"));
+				np_copy_tstr(text, count_of(text), ISTR("服务器验证超时!"));
 				np_fail(text, NULL, 0);
 				rc = NP_POLL_FAILED;
 			}
@@ -446,7 +486,7 @@ int np_poll(char* msg, ines_size_t len)
 		}
 	}
 
-	np_copy_text(msg, len, text);
+	np_copy_utf8(msg, len, text);
 
 	return rc;
 }
@@ -523,6 +563,9 @@ int np_frame_input(ines_byte_t mine_joypad, ines_byte_t mine_ctrl,
 	value = np_cache_get();
 
 	// 服务端用主手柄, 客户端用副手柄(与 win32 一致)
+	//
+	// 注意: 这里依赖 net_is_server()(即"监听 socket 是否存在"), 因此开打后
+	// **不能**关闭监听 socket, 否则服务端会按客户机取值(手柄反转)。
 	if (net_is_server())
 	{
 		*out_main   = (ines_int_t)(value & 0xff);

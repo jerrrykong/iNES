@@ -19,6 +19,7 @@
 
 #ifdef WIN32
 #include <WinSock2.h>
+#include <windows.h>     // WideCharToMultiByte / MultiByteToWideChar(UTF-8 转换)
 #include <stdlib.h>
 typedef SOCKET  socket_t;
 #define  LAN_INVALID_SOCKET   INVALID_SOCKET
@@ -66,21 +67,26 @@ static ines_byte_t lan_rand_byte(void)
 
 // 本地字符集(win32 Unicode 下为宽字符) -> UTF-8 字节流。
 // 返回的缓冲区由本函数静态持有, 仅在下次调用前有效(调用方须立即消费)。
+//
+// win32 分支**必须**显式按 CP_UTF8 转换: wcstombs() 走的是当前 locale, 而
+// Windows 的默认 locale 不是 UTF-8, 中文昵称/ROM 名会被转成 '?' 或直接失败;
+// macOS(非 UNICODE)本就是 UTF-8 直通, 两端只有都按 UTF-8 才能正确显示中文。
 static const char* lan_t2a(ines_cstr_t ts)
 {
 #ifdef UNICODE
 	static char  out[512];
+	int          n;
 
 	if (ts == NULL)
 		return "";
 
-	{
-		size_t n = wcstombs(out, ts, sizeof(out) - 1);
-		if (n == (size_t)-1)
-			out[0] = 0;
-		else
-			out[n] = 0;
-	}
+	n = WideCharToMultiByte(CP_UTF8, 0, ts, -1, out, (int)sizeof(out) - 1, NULL, NULL);
+
+	if (n <= 0)
+		out[0] = 0;
+	else
+		out[n] = 0;
+
 	return out;
 #else
 	return (ts != NULL) ? (const char*)ts : "";
@@ -113,8 +119,10 @@ static void lan_a2t(ines_str_t dst, int dst_chars, const char* src, int src_byte
 		memcpy(tmp, src, src_bytes);
 		tmp[src_bytes] = 0;
 
-		n = (int)mbstowcs(dst, tmp, dst_chars - 1);
-		if (n < 0)
+		// 与 lan_t2a() 对称: 显式按 UTF-8 解释对端发来的字节, 不依赖 locale
+		n = MultiByteToWideChar(CP_UTF8, 0, tmp, -1, dst, dst_chars - 1);
+
+		if (n <= 0)
 			dst[0] = 0;
 		else
 			dst[n] = 0;

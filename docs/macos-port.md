@@ -147,9 +147,17 @@
 
 ### 4.7 图标
 
-- 源稿: `mac/icon/iNES-icon.svg`，红白机手柄抽象化（深红底 + 米白手柄面板 + 十字键 + 两枚圆钮）。
-- 输出: `mac/icon/iNES.icns`，由 `mac/icon/make-icns.sh` 生成，覆盖 16/32/64/128/256/512/1024 全尺寸并保留 alpha。
-- 接入: `CMakeLists.txt` 将 `.icns` 设为 `MACOSX_PACKAGE_LOCATION Resources`，`mac/Info.plist` 声明 `CFBundleIconFile = iNES.icns`。
+- 源稿: `mac/icon/iNES-icon.svg`，红白机手柄抽象化（深红底 + 米白手柄面板 + 十字键 + 两枚圆钮）。**mac / Windows 共用这一份源稿**，两边显示完全一致。
+- macOS 输出: `mac/icon/iNES.icns`（16/32/64/128/256/512/1024，保留 alpha）。接入: `CMakeLists.txt` 将 `.icns` 设为 `MACOSX_PACKAGE_LOCATION Resources`，`mac/Info.plist` 声明 `CFBundleIconFile = iNES.icns`。
+- Windows 输出: `win32/iNES.ico`（16/24/32/40/48/64/96/128/256）与 `win32/small.ico`（16/20/24/32/48）。接入: `win32/iNES.rc` 的 `IDI_INES` / `IDI_SMALL`，由 `win32/iNES.c` 注册窗口类时加载（`hIcon` / `hIconSm`）。
+- 生成脚本: `mac/icon/make-ico.ps1`（Windows，PowerShell + Chrome/Edge 无头渲染，无浏览器时退化为 `.icns` 位图 + GDI+ 缩放）：
+
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File mac\icon\make-ico.ps1             # 只更新 win32 的 .ico
+  powershell -ExecutionPolicy Bypass -File mac\icon\make-ico.ps1 -UpdateIcns  # 同时重打包 .icns
+  ```
+
+  `mac/icon/make-icns.sh`（`qlmanage` 路线）**会给 SVG 垫一层白底**，四角变成不透明白、图标显示为白方块；仓库内的 `.icns` 已是透明渲染的产物，重跑该脚本前请看它头部的说明。
 
 ## 5. 构建
 
@@ -315,7 +323,7 @@ cmake -S . -B build && cmake --build build                            # Release
 
 | 文件 | 职责 |
 |---|---|
-| `mac/iNESNetPlaySession.h` / `.c` | 会话层（C）：握手校验、延迟线帧缓存、主副手柄路由、控制码收发 |
+| `comm/npsession.h` / `.c` | 会话层（C，2026-09-19 由 `mac/iNESNetPlaySession` 下沉到 `comm/`，**win32 与 macOS 共用**）：握手校验、延迟线帧缓存、主副手柄路由、控制码收发 |
 | `mac/iNESNetPlayDialog.h` / `.m` | 对话框（ObjC，ARC）：运行方式、地址、端口、缓冲帧数、状态提示 |
 
 前置修复（P0，不修在 macOS 上根本连不上）：`comm/net.c` 的 `net_check_read()` 里 `select()` 的 `nfds` 在 POSIX 下必须是"最大描述符 + 1"，原代码传的是 `sock`（取值恒为 1）→ 描述符 > 1 时**当前 socket 恰好落在监听范围之外**，`select` 永远返回 0（永不可读）→ 服务端永远 `accept` 不到、客户端永远连不上。改为 `sock + 1`；Windows 忽略 `nfds`，行为不变。
@@ -347,7 +355,7 @@ cmake -S . -B build && cmake --build build                            # Release
 
 ### 8.8 M2：局域网快速配对（快速对战）
 
-设计方案：`docs/lan-quick-match-plan.md`。与 §8.7 的手动模式**并存**，两者共用同一套会话层（`mac/iNESNetPlaySession`），差别只在"怎么找到对端"。
+设计方案：`docs/lan-quick-match-plan.md`。与 §8.7 的手动模式**并存**，两者共用同一套会话层（`comm/npsession`，win32 端亦如此），差别只在"怎么找到对端"。
 
 | 文件 | 职责 |
 |---|---|

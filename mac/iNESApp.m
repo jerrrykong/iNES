@@ -28,7 +28,7 @@
 #import "iNESLanLobby.h"
 
 #import "../comm/log.h"
-#import "iNESNetPlaySession.h"
+#include "../comm/npsession.h"
 
 #include <stdio.h>
 #include <time.h>

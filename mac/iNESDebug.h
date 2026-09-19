@@ -17,8 +17,8 @@
 //   IDBG_VIEW_MEMORY    -> wMemory.c        (内存查看器)
 //   IDBG_VIEW_VMEMORY   -> wVmemory.c       (图形内存查看器)
 //   IDBG_VIEW_SPMEMORY  -> wSPmemory.c      (精灵内存查看器)
-//   IDBG_VIEW_REGISTER  -> iNESRegisterView (寄存器查看器; win32 的"寄存器"菜单项为空实现,
-//                                            mac 端补齐, 见 docs/register-view-plan.md)
+//   IDBG_VIEW_REGISTER  -> iNESRegisterView (寄存器查看器; win32 对应 win32/wRegister.c,
+//                                            见 docs/register-view-plan.md)
 //
 // 线程模型:
 //   host 由模拟线程独占。调试视图不能直接读取 host, 因此:
@@ -38,7 +38,7 @@
 #define IDBG_VIEW_MEMORY       3    // 内存查看器
 #define IDBG_VIEW_VMEMORY      4    // 图形内存查看器
 #define IDBG_VIEW_SPMEMORY     5    // 精灵内存查看器
-#define IDBG_VIEW_REGISTER     6    // 寄存器查看器(win32 无对应实现)
+#define IDBG_VIEW_REGISTER     6    // 寄存器查看器(win32: win32/wRegister.c)
 #define IDBG_VIEW_COUNT        7
 
 

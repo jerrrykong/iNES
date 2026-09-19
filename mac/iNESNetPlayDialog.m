@@ -1,12 +1,13 @@
 // =====================================================================
 // iNES macOS 前端 —— "网络对战"对话框(实现)
 //
-// 状态机完全由 iNESNetPlaySession 提供, 本文件只负责界面与 50ms 轮询,
-// 与 win32/dlgNetPlay.c 的 WM_TIMER 驱动方式一致(模拟线程不受影响)。
+// 状态机完全由 comm/npsession 提供(win32 与 macOS 共用), 本文件只负责界面与
+// 50ms 轮询, 与 win32/dlgNetPlay.c 的 WM_TIMER 驱动方式一致(模拟线程不受影响)。
 // =====================================================================
 
 #import "iNESNetPlayDialog.h"
-#import "iNESNetPlaySession.h"
+
+#include "../comm/npsession.h"
 
 
 #define NPDLG_CONTENT_W   340.0

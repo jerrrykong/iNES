@@ -1,10 +1,17 @@
-# 寄存器查看窗口 设计方案（macOS）
+# 寄存器查看窗口 设计方案（macOS / win32）
 
-> 状态: **mac 端已实现（2026-09-15）**，决策见 §10；win32 仍为空实现。
+> 状态: **mac 端已实现（2026-09-15）；win32 端已实现（2026-09-18，`win32/wRegister.c`）**，决策见 §10。
 >
 > 实现偏差: 实际 46 项（CPU 8 / PPU 12 / APU 23 / I/O 3），§4 原记 51/24 为多计;
 > 位格每个占 3 列（`[x]`），故总宽 97 列（≈710px）而非 88 列/648px。
-> 范围: **仅 macOS 前端**。win32 的 `IDM_VIEW_REG`(32867) 菜单项仍为空实现（`win32/iNES.c:811`），本次不动。
+> 范围: macOS 前端 `mac/iNESRegisterView.m` 与 win32 前端 `win32/wRegister.c`（`IDM_VIEW_REG` = 32867）。
+>
+> win32 实现的两点差异（由线程模型决定，非功能差异）:
+>   1. win32 的 `OnIdle()` 在主线程直接 `ines_host_doframe()`，host 与窗口同线程 ——
+>      **不需要**快照与写队列：取值直读 host 字段，改值直接应用（写端口仍走
+>      `ines_ppu_writelow` / `ines_apu_write` / `ines_host_write`）;
+>   2. 重绘沿用 wMemory.c 的 50ms `WM_TIMER` + `UpdateAllViews()` 节奏；暂停且无变化、
+>      无 Tips 时不重绘，变化高亮回落与 Tips 过期各补一拍整幅重绘。
 
 ## 0. 结论摘要
 
@@ -19,7 +26,7 @@
 
 | 项 | 现状 |
 |---|---|
-| `win32` | `IDM_VIEW_REG`(32867) 菜单存在，`win32/iNES.c:811` 为 `case IDM_VIEW_REG: break;` 空实现 —— **本次不动** |
+| `win32` | 已完成：`win32/wRegister.c` + `wRegister.h`（`IDM_VIEW_REG` = 32867 接上，`UpdateAllViews()` 加 `wReg_SetUpdate()`）；标题串 `IDS_WND_REG_TITLE`(115) |
 | `mac/iNESDebug.h` | 6 个视图（`IDBG_VIEW_COUNT 6`），第 20 行注释「win32 的"寄存器"菜单项为空实现, 这里同样不提供」 |
 | `mac/iNESApp.m:790-807` | 「调试视图」子菜单 6 项走 `showDebugView:`（tag = 视图号），另有单独一项「寄存器…」走 `showUnimplemented:` |
 | 快照 | `ines_dbg_snapshot_t` 目前只有内存/调色板/精灵 + `reg_ctrl_1`，**没有 CPU/APU 寄存器** |

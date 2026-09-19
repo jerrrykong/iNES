@@ -19,10 +19,12 @@
 #define IDS_WND_NT_TITLE                112
 #define IDS_WND_PT_TITLE                113
 #define IDS_WND_PAL_TITLE               114
+#define IDS_WND_REG_TITLE               115
 #define IDR_MAINFRAME                   128
 #define IDC_POPUP                       129
 #define IDD_NETPLAY                     130
 #define IDD_OPENROM                     131
+#define IDD_LANMATCH                    132
 #define IDC_RAD_SERVER                  1000
 #define IDC_RAD_CLIENT                  1001
 #define IDC_EDT_IP                      1002
@@ -34,6 +36,12 @@
 #define IDC_OPENROM_BTN_DIR             1008
 #define IDC_OPENROM_LIST                1009
 #define IDC_OPENROM_LAB_COUNT           1010
+#define IDC_LANMATCH_EDT_NICK           1011
+#define IDC_LANMATCH_LAB_ROM            1012
+#define IDC_LANMATCH_LIST               1013
+#define IDC_LANMATCH_LAB_INFO           1014
+#define IDC_LANMATCH_CMB_CACHE          1015
+#define IDC_LANMATCH_LAB_HINT           1016
 #define IDS_ERR_FILE_FORMAT             10001
 #define IDS_ERR_UNSUPPORT_MAPPER_ID     10002
 #define IDS_ERR_ILLEGAL_INSTRUCTION     10003
@@ -103,6 +111,7 @@
 #define IDM_VOLUMN_80                   32898
 #define IDM_VOLUMN_100                  32899
 #define IDM_NET_PLAY                    32902
+#define IDM_LAN_MATCH                   32903
 #define IDC_STATIC                      -1
 
 // Next default values for new objects
@@ -110,9 +119,9 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
-#define _APS_NEXT_RESOURCE_VALUE        132
-#define _APS_NEXT_COMMAND_VALUE         32903
-#define _APS_NEXT_CONTROL_VALUE         1011
+#define _APS_NEXT_RESOURCE_VALUE        133
+#define _APS_NEXT_COMMAND_VALUE         32904
+#define _APS_NEXT_CONTROL_VALUE         1017
 #define _APS_NEXT_SYMED_VALUE           110
 #endif
 #endif

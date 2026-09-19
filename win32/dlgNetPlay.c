@@ -1,32 +1,33 @@
+// =====================================================================
+// iNES win32 前端 —— "联网对战"对话框(手动输入 IP)
+//
+// 握手与帧缓存全部交给 comm/npsession(win32 与 macOS 共用同一份会话层), 本文件
+// 只负责界面与 50ms 轮询 —— 与 mac/iNESNetPlayDialog.m 一一对应, 两端行为一致。
+// 原实现把状态机写在本地(dlgNetPlay_TimedCheck), 已随会话层下沉而移除。
+// =====================================================================
 
 #include "stdafx.h"
-#include "../comm/log.h"
 #include "../comm/net.h"
+#include "../comm/npsession.h"
 #include "Resource.h"
 #include "dlgNetPlay.h"
-#include <time.h>
 
 
-// 联网对战的缓冲帧数(定义在 iNES.c)。原实现只把 1~5 填进下拉框却从未写回,
-// 选择项实际不生效, 这里在点"开始"时写回(只有"服务器"侧可设, 与下拉框的可用
-// 状态一致; cache_add_mine() 按 net_cache_num 定位写入槽位, 故必须夹到合法范围)。
-extern  ines_int_t  net_cache_num;
-
-#define NETPLAY_CACHE_MIN   1
-#define NETPLAY_CACHE_MAX   5
+#define NETPLAY_MSG_MAX   256
 
 
-static int s_is_server = 0;
-static int s_status = NET_ST_NONE;
-static time_t  s_status_time = 0;
-static ines_dword_t s_crc32 = 0;
+static int           s_is_server  = 0;
+static int           s_connecting = 0;
+static ines_dword_t  s_crc32      = 0;
+
 
 static INT_PTR CALLBACK dlgNetPlay_DlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
 static BOOL dlgNetPlay_OnInitDialog(HWND hDlg);
-static VOID dlgNetPlay_OnNotify(HWND hDlg, UINT nID, LPNMHDR lpNMHDR);
-
 static VOID dlgNetPlay_OnStartConnect(HWND hDlg);
 static VOID dlgNetPlay_TimedCheck(HWND hDlg);
+
+static VOID dlgNetPlay_SetInfo(HWND hDlg, const char* utf8);
+static VOID dlgNetPlay_StopConnecting(HWND hDlg);
 
 
 BOOL dlgNetPlay_DoModal(HINSTANCE hInstance, HWND hParentWnd, ines_dword_t  crc32)
@@ -34,7 +35,7 @@ BOOL dlgNetPlay_DoModal(HINSTANCE hInstance, HWND hParentWnd, ines_dword_t  crc3
 	INT_PTR iRet;
 
 	s_crc32 = crc32;
-	
+
 	iRet = DialogBox(hInstance, MAKEINTRESOURCE(IDD_NETPLAY), hParentWnd, dlgNetPlay_DlgProc);
 
 	if(iRet == IDOK)
@@ -46,7 +47,6 @@ BOOL dlgNetPlay_DoModal(HINSTANCE hInstance, HWND hParentWnd, ines_dword_t  crc3
 
 
 
-
 static INT_PTR CALLBACK dlgNetPlay_DlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
 
@@ -54,9 +54,6 @@ static INT_PTR CALLBACK dlgNetPlay_DlgProc(HWND hDlg, UINT message, WPARAM wPara
 	{
 	case WM_INITDIALOG:
 		return (INT_PTR)dlgNetPlay_OnInitDialog(hDlg);
-	case WM_NOTIFY:
-		dlgNetPlay_OnNotify(hDlg, (UINT)wParam, (LPNMHDR)lParam);
-		break;
 	case WM_COMMAND:
 		if (LOWORD(wParam) == IDOK )
 		{
@@ -66,19 +63,16 @@ static INT_PTR CALLBACK dlgNetPlay_DlgProc(HWND hDlg, UINT message, WPARAM wPara
 		}
 		else if(LOWORD(wParam) == IDCANCEL)
 		{
-			// cancel net mode dialog
+			// 握手进行中: 先停下, 不关对话框(与 mac 的"取消连接"一致)
+			if(s_connecting)
+			{
+				dlgNetPlay_StopConnecting(hDlg);
+				return (INT_PTR)TRUE;
+			}
+
 			KillTimer(hDlg, 100);
-			net_close();
-			if(s_status == NET_ST_NONE)
-			{
-				EndDialog(hDlg, LOWORD(wParam));
-			}
-			else
-			{
-				s_status = NET_ST_NONE;
-				SetDlgItemText(hDlg, IDC_LAB_INFO, ISTR(""));
-				EnableWindow(GetDlgItem(hDlg, IDOK), TRUE);
-			}
+			np_end();
+			EndDialog(hDlg, IDCANCEL);
 			return (INT_PTR)TRUE;
 		}
 		else if(LOWORD(wParam) >= IDC_RAD_SERVER && LOWORD(wParam) <= IDC_RAD_CLIENT)
@@ -107,7 +101,7 @@ static BOOL dlgNetPlay_OnInitDialog(HWND hDlg)
 	SendDlgItemMessage(hDlg, IDC_CMB_CACHE, CB_ADDSTRING, 0, (LPARAM)_T("4"));
 	SendDlgItemMessage(hDlg, IDC_CMB_CACHE, CB_ADDSTRING, 0, (LPARAM)_T("5"));
 	// select 4 
-	SendDlgItemMessage(hDlg, IDC_CMB_CACHE, CB_SETCURSEL, 3, 0);
+	SendDlgItemMessage(hDlg, IDC_CMB_CACHE, CB_SETCURSEL, NP_CACHE_DEFAULT - NP_CACHE_MIN, 0);
 
 
 
@@ -123,25 +117,67 @@ static BOOL dlgNetPlay_OnInitDialog(HWND hDlg)
 	SetDlgItemText(hDlg, IDC_EDT_IP, _T("127.0.0.1"));
 	SetDlgItemText(hDlg, IDC_EDT_PORT, _T("8891"));
 
-	s_status = NET_ST_NONE;
+	s_is_server  = 0;
+	s_connecting = 0;
 
 	return TRUE;
 }
 
 
-static VOID dlgNetPlay_OnNotify(HWND hDlg, UINT nID, LPNMHDR lpNMHDR)
+/**
+ * 显示会话层给出的提示文本(统一 UTF-8), 转成 TCHAR 再交给控件。
+ */
+static VOID dlgNetPlay_SetInfo(HWND hDlg, const char* utf8)
 {
+	ines_char_t  text[NETPLAY_MSG_MAX];
+
+	if(utf8 == NULL)
+	{
+		text[0] = 0;
+	}
+#ifdef UNICODE
+	else if(0 == MultiByteToWideChar(CP_UTF8, 0, utf8, -1, text, (int)count_of(text)))
+	{
+		text[0] = 0;
+	}
+#else
+	else
+	{
+		ines_strncpy(text, utf8, count_of(text) - 1);
+		text[count_of(text) - 1] = 0;
+	}
+#endif
+
+	SetDlgItemText(hDlg, IDC_LAB_INFO, text);
 }
 
+/** 停止握手并恢复界面(失败或用户取消连接)。 */
+static VOID dlgNetPlay_StopConnecting(HWND hDlg)
+{
+	KillTimer(hDlg, 100);
+
+	if(s_connecting)
+	{
+		np_end();
+		s_connecting = 0;
+	}
+
+	dlgNetPlay_SetInfo(hDlg, "");
+	EnableWindow(GetDlgItem(hDlg, IDOK), TRUE);
+}
 
 
 static VOID dlgNetPlay_OnStartConnect(HWND hDlg)
 {
 	ines_char_t   szIP[128];
 	int           iPort;
+	int           iCache;
 	BOOL          b;
 
-	GetDlgItemText(hDlg, IDC_EDT_IP, szIP, 128);
+	if(s_connecting)
+		return;
+
+	GetDlgItemText(hDlg, IDC_EDT_IP, szIP, (int)count_of(szIP));
 	iPort = GetDlgItemInt(hDlg, IDC_EDT_PORT, &b, FALSE);
 
 	if(!b)
@@ -150,202 +186,79 @@ static VOID dlgNetPlay_OnStartConnect(HWND hDlg)
 		return;
 	}
 
-	// 写回"缓冲帧数"(仅服务器侧可设)
+	// 缓冲帧数只有服务端侧可设(与下拉框的可用状态一致); 客户端以服务端下发的为准
+	iCache = NP_CACHE_DEFAULT;
+
 	if(IsDlgButtonChecked(hDlg, IDC_RAD_SERVER))
 	{
 		int  iSel = (int)SendDlgItemMessage(hDlg, IDC_CMB_CACHE, CB_GETCURSEL, 0, 0);
 
 		if(iSel >= 0)
-			net_cache_num = iSel + 1;
+			iCache = iSel + NP_CACHE_MIN;
 
-		if(net_cache_num < NETPLAY_CACHE_MIN)
-			net_cache_num = NETPLAY_CACHE_MIN;
+		if(iCache < NP_CACHE_MIN)
+			iCache = NP_CACHE_MIN;
 
-		if(net_cache_num > NETPLAY_CACHE_MAX)
-			net_cache_num = NETPLAY_CACHE_MAX;
+		if(iCache > NP_CACHE_MAX)
+			iCache = NP_CACHE_MAX;
 	}
 
-	net_close();
+	s_is_server = IsDlgButtonChecked(hDlg, IDC_RAD_SERVER) ? 1 : 0;
 
-	s_is_server = IsDlgButtonChecked(hDlg, IDC_RAD_SERVER);
-
-	// start connect
-	if(s_is_server)
+	// 开始握手: 服务端监听, 客户端连接(会话层内部状态机与 mac 端完全一致)
+	if(0 != np_begin(s_is_server, szIP, iPort, s_crc32, iCache))
 	{
-		// run as a server
-		if( 0 != net_listen(ISTR("0.0.0.0"), iPort))
-		{
-			MessageBox(hDlg, net_get_last_error(), ISTR("iNes"), MB_OK|MB_ICONSTOP);
-			return;	
-		}
-		
-		SetDlgItemText(hDlg, IDC_LAB_INFO, ISTR("等待客户端的连接..."));
-		
-	}
-	else
-	{
-		// run as a client
-
-		if( 0 != net_connect(szIP, iPort))
-		{
-			MessageBox(hDlg, net_get_last_error(), ISTR("iNes"), MB_OK|MB_ICONSTOP);
-			return;	
-		}
-
-		SetDlgItemText(hDlg, IDC_LAB_INFO, ISTR("正在连接到服务器..."));
+		MessageBox(hDlg, net_get_last_error(), ISTR("iNes"), MB_OK|MB_ICONSTOP);
+		return;	
 	}
 
-	// timed check 
+	s_connecting = 1;
 
 	EnableWindow(GetDlgItem(hDlg, IDOK), FALSE);
-	// EnableWindow(GetDlgItem(hDlg, IDCANCEL), FALSE);
 
-	s_status = NET_ST_WAIT_CONN;
-	s_status_time = time(NULL);
+	dlgNetPlay_SetInfo(hDlg, s_is_server ? "等待客户端的连接..." : "正在连接到服务器...");
 
+	// timed check(与 mac 的 0.05s 定时器一致)
 	SetTimer(hDlg, 100, 50, NULL);
 }
 
 
-static VOID dlgNetPlay_ConnectError(HWND hDlg, ines_cstr_t msg, void* rsp_data, int len)
-{
-	s_status = NET_ST_NONE;
-	s_status_time = 0;
-	KillTimer(hDlg, 100);
-	if(rsp_data != NULL)
-	{
-		net_send(rsp_data, len);
-	}
-	MessageBox(hDlg, msg, ISTR("iNes"), MB_OK|MB_ICONSTOP);
-	net_close();
-	SetDlgItemText(hDlg, IDC_LAB_INFO, ISTR(""));
-	EnableWindow(GetDlgItem(hDlg, IDOK), TRUE);
-}
-
 static VOID dlgNetPlay_TimedCheck(HWND hDlg)
 {
-	if(s_is_server)
-	{
-		switch(s_status)
-		{
-		case NET_ST_WAIT_CONN:
-			if(!net_is_connected())
-				return;
-			SetDlgItemText(hDlg, IDC_LAB_INFO, ISTR("连接成功，等待验证..."));
-			s_status = NET_ST_WAIT_START;
-			s_status_time = time(NULL);
-			break;
-		case NET_ST_WAIT_START:
-			//if(net_check_recv() >= sizeof(nst))
-			{
-				struct _net_start  nst;
-				struct _net_start_rsp  rsp;
-				rsp.cmd = NET_CMD_START_RSP;
+	char  msg[NETPLAY_MSG_MAX];
+	int   rc;
 
-				if(0 == net_pick_recv_data(&nst, sizeof(nst)) )
-				{ 
-					net_del_recv_data(sizeof(nst));
-					if( nst.cmd != NET_CMD_START )
-					{
-						dlgNetPlay_ConnectError(hDlg, ISTR("连接错误!"), NULL, 0);
-					} 
-					else if( nst.ver != NET_VER )
-					{
-						rsp.code = 1;
-						dlgNetPlay_ConnectError(hDlg, ISTR("版本不匹配!"), &rsp, sizeof(rsp));
-					}
-					else if( nst.crc32 != s_crc32 )
-					{
-						rsp.code = 2;
-						dlgNetPlay_ConnectError(hDlg, ISTR("ROM不匹配!"),  &rsp, sizeof(rsp));
-					}
-					else
-					{
-						rsp.code = 0;
-						rsp.is_ntsc = 1;
-						net_send(&rsp, sizeof(rsp));
-						EndDialog(hDlg, IDOK);
-					}
-					break;
-				}
-			}
-			if(s_status_time + 5 < time(NULL))
-			{
-				// check verify timeout
-				dlgNetPlay_ConnectError(hDlg, ISTR("客户端验证超时!"), NULL, 0);
-				break;
-			}
-			break;
-		}
+	msg[0] = 0;
+
+	rc = np_poll(msg, (ines_size_t)sizeof(msg));
+
+	dlgNetPlay_SetInfo(hDlg, msg);
+
+	if(rc == NP_POLL_OK)
+	{
+		KillTimer(hDlg, 100);
+		s_connecting = 0;
+
+		EndDialog(hDlg, IDOK);
+		return;
 	}
-	else
+
+	if(rc == NP_POLL_FAILED)
 	{
-		switch(s_status)
-		{
-		case NET_ST_WAIT_CONN:
-			if(net_is_connect_failed())
-			{
-				dlgNetPlay_ConnectError(hDlg, net_get_last_error(), NULL, 0);
-				break;
-			}
-			if(!net_is_connected())
-			{
-				return;
-			}
+		ines_char_t  text[NETPLAY_MSG_MAX];
 
-			{
-				struct _net_start   nst;
-				nst.cmd = NET_CMD_START;
-				nst.ver = NET_VER;
-				nst.crc32 = s_crc32;
+		dlgNetPlay_StopConnecting(hDlg);
 
-				net_send(&nst, sizeof(nst));
+		// 会话层已关闭链路, 这里只把原因弹出来
+#ifdef UNICODE
+		if(0 == MultiByteToWideChar(CP_UTF8, 0, msg, -1, text, (int)count_of(text)))
+			text[0] = 0;
+#else
+		ines_strncpy(text, msg, count_of(text) - 1);
+		text[count_of(text) - 1] = 0;
+#endif
 
-			}
-			SetDlgItemText(hDlg, IDC_LAB_INFO, ISTR("连接成功，等待验证..."));
-			s_status = NET_ST_WAIT_START;
-			s_status_time = time(NULL);
-			break;
-		case NET_ST_WAIT_START:
-			//if(net_check_recv() >= sizeof(nst))
-			{
-				struct _net_start_rsp  rsp;
-
-				if(0 == net_pick_recv_data(&rsp, sizeof(rsp)) )
-				{
-					net_del_recv_data(sizeof(rsp));
-					if( rsp.cmd != NET_CMD_START_RSP )
-					{
-						dlgNetPlay_ConnectError(hDlg, ISTR("连接错误!"), NULL, 0);
-					} 
-					else if(rsp.code == 0)
-					{
-						// set ntsc...
-						// todo:
-						EndDialog(hDlg, IDOK);
-					}
-					else if( rsp.code  == 1 )
-					{
-						dlgNetPlay_ConnectError(hDlg, ISTR("版本不匹配!"), NULL, 0);
-					}
-					else if( rsp.code == 2 )
-					{
-						dlgNetPlay_ConnectError(hDlg, ISTR("ROM不匹配!"), NULL, 0);
-					}
-					else
-					{
-						dlgNetPlay_ConnectError(hDlg, ISTR("连接错误!"), NULL, 0);
-					}
-					break;
-				}
-			}
-			if(s_status_time + 5 < time(NULL))
-			{
-				// check verify timeout
-				dlgNetPlay_ConnectError(hDlg, ISTR("客户端验证超时!"), NULL, 0);
-				break;
-			}
-			break;
-		}
+		MessageBox(hDlg, (text[0] != 0) ? text : ISTR("连接失败"), ISTR("iNes"), MB_OK|MB_ICONSTOP);
+		return;
 	}
 }

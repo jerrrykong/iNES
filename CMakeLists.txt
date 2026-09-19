@@ -134,6 +134,7 @@ set(INES_COMMON_COMM_SOURCES
     "${INES_DIR}/comm/lan.c"
     "${INES_DIR}/comm/log.c"
     "${INES_DIR}/comm/net.c"
+    "${INES_DIR}/comm/npsession.c"
     "${INES_DIR}/comm/platform.c")
 
 # comm/thread.c 仅被 iNesCore_DLL 使用(iNES.exe 不包含)
@@ -141,6 +142,7 @@ set(INES_THREAD_SOURCE "${INES_DIR}/comm/thread.c")
 
 # win32 GUI 源文件(iNES.vcproj 的 win32 分组)
 set(INES_WIN32_SOURCES
+    "${INES_DIR}/win32/dlgLanMatch.c"
     "${INES_DIR}/win32/dlgOpenRom.c"
     "${INES_DIR}/win32/dlgNetPlay.c"
     "${INES_DIR}/win32/iNES.c"
@@ -149,6 +151,7 @@ set(INES_WIN32_SOURCES
     "${INES_DIR}/win32/wNameTable.c"
     "${INES_DIR}/win32/wPalette.c"
     "${INES_DIR}/win32/wPatternTable.c"
+    "${INES_DIR}/win32/wRegister.c"
     "${INES_DIR}/win32/wSPmemory.c"
     "${INES_DIR}/win32/wVmemory.c")
 
@@ -168,21 +171,24 @@ set(INES_MAC_OBJC_SOURCES
 set(INES_MAC_C_SOURCES
     "${INES_DIR}/mac/iNESOsd.c"
     "${INES_DIR}/mac/iNESPalette.c"
-    "${INES_DIR}/mac/iNESConfig.c"
-    "${INES_DIR}/mac/iNESNetPlaySession.c")
+    "${INES_DIR}/mac/iNESConfig.c")
 
 set(INES_MAC_SOURCES
     ${INES_MAC_OBJC_SOURCES}
     ${INES_MAC_C_SOURCES})
 
-# macOS 应用图标: 由 mac/icon/iNES-icon.svg 经 mac/icon/make-icns.sh 生成。
+# macOS 应用图标: 由 mac/icon/iNES-icon.svg 生成(见 mac/icon/make-icns.sh 与 mac/icon/make-ico.ps1)。
 # 借助 MACOSX_PACKAGE_LOCATION 让 CMake 把它拷进 iNES.app/Contents/Resources/。
+# 注意: 只在 APPLE 下检查文件是否齐全 —— 写成 "APPLE AND EXISTS" 的话, 非 Apple 平台
+#       该条件恒为假, 会误报"缺少 macOS 图标"。
 set(INES_MAC_ICON "${INES_DIR}/mac/icon/iNES.icns")
-if(APPLE AND EXISTS "${INES_MAC_ICON}")
-    set_source_files_properties("${INES_MAC_ICON}"
-        PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
-else()
-    message(WARNING "iNES: 缺少 macOS 图标 ${INES_MAC_ICON}, 应用将显示默认图标")
+if(APPLE)
+    if(EXISTS "${INES_MAC_ICON}")
+        set_source_files_properties("${INES_MAC_ICON}"
+            PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+    else()
+        message(WARNING "iNES: 缺少 macOS 图标 ${INES_MAC_ICON}, 应用将显示默认图标")
+    endif()
 endif()
 
 # 前端使用 ARC(自动引用计数): 视图/音频模块依赖 weak 属性与 block 捕获语义。

@@ -7,6 +7,12 @@
 #
 # 用法: cd mac/icon && ./make-icns.sh
 #
+# 已知坑(重要): qlmanage -t 光栅化 SVG 时会垫一层白底 —— 实测本脚本产出的
+#   .icns 四角是 A=255 的纯白, 图标在深色背景下显示为"白方块"。
+#   仓库里的 iNES.icns 已改用 mac/icon/make-ico.ps1 的透明渲染产物
+#   (Chrome/Edge 无头渲染, --default-background-color=00000000)。
+#   重跑本脚本会把白底带回来, 除非先给 qlmanage 这条链路换掉。
+#
 # 说明: 先在 1024x1024 下光栅化 SVG(qlmanage 走 WebKit 矢量渲染, 保真度最高),
 #       再用 sips 逐级降采样出 Big Sur 图标网格所需的各个尺寸。
 #       注意 sips 会保留 alpha, 而 ImageMagick 在小尺寸下可能丢弃 alpha, 故不用它。

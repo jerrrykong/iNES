@@ -52,6 +52,7 @@ BEGIN
         MENUITEM "卸载ROM(&U)\tCtrl+U",           IDM_CLOSE
         MENUITEM SEPARATOR
         MENUITEM "联网对战",                        IDM_NET_PLAY
+        MENUITEM "局域网快速对战(&L)",               IDM_LAN_MATCH
         MENUITEM SEPARATOR
         MENUITEM "最近文件",                        32990, INACTIVE
         MENUITEM SEPARATOR
@@ -225,7 +226,7 @@ STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSM
 CAPTION "关于 iNES"
 FONT 9, "MS Shell Dlg", 0, 0, 0x1
 BEGIN
-    ICON            128,IDC_STATIC,14,14,21,20
+    ICON            IDI_INES,IDC_STATIC,14,14,21,20
     LTEXT           "iNES，1.0 版",IDC_STATIC,42,14,114,8,SS_NOPREFIX
     LTEXT           "Copyright (C) 2015",IDC_STATIC,42,26,114,8
     DEFPUSHBUTTON   "确定",IDOK,113,41,50,14,WS_GROUP
@@ -263,6 +264,24 @@ BEGIN
     LTEXT           "",IDC_OPENROM_LAB_COUNT,7,278,240,12
     DEFPUSHBUTTON   "加载",IDOK,300,275,60,18
     PUSHBUTTON      "取消",IDCANCEL,368,275,60,18
+END
+
+// 局域网快速对战: 上(昵称/本机 ROM/说明) / 中(房间列表) / 下(缓冲帧数、提示、加入、关闭)
+IDD_LANMATCH DIALOGEX 0, 0, 440, 300
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "局域网快速对战"
+FONT 9, "MS Shell Dlg", 0, 0, 0x1
+BEGIN
+    LTEXT           "昵称:",IDC_STATIC,7,12,30,10
+    EDITTEXT        IDC_LANMATCH_EDT_NICK,40,8,150,16,ES_AUTOHSCROLL
+    LTEXT           "",IDC_LANMATCH_LAB_ROM,200,12,233,10
+    LTEXT           "已发布到局域网。加入他人房间后，本机作为副手柄（客户机）。",IDC_LANMATCH_LAB_HINT,7,32,426,10
+    CONTROL         "",IDC_LANMATCH_LIST,"SysListView32",LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | WS_BORDER | WS_TABSTOP,7,48,427,190
+    LTEXT           "缓冲帧数",IDC_STATIC,7,246,40,10
+    COMBOBOX        IDC_LANMATCH_CMB_CACHE,52,242,54,80,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "",IDC_LANMATCH_LAB_INFO,120,246,314,10
+    DEFPUSHBUTTON   "加入",IDOK,300,275,60,18
+    PUSHBUTTON      "关闭",IDCANCEL,368,275,60,18
 END
 
 
@@ -359,6 +378,7 @@ BEGIN
     IDS_WND_NT_TITLE        "卷轴查看器"
     IDS_WND_PT_TITLE        "图形查看器"
     IDS_WND_PAL_TITLE       "色盘查看器"
+    IDS_WND_REG_TITLE       "寄存器查看器"
 END
 
 #endif    // 中文(中华人民共和国) resources

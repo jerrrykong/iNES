@@ -1,15 +1,16 @@
 // =====================================================================
 // iNES macOS 前端 —— 局域网快速配对面板(实现)
 //
-// 状态推进完全交给 iNESNetPlaySession(np_begin / np_poll), 本文件只负责:
+// 状态推进完全交给 comm/npsession(np_begin / np_poll, 与 win32 共用), 本文件只负责:
 //   1) 每 500ms 刷新房间列表, 每 1s 广播一次自己的房间;
 //   2) 服务端被动等待接入(nb_poll 的 server 分支会自动 accept 并握手);
 //   3) 用户双击房间 -> 停广播 -> np_begin(client) 接入。
 // =====================================================================
 
 #import "iNESLanLobby.h"
-#import "iNESNetPlaySession.h"
 #import "iNESConfig.h"
+
+#include "../comm/npsession.h"
 
 #include "../comm/net.h"
 #include "../comm/log.h"
@@ -495,7 +496,7 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 		// 开打后不再广播(房间随即从别人的列表里消失)
 		//
 		// 注意: 这里不能关闭监听 socket —— comm/net.c 的 net_is_server() 以"监听
-		// socket 是否存在"为判据, 而 iNESNetPlaySession 的 np_frame_input() 正是
+		// socket 是否存在"为判据, 而 comm/npsession 的 np_frame_input() 正是
 		// 用它决定主/副手柄路由; 一旦关掉, 服务端会按客户机取值(手柄反转)。
 		// 监听 socket 统一由 np_end() 关闭; 且已有连接时 net_is_connected() 不会
 		// 再 accept, 因此保留它对对战没有任何影响。

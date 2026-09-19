@@ -50,7 +50,7 @@ powershell -ExecutionPolicy Bypass -File tools\convert_encoding.ps1 -WhatIf   # 
 powershell -ExecutionPolicy Bypass -File tools\convert_encoding.ps1          # 执行
 ```
 
-脚本已排除 `bin` `doc` `project` `build` `cmake-build-*` `out` `.git` `.codebuddy` 目录。
+脚本已排除 `bin` `doc` `build` `cmake-build-*` `out` `.git` `.codebuddy` 目录。
 
 ## 5. 常见构建问题
 
@@ -63,7 +63,18 @@ powershell -ExecutionPolicy Bypass -File tools\convert_encoding.ps1          # �
 | `C4819` 中文告警 | 缺 `/utf-8` | 已在 CMake 中统一添加，勿删除 |
 | 帧率明显偏低（`assert` 反而生效） | 单配置生成器下 `CMAKE_BUILD_TYPE` 为空 | 现已默认 `Release`；旧的空类型构建目录删除后重新配置 |
 
-## 6. Win64
+## 6. 应用图标
+
+Windows 与 macOS 共用一份源稿 `mac/icon/iNES-icon.svg`：
+
+| 平台 | 产物 | 生成方式 |
+|---|---|---|
+| Windows | `win32/iNES.ico`、`win32/small.ico` | `powershell -ExecutionPolicy Bypass -File mac\icon\make-ico.ps1` |
+| macOS | `mac/icon/iNES.icns` | 同上加 `-UpdateIcns`；`mac/icon/make-icns.sh`（qlmanage 路线）会垫白底，详见其头部说明 |
+
+`.ico` 用 32bpp DIB（BGRA + alpha、自下而上）而不是 PNG 条目：`rc.exe` 与各版本 Windows 的资源加载器对 DIB 支持最广。重新生成图标后重新构建 `iNES` 目标即可 —— `.ico` 时间戳变化会触发 `iNES.rc` 重编译。
+
+## 7. Win64
 
 评估为安全（无内联汇编、无指针/整型互存、`socket_t` 已按平台定义、LLP64 下 `long` 仍为 32 位）。构建后请关注 `C4267 / C4311 / C4312 / C4244` 警告。
 

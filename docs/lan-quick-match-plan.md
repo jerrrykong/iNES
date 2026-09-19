@@ -1,11 +1,14 @@
-# 局域网快速配对对战 设计方案（macOS）
+# 局域网快速配对对战 设计方案（macOS / win32）
 
-> 状态: **实施中**（阶段 1~3 已完成并自测通过，阶段 4 收尾中；进度与实测见 §13）
+> 状态: **mac 端阶段 1~3 已完成并自测通过、阶段 4 收尾中（进度与实测见 §13）；
+> win32 端已实施完毕、构建 0 警告（记录见 §15），真机跨端验证待用户完成**
 >
-> 范围: **仅 macOS 前端**。本机无 Win32 构建环境（无 MSVC / `rc.exe`），**本次不同步实现 win32**；
-> win32 的「联网对战…」（手动输入 IP）保持原样不受影响，两种模式在 mac 端并存。
+> 范围: macOS 前端（`mac/iNESLanLobby.*`）与 win32 前端（`win32/dlgLanMatch.*`），
+> **两端要能互相发现、互相对战**。原 D1「不同步实现 win32」已作废：本机已有 VS2022 + CMake 构建环境
+> （见 `docs/build.md`），且 `comm/lan.c` 本就是跨平台实现、已编入两个目标。
 >
-> 与现有手动对战的关系: 两者**只共享会话层**（`mac/iNESNetPlaySession`），发现层完全独立，互不干扰。
+> 与现有手动对战的关系: 两者**只共享会话层**（两端共用的 `comm/npsession`，由 `mac/iNESNetPlaySession`
+> 下沉而来），发现层完全独立，互不干扰。
 
 ---
 
@@ -31,7 +34,7 @@
 
 | # | 规则 | 说明 |
 |---|---|---|
-| R1 | 仅 macOS | win32 不同步实现；除非用户明确提出，否则不再逐个需求确认 |
+| R1 | **macOS + win32**（原"仅 macOS"已作废） | 用户 2026-09-19 明确要求两端同步、**且能跨端对战**；会话层因此下沉到 `comm/npsession`（见 §15） |
 | R2 | **先发布者 = 服务端**，有控制权 | 帧数基准、端口、由谁受理接入都由服务端决定 |
 | R3 | **加入无需服务端确认** | 客户端连上并完成校验即进入对战，双方**同时硬复位**后开始 |
 | R4 | 昵称**持久化**（首次生成，可改） | 首次进入局域网模式时自动生成 `Player xxxx`（`xxxx` = 4 位随机数字，例 `Player 4712`）并写入 `config.ini` 的 `[netplay] nickname`；面板内可随时修改，关闭面板即保存 |
@@ -62,8 +65,8 @@
 | `comm/net.c:340-341` | 服务端 `net_is_connected()` 在已有 conn 时直接 `return 1`，**不再 accept** | 天然不会混入第三个连接；但 listen socket 仍占端口（F9） |
 | `comm/net.c:122` | 已有 `net_set_async()`（`FIONBIO`）与 `select` 封装 | 非阻塞收 beacon 沿用同一跨平台风格 |
 | `comm/thread.h` | mutex / thread / wait 齐全 | **本方案不需要新线程**，见 §3 |
-| `mac/iNESNetPlaySession.{h,c}` | 已封装 `NP_ST_*` 状态机、`np_begin / np_poll / np_frame_input` | 新模式只需调用它，会话层零改动 |
-| `iNESNetPlaySession.h:15-17` | 明确约定"握手期只在主线程、对战期只在模拟线程，`comm/net.c` 非线程安全" | 发现阶段**必须**与对战阶段时间互斥 → 免线程免锁 |
+| `comm/npsession.{h,c}` | 已封装 `NP_ST_*` 状态机、`np_begin / np_poll / np_frame_input`（**win32 与 macOS 共用**，2026-09-19 由 `mac/iNESNetPlaySession` 下沉而来） | 新模式只需调用它，会话层零改动 |
+| `comm/npsession.h:19-22` | 明确约定"握手期只在主线程、对战期只在模拟线程，`comm/net.c` 非线程安全" | 发现阶段**必须**与对战阶段时间互斥 → 免线程免锁 |
 | 校验码来源 | `host.rom.crc32_p`（`win32/iNES.c:644`、`mac/iNESApp.m:1746`） | 与 R6 判据一致 |
 | 默认端口 | TCP 8891（`mac/iNESNetPlayDialog.m:19`） | 发现用 **UDP 8892**，对战沿用 8891（被占用时自动改，见 F2） |
 | `mac/Info.plist` | **缺 `NSLocalNetworkUsageDescription`** | macOS 15 起访问局域网会弹权限框且缺自定义文案 → F8 必做（现有手动对战同样受益） |
@@ -135,7 +138,8 @@ struct _lan_beacon {
 要点：
 
 - **IPv4 only**（广播语义），与现有 `sockaddr_in` 一致；
-- 文本一律 **UTF-8 字节流**（Win32 Unicode 构建下 `ines_char_t` 是 `wchar_t`，将来若移植需 `MultiByteToWideChar`；本次不做）；
+- 文本一律 **UTF-8 字节流**（Win32 Unicode 构建下 `ines_char_t` 是 `wchar_t`，由 `comm/lan.c` 的
+  `lan_t2a/lan_a2t` 用 `WideCharToMultiByte(CP_UTF8)` / `MultiByteToWideChar(CP_UTF8)` 转换；**win32 已实现**）；
 - 接收时用 `recvfrom` 的**源地址**作为对方 IPv4，**不需要枚举本机网卡**（省掉 `getifaddrs` / `GetAdaptersAddresses` 双分支）。
 
 ---
@@ -196,7 +200,9 @@ struct _lan_beacon {
 | `mac/Info.plist` | 新增 `NSLocalNetworkUsageDescription` |
 | `docs/macos-port.md` | §8.7 之后补「快速配对」小节（实现时再写） |
 
-**不改动**：`core/`（含 mapper）、`win32/`、`comm/net.c` 的既有 TCP 行为、`iNESNetPlaySession`。
+**不改动**：`core/`（含 mapper）、`comm/net.c` 的既有 TCP 行为。
+（原写"不改动 `win32/`"已于 2026-09-19 作废：win32 端同步实现见 §14/§15，
+  会话层 `iNESNetPlaySession` 也已下沉为 `comm/npsession`。）
 
 ---
 
@@ -234,7 +240,7 @@ struct _lan_beacon {
 
 | 项 | 原因 |
 |---|---|
-| win32 同步实现 | R1：本机无构建环境，无法验证 |
+| ~~win32 同步实现~~ | 原表项已作废：R1 于 2026-09-19 改为"macOS + win32"，win32 端已实现（§15） |
 | 互联网 / NAT 穿透 / 中继 | 违反 R7，且引入服务端与安全模型，成本数量级上升 |
 | 断线重连 | R8，沿用既有"卡帧等待"表现 |
 | 服务端踢人 / 单方面结束 | 见 R2，非本次范围 |
@@ -297,7 +303,7 @@ struct _lan_beacon {
 
 | 编号 | 决策 | 来源 |
 |---|---|---|
-| D1 | 不同步实现 win32（本机无 Win32 环境），后续不再逐条询问 | 用户 2026-09-17 |
+| D1 | ~~不同步实现 win32（本机无 Win32 环境）~~ → **2026-09-19 用户撤销**：win32 同步实现且要与 mac 跨端对战（见 §15） | 用户 2026-09-17 / 撤销 2026-09-19 |
 | D2 | 先发布者 = 服务端，拥控制权；加入无需其确认，配对成功直接开打 | 用户 2026-09-17 |
 | D3 | 发布时可填昵称，留空则自动 `Player xxxx`（4 位随机数字） | 用户 2026-09-17 |
 | D4 | 后加入者 = 客户机，不接受者可自行发布房间 | 用户 2026-09-17 |
@@ -336,3 +342,132 @@ struct _lan_beacon {
 - **开打后不能关闭监听 socket**（原 F9 的一部分）：`comm/net.c` 的 `net_is_server()` 以"监听 socket 是否存在"为判据，而 `np_frame_input()` 用它决定主/副手柄路由；关掉会让服务端按客户机取值（**手柄反转**）。因此 `net_close_listen()` 一并删除，监听 socket 统一由 `np_end()` 关闭 —— 已有连接时 `net_is_connected()` 不会再 accept，保留它对对战没有任何影响。
 - 握手失败后一律"恢复发布"（`resumeHosting`），服务端继续等下一个人，不会把面板卡死在失败态。
 - 广播文本按字节截断并做了 UTF-8 边界保护（`lobby_clip_utf8`），中文 ROM 名不会出现乱码。
+
+---
+
+## 14. win32 同步实现（2026-09-19 盘点 → **已按方案 A 实施，见 §15**）
+
+> 目标：win32 也提供「局域网快速对战…」，且 **win ↔ mac 可以互相发现、互相对战**。
+> 本节保留开工前的事实盘点与决策记录（§14.6 为拍板结论），实际落地见 §15。
+
+### 14.1 win32 现状盘点（与 §2 对照）
+
+| 项 | 现状 | 影响 |
+|---|---|---|
+| `comm/lan.{h,c}` | 已完成，且**已编入两个目标**（`CMakeLists.txt:134` 的 `INES_COMMON_COMM_SOURCES` 同时给 `inescore` 与 `iNES`） | **发现层零改动即可在 win32 用**：UDP 8892、`SO_BROADCAST`、非阻塞、Windows `SO_REUSEADDR` 分支、房间表/TTL/自身过滤都写好了 |
+| `comm/net.c` | `net_listen(port=0)` + `net_get_local_port()`（`getsockname`）已具备；`net_is_server()` = "监听 socket 存在" | 端口回退(F2) 可用；§13 的"开打后不能关监听"同样适用 |
+| **会话层** | **win32 没有 `np_*`**：mac 的 `mac/iNESNetPlaySession.{h,c}` 是 mac 独有；win32 把握手状态机写在 `win32/dlgNetPlay.c`（`dlgNetPlay_TimedCheck`），把帧收发写在 `win32/iNES.c`（`send_frame / recv_frame / cache_add_mine / cache_add_other / cache_get`） | **最大差异点**，见 §14.4 |
+| 帧包格式 | 两端都是 `struct _net_frame {cmd, joypad, ctrl}`（packed，3B），语义一致 | 互通无碍 |
+| 握手 | 两端都是 `NET_CMD_START` / `NET_CMD_START_RSP`，`NET_VER=0x0101`，code 0/1/2，超时 5s | 互通无碍 |
+| 缓存槽 / 默认帧数 | win32 `MAX_BUF_NUM=10`、`net_cache_num=4`；mac `NP_CACHE_SLOTS=10`、`NP_CACHE_DEFAULT=4` | 一致 |
+| 配置 | win32 `GetConfigStr/SetConfigStr`（`win32/iNES.c:2082`，写 `config.ini`）与 mac `iNESConfig.c` **同名同签名** | 昵称持久化(R4/F10) 可直接对齐 `[netplay] nickname` |
+| `net_init()` | `win32/iNES.c:475` 启动时已调用 | `lan_open()` 前置条件满足 |
+| 菜单 | 文件菜单只有「联网对战」= `IDM_NET_PLAY`(32902)；**无灰显机制**，未载入 ROM 时弹 MessageBox | 新菜单项沿用同一风格（见 Q7） |
+| 空闲命令号 | `Resource.h` 的 `_APS_NEXT_COMMAND_VALUE = 32903`、`_APS_NEXT_CONTROL_VALUE = 1011` | 新菜单用 32903，新控件从 1011 起 |
+
+### 14.2 跨端（win ↔ mac）互通性核对
+
+| 环节 | 结论 |
+|---|---|
+| 发现报文 `lan_beacon_t`（128B，网络字节序） | 两端同一份 `comm/lan.c` → **一致** |
+| **文本编码（昵称 / ROM 名）** | ⚠️ **win32 有 bug**：`lan_t2a/lan_a2t` 在 `UNICODE` 下用 `wcstombs` / `mbstowcs`，依赖 C locale，Windows 默认非 UTF-8 → 中文变 `?` 或失败；mac（非 UNICODE）直通 UTF-8。**必须改成 `WideCharToMultiByte(CP_UTF8)` / `MultiByteToWideChar(CP_UTF8)`**（只改 `#ifdef UNICODE` 分支，mac 行为不变） |
+| TCP 握手 / 帧包 / 手柄路由 / 复位控制码 | **一致** |
+| **缓冲帧数对齐** | ⚠️ mac 客户端读 `START_RSP.fno >> 32` 对齐服务端 `cache_num`；**win32 客户端不读 `fno`**（栈上的 `nst.fno` 甚至未清零），固定用本地 `net_cache_num`。win32 客户端 + mac 服务端且 mac 帧数 ≠ 4 时，两端延迟不同 → 帧号恒定偏移、表现为持续卡帧。**必须给 win32 客户端补上 fno 对齐** |
+| 开打后保留 listen socket | 两端同一约束（`net_is_server()` 判据）→ **win32 同样不能关** |
+
+### 14.3 win32 侧特有的差异（不影响协议，但影响体验）
+
+1. **没有会话层**（§14.4）。
+2. **Windows 防火墙**：UDP 8892 / TCP 8891 首次入站会弹「是否允许访问」，需用户允许（专用网络）。不做程序化放行（要提权 `netsh`），仅在文档与面板空态文案里说明。
+3. **Windows `SO_REUSEADDR` ≠ POSIX `SO_REUSEPORT`**：Windows 下多个 socket 绑同一 UDP 端口后，广播数据报**只投递给其中一个绑定者**（且可被无关进程抢占）→ **win32 上"同机双开两个 iNES 互见"大概率不成立**（mac 实测可）。自测退而求其次：用手动 IP 模式连 `127.0.0.1`，或两台真机。
+4. **字符集**：win32 是 UNICODE 构建，昵称/ROM 名内部都是宽字符；截断逻辑要按 UTF-8 **字节**做（对齐 `lobby_clip_utf8`），否则中文 ROM 名会出现半个字。
+
+### 14.4 会话层方案（待决策 Q1）
+
+| 方案 | 做法 | 改动量 | 风险 |
+|---|---|---|---|
+| **A（推荐）** | 把 `mac/iNESNetPlaySession.{h,c}`（纯 C，不依赖 Cocoa）**下沉到 `comm/npsession.{h,c}`**，两端共用；win32 的手动「联网对战」与新的「局域网快速对战」都走 `np_*`，`win32/iNES.c` 的 `send_frame/recv_frame/cache_*` 换成 `np_frame_begin()/np_frame_input()` | 大 | 中：动到现有对战主链路，需回归手动模式 |
+| B | 只把会话层**复制**一份到 `win32/wNetSession.{h,c}`（内容与 mac 版一致），**仅 LAN 快速对战使用**；手动模式保持 `dlgNetPlay.c` 原样 | 中 | 低（不动现有链路），但两端两份代码需同步维护 |
+| C | 不引入会话层：LAN 对话框内自管握手（复制 `dlgNetPlay_TimedCheck` 的状态机） | 最小 | 与 mac 结构不对齐，状态机两份 |
+
+**无论选哪个，都必须补两件跨端必需项**：① win32 客户端解析 `START_RSP.fno` 高 32 位对齐帧数（§14.2）；② `comm/lan.c` 的 UTF-8 转换改用 Win32 API（§14.2）。
+
+### 14.5 win32 改动文件清单（按方案 A 估算）
+
+| 文件 | 改动 |
+|---|---|
+| `comm/lan.c` | 修 `#ifdef UNICODE` 分支的 UTF-8 转换（**共享文件**，mac 逻辑不变） |
+| `comm/npsession.{h,c}` | 由 `mac/iNESNetPlaySession.{h,c}` 迁来（A）／或新增 `win32/wNetSession.{h,c}`（B） |
+| `win32/dlgLanMatch.{c,h}` | **新文件**：昵称 + 本机 ROM + 房间列表 + 加入/关闭 + 50ms 定时器（对齐 `iNESLanLobby` 的状态推进） |
+| `win32/iNES.rc` | 新增对话框资源 + 「局域网快速对战(&L)...」菜单项（BOM 必须保留） |
+| `win32/Resource.h` | 对话框 / 控件 / 菜单 ID |
+| `win32/iNES.c` | 菜单命令处理（ROM 已载入 / 非对战中校验 + 配对成功后硬复位），方案 A 时 `OnIdle` 帧循环改走会话层 |
+| `CMakeLists.txt` | 新源文件登记（方案 A 还要把 `comm/npsession.c` 加进 `INES_COMMON_COMM_SOURCES` 并从 mac 列表里去掉旧文件） |
+| 本文档 | §14 更新为"已实施"，补 §15 实施计划与实测 |
+
+**不改动**：`core/`、发现层协议（`comm/lan.h`）、`comm/net.c` 的既有 TCP 行为。
+
+### 14.6 决策结果（用户 2026-09-19 拍板）
+
+| # | 问题 | 结论 |
+|---|---|---|
+| Q1 | 会话层 | **A**：`mac/iNESNetPlaySession.{h,c}` 下沉为 `comm/npsession.{h,c}`，两端共用；win32 手动「联网对战」与新的快速对战都走 `np_*`，`win32/iNES.c` 的 `send_frame/recv_frame/cache_*` 全部替换 |
+| Q2 | 房间列表控件 | ListView（`LVS_REPORT` + `NM_CUSTOMDRAW` 灰显），双击加入 |
+| Q3 | `comm/lan.c` 的 UTF-8 转换 | **允许**：`UNICODE` 分支改用 `WideCharToMultiByte(CP_UTF8)` / `MultiByteToWideChar(CP_UTF8)` |
+| Q4 | 缓冲帧数 | win32 面板**提供 1~5 下拉框**（mac 面板没有此项，属两端 UI 差异）；客户端仍按 `START_RSP.fno` 高 32 位对齐 |
+| Q5 | 手动模式 | 随 Q1=A 一并改走会话层 |
+| Q6 | 同机双开 | 接受 win32 上不可行（Windows `SO_REUSEADDR` 语义），自测用手动 IP + 真机 |
+| Q7 | 菜单与提示 | 新命令 `IDM_LAN_MATCH`(32903)，文案「局域网快速对战(&L)」放在「联网对战」下面；未载入 ROM 沿用 MessageBox 提示 |
+| Q8 | 验证条件 | 用户有 mac 可做真机跨端验证；本侧只做 win32 构建 + win↔win / 协议层校验 |
+
+---
+
+## 15. win32 实施记录（2026-09-19）
+
+状态：**代码已完成，win32 Release 构建 0 警告**；真机跨端(win↔mac)由用户验证。
+
+### 15.1 实际改动清单
+
+| 文件 | 改动 |
+|---|---|
+| `comm/npsession.{h,c}` | **新文件**：由 `mac/iNESNetPlaySession.{h,c}` 迁来，两端共用。新增 `np_copy_tstr()`(原生→原生) 与 `np_copy_utf8()`(原生→UTF-8)，使 `np_poll()` 的提示文本在 Unicode 与非 Unicode 目标下都正确；`np_begin()` 的 `ip` 参数改为 `ines_cstr_t`(平台原生编码) |
+| `mac/iNESNetPlaySession.{h,c}` | **删除**（内容迁到 `comm/`） |
+| `mac/iNESLanLobby.m`、`mac/iNESNetPlayDialog.m`、`mac/iNESApp.m` | include 改为 `#include "../comm/npsession.h"`，注释同步 |
+| `comm/lan.c` | `#ifdef UNICODE` 的 `wcstombs/mbstowcs` → `WideCharToMultiByte(CP_UTF8)` / `MultiByteToWideChar(CP_UTF8)`（中文昵称/ROM 名不再乱码） |
+| `win32/dlgLanMatch.{c,h}` | **新文件**：快速对战对话框（昵称 + 本机 ROM + 房间 ListView + 缓冲帧数下拉 + 加入/关闭），500ms 定时器推进握手与发现，1s 广播一次 |
+| `win32/dlgNetPlay.c` | 手动模式改为 `np_begin / np_poll` 驱动（50ms 定时器不变），本地状态机与 `net_cache_num` extern 依赖删除 |
+| `win32/iNES.c` | `net_init()` → `np_init()`；`OnIdle` 帧循环改走 `np_frame_begin / np_input_ready / np_frame_input`；删除 `send_frame/recv_frame/cache_*` 与 `net_cache[]`、`net_cache_size`、`net_cache_num`；`net_close()` → `np_end()`（关 ROM/退出/暂停切换）；新增 `IDM_LAN_MATCH`；`WM_DESTROY` 加 `np_fini()` |
+| `win32/iNES.rc` | 新增 `IDD_LANMATCH` 对话框 + 「局域网快速对战(&L)」菜单项（BOM 已复查保留） |
+| `win32/Resource.h` | `IDD_LANMATCH`(132)、`IDC_LANMATCH_*`(1011-1016)、`IDM_LAN_MATCH`(32903) |
+| `CMakeLists.txt` | `INES_COMMON_COMM_SOURCES` 加 `comm/npsession.c`；`INES_MAC_C_SOURCES` 去掉 `mac/iNESNetPlaySession.c`；`INES_WIN32_SOURCES` 加 `win32/dlgLanMatch.c` |
+
+**未改动**：`core/`、发现层协议（`comm/lan.h`）、`comm/net.c` 的既有 TCP 行为。
+
+### 15.2 与 mac 端的行为对齐点
+
+- 面板一打开即 `np_begin(server)` 发布房间，UDP 8892 广播自己的 `(crc32, tcp_port, 昵称, ROM 名)`，1s 一次；TCP 8891 占用时 `np_begin(..., 0)` 交系统分配端口，`net_get_local_port()` 回填到广播里。
+- 加入他人房间 → `lan_close()` 停广播 → `np_begin(client)`；本机随即从别人的列表消失，"后加入者必为客户机"。
+- 握手失败/超时一律"恢复发布"（服务端继续等人），与 mac 的 `resumeHosting` 一致。
+- **开打后不关监听 socket**（`net_is_server()` 是手柄路由判据），只关发现通道。
+- 昵称持久化在 `config.ini` 的 `[netplay] nickname`，键名与 mac 端一致（两端各自存各自的）。
+- ROM 不同的房间可见但灰字 + "（ROM 不同）"后缀，且不可选中加入。
+
+### 15.3 跨端(win↔mac)必需项，均已落到 `comm/npsession.c`
+
+1. 客户端读 `START_RSP.fno` 高 32 位对齐服务端的缓冲帧数（旧版对端填 0 时沿用默认值，互通无影响）。
+2. 提示文本对外统一 UTF-8，界面层各自转回（`MultiByteToWideChar(CP_UTF8)` / `NSString UTF8String`）。
+3. 帧包、握手包、手柄路由、复位控制码两端同构。
+
+### 15.4 已知限制
+
+- **win32 同机双开互见大概率不成立**：Windows 的 `SO_REUSEADDR` 不等于 POSIX `SO_REUSEPORT`，多 socket 绑同一 UDP 端口时广播只投递给其中一个。自测请用两台真机，或手动 IP 模式连 `127.0.0.1`。
+- **Windows 防火墙**会对 UDP 8892 / TCP 8891 的入站弹询问，需用户允许（专用网络）；程序不做放行（需提权 `netsh`）。
+- win32 面板多一个"缓冲帧数 1~5"下拉框（mac 面板没有），这是 Q4 明确接受的两端 UI 差异；改动它会立即以新值重新发布。
+
+### 15.5 待用户验证（真机）
+
+1. win↔mac 互相发现（中文昵称/ROM 名显示正确）。
+2. win↔mac 对战：手柄路由正确（服务端主手柄、客户端副手柄）、无卡帧。
+3. 两端缓冲帧数不一致时（例如 win 服务端设 2、mac 客户端）仍能正常开局。
+4. 手动「联网对战…」回归（win↔win / win↔mac）。
+

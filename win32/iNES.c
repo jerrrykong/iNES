@@ -13,9 +13,12 @@
 #include "wNameTable.h"
 #include "wPatternTable.h"
 #include "wPalette.h"
+#include "wRegister.h"
+#include "dlgLanMatch.h"
 #include "dlgNetPlay.h"
 #include "dlgOpenRom.h"
 #include "../comm/net.h"
+#include "../comm/npsession.h"
 
 // 模拟器全局变量
 ines_host_t   host;
@@ -185,14 +188,7 @@ DWORD   dwFrameLastTime = 0;
 ines_int_t   pause_flag = 0;
 
 ines_int_t   is_net_play = 0;
-// 网络游戏时缓冲的帧数
-ines_int_t   net_cache_num = 4;
-
-#define NET_CACHE_MAX_SIZE    10
-// 缓冲区，  31~24: CMD, 23~16: unused; 15~8: second joypad state, 7~0: main joypad state.
-ines_dword_t   net_cache[NET_CACHE_MAX_SIZE];
-// 当前缓冲的帧数
-ines_int_t   net_cache_size = 0;
+// 帧缓冲由 comm/npsession 持有(与 macOS 端同一份实现), 这里不再单独维护缓存数组
 
 
 
@@ -306,12 +302,8 @@ VOID UpdateMenuLoadState(HMENU hMenu, UINT nPos, int index);
 
 
 void send_ctrl(ines_byte_t  code, ines_word_t flag, ines_int64_t fno);
-void send_frame(ines_byte_t joypad, ines_byte_t ctrl);
-void recv_frame();
-
-void cache_add_other(ines_byte_t  joypad, ines_byte_t ctrl);
-void cache_add_mine(ines_byte_t joypad, ines_byte_t ctrl);
-ines_dword_t cache_get();
+// 帧收发与帧缓存已下沉到 comm/npsession(np_frame_begin/np_input_ready/np_frame_input),
+// 原 send_frame / recv_frame / cache_add_* / cache_get 不再在此声明。
 
 
 int APIENTRY _tWinMain(HINSTANCE hInstance,
@@ -471,7 +463,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 
 
    // init socket library
-   net_init();
+   np_init();
 
 
    x = GetConfigInt(ISTR("display"), ISTR("x"), CW_USEDEFAULT);
@@ -643,10 +635,33 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			{
 				if(TRUE == dlgNetPlay_DoModal(hInst, hWnd, host.rom.crc32_p))
 				{
+					ines_int_t cache_num = (ines_int_t)np_cache_num();
+
+					INES_LOG(LOG_NTY, MOD_NET, ISTR("netplay: %s(manual), cache_num=%d\n"),
+							 np_is_server() ? ISTR("server") : ISTR("client"), cache_num);
+
 					is_net_play = 1;
-					net_cache_size = 0;
-					memset(net_cache, 0, sizeof(net_cache));
-					net_cache_size = net_cache_num;
+
+					// 硬件复位
+					OnMenuHardReset();
+				}
+			}
+			else
+			{
+				MessageBox(hWnd, ISTR("请先载入一个ROM。"), szTitle, MB_OK|MB_ICONWARNING);
+			}
+			break;
+		case IDM_LAN_MATCH:
+			if(host.status != NES_STATUS_OFF)
+			{
+				if(TRUE == dlgLanMatch_DoModal(hInst, hWnd, host.rom.crc32_p))
+				{
+					ines_int_t cache_num = (ines_int_t)np_cache_num();
+
+					INES_LOG(LOG_NTY, MOD_NET, ISTR("netplay: %s(lan), cache_num=%d\n"),
+							 np_is_server() ? ISTR("server") : ISTR("client"), cache_num);
+
+					is_net_play = 1;
 
 					// 硬件复位
 					OnMenuHardReset();
@@ -809,6 +824,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			}
 			break;
 		case IDM_VIEW_REG:
+			if(1 || !wReg_IsShow())
+			{
+				wReg_Create(hInst, hMainWnd);
+				wReg_Show(TRUE);
+
+			}
+			else
+			{
+				wReg_Destroy();
+			}
 			break;
 		case IDM_SAVE_STATE_0:
 		case IDM_SAVE_STATE_1:
@@ -891,6 +916,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		}
 		break;
 	case WM_DESTROY:
+		np_fini();
 		PostQuitMessage(0);
 		break;
 	default:
@@ -1041,14 +1067,14 @@ VOID OnIdle()
 	double  dblSecondPassed;
 	double  dblSecondDelay;
 	WAVEOUTBUFFER* lpBuff;
-	ines_byte_t    this_ctrl;
+	ines_int_t     this_ctrl;
 	ines_char_t    strDisp[256];
 
 	this_ctrl = 0;
 
 	if(is_net_play)
 	{
-		recv_frame();
+		np_frame_begin();
 	}
 
 
@@ -1086,8 +1112,8 @@ VOID OnIdle()
 
 	if(is_net_play)
 	{
-		// 如果网络缓冲空了,则等待
-		if(net_cache_size == 0)
+		// 如果网络缓冲空了,则等待(帧缓存由 comm/npsession 持有)
+		if(!np_input_ready())
 		{
 			// 网络卡
 			return;
@@ -1267,30 +1293,12 @@ VOID OnIdle()
 
 	if(is_net_play)
 	{
-		ines_dword_t  cache_joypad;
-		// 更新输入
-		cache_add_mine(main_key_state, ctrl_key_state);
-
-		send_frame(main_key_state, ctrl_key_state);
+		// 提交本方输入并取回本帧实际使用的输入(帧缓存与手柄路由由 comm/npsession 负责,
+		// 与 macOS 端 np_frame_input() 完全一致)
+		np_frame_input((ines_byte_t)main_key_state, (ines_byte_t)ctrl_key_state,
+					   &main_key_state, &second_key_state, &this_ctrl);
 
 		ctrl_key_state = 0;
-
-
-
-		cache_joypad = cache_get();
-
-		if(net_is_server())
-		{
-			main_key_state = cache_joypad & 0xff;
-			second_key_state = (cache_joypad>>8) & 0xff;
-		}
-		else
-		{
-			main_key_state = (cache_joypad>>8) & 0xff;
-			second_key_state = cache_joypad & 0xff;
-		}
-
-		this_ctrl = (cache_joypad >> 24) & 0xff;
 	}
 
 	ines_joypad_update_bits(&host.joypad, main_key_state, second_key_state);
@@ -1495,6 +1503,7 @@ VOID  UpdateAllViews()
 	wNT_SetUpdate();
 	wPT_SetUpdate();
 	wPal_SetUpdate();
+	wReg_SetUpdate();
 }
 
 
@@ -1723,7 +1732,7 @@ BOOL NesOpenFile(LPCTSTR lpszFileName)
 
 	if(is_net_play)
 	{
-		net_close();
+		np_end();
 		is_net_play = 0;
 	}
 
@@ -1834,7 +1843,7 @@ VOID OnMenuClose()
 
 	if(is_net_play)
 	{
-		net_close();
+		np_end();
 		is_net_play = 0;
 	}
 
@@ -1874,7 +1883,7 @@ VOID OnMenuHardReset()
 	{
 		if(is_net_play)
 		{
-			net_close();
+			np_end();
 			is_net_play = 0;
 		}
 
@@ -2321,100 +2330,6 @@ VOID UpdateMenuLoadState(HMENU hMenu, UINT nPos, int index)
 }
 
 
-
-void send_frame(ines_byte_t joypad, ines_byte_t ctrl)
-{
-	struct _net_frame pkg;
-	memset(&pkg, 0, sizeof(pkg));
-	pkg.cmd = NET_CMD_FRAME;
-	pkg.joypad = joypad;
-	pkg.ctrl = ctrl;
-	net_send(&pkg, sizeof(pkg));
-}
-
-
-void recv_frame()
-{
-	ines_byte_t   cmd;
-	int           flag;
-
-	flag = 0;
-
-	while(0 == flag && 0 == net_pick_recv_data(&cmd, sizeof(cmd)))
-	{
-		flag = 1;
-		switch(cmd)
-		{
-		case NET_CMD_FRAME:
-			{
-				struct _net_frame  pkg;
-				if( 0== net_pick_recv_data(&pkg, sizeof(pkg)) )
-				{
-					if(net_cache_size < MAX_BUF_NUM)
-					{
-						cache_add_other(pkg.joypad, pkg.ctrl);
-						net_del_recv_data(sizeof(pkg));
-						flag = 0;
-					}
-				}
-			}
-			break;
-		//case NET_CMD_CHAT:
-		//	break;
-		case NET_CMD_NOP:
-			net_del_recv_data(sizeof(cmd));
-			flag = 0;
-			break;
-		default:
-			// error cmd
-			net_del_recv_data(sizeof(cmd));
-			flag = 0;
-			break;
-		}
-	}
-}
-
-
-
-
-
-void cache_add_other(ines_byte_t joypad, ines_byte_t  ctrl)
-{
-	if(net_cache_size < MAX_BUF_NUM)
-	{
-		net_cache[net_cache_size] |= joypad * 0x100;
-		net_cache[net_cache_size] |= ctrl * 0x1000000;
-		net_cache_size++;
-	}
-}
-
-
-void cache_add_mine(ines_byte_t joypad, ines_byte_t  ctrl)
-{
-	// 永远在固定的缓冲帧
-	net_cache[net_cache_num] |= joypad;
-	net_cache[net_cache_num] |= ctrl * 0x1000000;
-}
-
-
-ines_dword_t cache_get()
-{
-	int   i;
-	ines_dword_t   ret = 0;
-	if(net_cache_size > 0)
-	{
-		ret = net_cache[0];
-
-		for(i = 1; i < MAX_BUF_NUM; i++)
-		{
-			net_cache[i-1] = net_cache[i];
-		}
-		net_cache[MAX_BUF_NUM-1] = 0;
-
-		net_cache_size--;
-	}
-	return ret;
-}
 
 
 void DrawTextToBitmap(ines_byte_t* bits, ines_int_t iWidth, ines_int_t iHeight, 

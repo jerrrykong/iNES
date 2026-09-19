@@ -25,7 +25,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $root 'CMakeLists.txt'))) {
 
 $exts = @('.c', '.h', '.rc', '.lua', '.mk', '.txt', '.md')
 # 排除非源码目录: 构建产物/文档/版本库
-$excludeRegex = '[\\/](bin|doc|project|build|cmake-build-[^\\/]+|out|\.git|\.codebuddy)[\\/]'
+$excludeRegex = '[\\/](bin|doc|build|cmake-build-[^\\/]+|out|\.git|\.codebuddy)[\\/]'
 
 $utf8Strict = New-Object System.Text.UTF8Encoding($false, $true)
 $gbk        = [System.Text.Encoding]::GetEncoding(936)
