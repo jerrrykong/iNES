@@ -207,14 +207,19 @@ static void lan_room_update(const lan_beacon_t* b, ines_dword_t addr)
 
 	if (r == NULL)
 	{
+		ines_char_t  ip[32];
+
 		r = lan_room_alloc(b->peer_id);
-		INES_LOG(LOG_NTY, MOD_NET, ISTR("lan: room found, port=%d\n"),
-				 (int)ntohs(b->tcp_port));
+		lan_addr_str(addr, ip, (int)sizeof(ip));
+
+		INES_LOG(LOG_NTY, MOD_NET, ISTR("lan: room found, ip=%s port=%d cache=%d\n"),
+				 ip, (int)ntohs(b->tcp_port), (int)b->cache_num);
 	}
 
 	r->crc32     = ntohl(b->crc32);
 	r->tcp_port  = ntohs(b->tcp_port);
 	r->region    = b->region;
+	r->cache_num = b->cache_num;
 	r->addr      = addr;
 	r->last_seen = (ines_dword_t)time(NULL);
 
@@ -525,7 +530,7 @@ int lan_is_open(void)
 }
 
 int lan_advertise(ines_dword_t crc32, ines_word_t tcp_port, ines_byte_t region,
-				  ines_cstr_t nick, ines_cstr_t rom)
+				  ines_cstr_t nick, ines_cstr_t rom, ines_byte_t cache_num)
 {
 	lan_beacon_t  b;
 	lan_iface_t   ifs[LAN_IFACE_MAX];
@@ -547,10 +552,12 @@ int lan_advertise(ines_dword_t crc32, ines_word_t tcp_port, ines_byte_t region,
 	lan_pack_text(b.nick, LAN_NICK_MAX, &b.nick_len, nick);
 	lan_pack_text(b.rom,  LAN_ROM_MAX,  &b.rom_len,  rom);
 
+	// 缓冲帧数随 beacon 广播: 加入方以房主的值为准
+	b.cache_num = cache_num;
+
 	// 逐个活动接口发**子网定向广播**: 由路由表选路, 每个网段都能收到;
 	// 有限广播在 Windows 上只走一个接口(见文件头说明), 故不作为首选。
 	cnt = lan_iface_list(ifs, LAN_IFACE_MAX);
-
 	for (i = 0; i < cnt; i++)
 	{
 		ines_dword_t  bcast = ifs[i].addr | ~(ifs[i].mask);

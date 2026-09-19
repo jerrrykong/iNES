@@ -234,8 +234,10 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 
 	// ---- 说明 ----
 	{
-		NSTextField*  hint = lobby_make_label(@"已发布到局域网。加入他人房间后，本机作为副手柄（客户机）。",
-											  NSMakeRect(18, 264, 424, 17));
+		NSTextField*  hint = lobby_make_label(
+			[NSString stringWithFormat:@"已发布到局域网（缓冲 %d 帧，发布后固定）。加入他人房间后，本机作为副手柄（客户机）。",
+					  NP_CACHE_DEFAULT],
+			NSMakeRect(18, 264, 424, 17));
 
 		hint.textColor = [NSColor secondaryLabelColor];
 		hint.font      = [NSFont systemFontOfSize:11.0];
@@ -257,14 +259,18 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 	{
 		NSTableColumn*  c1 = [[NSTableColumn alloc] initWithIdentifier:@"nick"];
 		NSTableColumn*  c2 = [[NSTableColumn alloc] initWithIdentifier:@"rom"];
+		NSTableColumn*  c3 = [[NSTableColumn alloc] initWithIdentifier:@"cache"];
 
 		c1.title = @"昵称";
-		c1.width = 130.0;
+		c1.width = 118.0;
 		c2.title = @"ROM";
-		c2.width = 260.0;
+		c2.width = 216.0;
+		c3.title = @"缓冲";
+		c3.width = 56.0;
 
 		[_table addTableColumn:c1];
 		[_table addTableColumn:c2];
+		[_table addTableColumn:c3];
 	}
 
 	scroll.documentView = _table;
@@ -368,7 +374,9 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 /** 空闲状态下的提示文本。 */
 - (void)refreshInfo
 {
-	[self setInfo:[NSString stringWithFormat:@"已发布，等待其他玩家加入（发现 %d 个房间）", _roomCount]];
+	[self setInfo:(_roomCount > 0)
+		 ? [NSString stringWithFormat:@"已发布，等待其他玩家加入（发现 %d 个房间）", _roomCount]
+		 : @"已发布，等待其他玩家加入（未发现房间：需同一局域网、且未被防火墙拦截）"];
 }
 
 
@@ -476,7 +484,8 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 		{
 			lan_advertise(_crc32, (ines_word_t)_listenPort, 0,
 						  [[self currentNick] UTF8String],
-						  [lobby_clip_utf8(_romName, LAN_ROM_MAX) UTF8String]);
+						  [lobby_clip_utf8(_romName, LAN_ROM_MAX) UTF8String],
+						  (ines_byte_t)NP_CACHE_DEFAULT);
 
 			_lastAdv = now;
 		}
@@ -542,6 +551,14 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 
 	if ([column.identifier isEqualToString:@"nick"])
 		return [NSString stringWithUTF8String:_rooms[row].nick];
+
+	// 缓冲帧数由房主发布时确定(对端未携带该字段时显示 --)
+	if ([column.identifier isEqualToString:@"cache"])
+	{
+		return ((_rooms[row].cache_num >= NP_CACHE_MIN) && (_rooms[row].cache_num <= NP_CACHE_MAX))
+			 ? [NSString stringWithFormat:@"%d 帧", (int)_rooms[row].cache_num]
+			 : @"--";
+	}
 
 	{
 		NSString*  name = [NSString stringWithUTF8String:_rooms[row].rom];

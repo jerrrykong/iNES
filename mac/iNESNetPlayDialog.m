@@ -11,7 +11,7 @@
 
 
 #define NPDLG_CONTENT_W   340.0
-#define NPDLG_CONTENT_H   176.0
+#define NPDLG_CONTENT_H   146.0
 
 // 与 win32 的 SetTimer(hDlg, 100, 50, NULL) 一致
 #define NPDLG_TIMER_SEC   0.05
@@ -19,9 +19,8 @@
 #define NPDLG_IP_DEFAULT   @"127.0.0.1"
 #define NPDLG_PORT_DEFAULT @"8891"
 
-// 缓冲帧数下拉项(与 win32 的 IDC_CMB_CACHE 一致)
-#define NPDLG_CACHE_MIN    1
-#define NPDLG_CACHE_MAX    5
+// 缓冲帧数不再由本对话框选择: 统一用默认值(与 win32 的 net_cache_num 初值一致),
+// 后续如需调整放到"设置"里 —— 放在对战对话框底部容易被误读成"加入时才选的参数"。
 
 
 @interface iNESNetPlayDialog () <NSWindowDelegate>
@@ -30,7 +29,6 @@
 	NSButton*       _radioClient;
 	NSTextField*    _ipField;
 	NSTextField*    _portField;
-	NSPopUpButton*  _cachePopup;
 	NSTextField*    _infoLabel;
 	NSButton*       _startButton;
 	NSTimer*        _timer;
@@ -150,15 +148,15 @@ static NSButton* npdlg_make_button(NSString* title, NSRect frame, BOOL isDefault
 	NSBox*   box;
 
 	// ---- 运行为 ----
-	box = [[NSBox alloc] initWithFrame:NSMakeRect(18, 118, 304, 46)];
+	box = [[NSBox alloc] initWithFrame:NSMakeRect(18, 88, 304, 46)];
 	box.title         = @"运行为";
 	box.titlePosition = NSAboveTop;
 	box.titleFont     = [NSFont systemFontOfSize:13.0];
 	box.contentViewMargins = NSMakeSize(0, 0);
 	[root addSubview:box];
 
-	_radioServer       = npdlg_make_radio(@"服务器", NSMakeRect(24, 124, 80, 18));
-	_radioClient       = npdlg_make_radio(@"客户机", NSMakeRect(140, 124, 80, 18));
+	_radioServer       = npdlg_make_radio(@"服务器", NSMakeRect(24, 94, 80, 18));
+	_radioClient       = npdlg_make_radio(@"客户机", NSMakeRect(140, 94, 80, 18));
 	_radioServer.state = NSControlStateValueOn;
 	_radioClient.state = NSControlStateValueOff;
 
@@ -171,29 +169,15 @@ static NSButton* npdlg_make_button(NSString* title, NSRect frame, BOOL isDefault
 	[root addSubview:_radioClient];
 
 	// ---- 地址 / 端口 ----
-	[root addSubview:npdlg_make_label(@"地址", NSMakeRect(20, 92, 36, 17))];
-	_ipField = npdlg_make_edit(NSMakeRect(58, 89, 118, 22));
+	[root addSubview:npdlg_make_label(@"地址", NSMakeRect(20, 62, 36, 17))];
+	_ipField = npdlg_make_edit(NSMakeRect(58, 59, 118, 22));
 	_ipField.stringValue = NPDLG_IP_DEFAULT;
 	[root addSubview:_ipField];
 
-	[root addSubview:npdlg_make_label(@"端口", NSMakeRect(192, 92, 30, 17))];
-	_portField = npdlg_make_edit(NSMakeRect(224, 89, 62, 22));
+	[root addSubview:npdlg_make_label(@"端口", NSMakeRect(192, 62, 30, 17))];
+	_portField = npdlg_make_edit(NSMakeRect(224, 59, 62, 22));
 	_portField.stringValue = NPDLG_PORT_DEFAULT;
 	[root addSubview:_portField];
-
-	// ---- 缓冲帧数 ----
-	[root addSubview:npdlg_make_label(@"缓冲帧数", NSMakeRect(20, 62, 62, 17))];
-	_cachePopup = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(84, 59, 70, 22) pullsDown:NO];
-	{
-		int  n;
-
-		for (n = NPDLG_CACHE_MIN; n <= NPDLG_CACHE_MAX; n++)
-			[_cachePopup addItemWithTitle:[NSString stringWithFormat:@"%d", n]];
-
-		// 默认 4(与 win32 的 CB_SETCURSEL 3 一致)
-		[_cachePopup selectItemAtIndex:(NP_CACHE_DEFAULT - NPDLG_CACHE_MIN)];
-	}
-	[root addSubview:_cachePopup];
 
 	// ---- 提示信息 ----
 	_infoLabel           = npdlg_make_label(@"", NSMakeRect(18, 32, 304, 17));
@@ -230,13 +214,12 @@ static NSButton* npdlg_make_button(NSString* title, NSRect frame, BOOL isDefault
 	_infoLabel.stringValue = (text != nil) ? text : @"";
 }
 
-/** 与 win32 一致: 地址仅客户机可用, 缓冲帧数仅服务器可设。 */
+/** 与 win32 一致: 地址仅客户机可用(缓冲帧数已改为固定默认值, 不再有控件)。 */
 - (IBAction)onRoleChanged:(id)sender
 {
 	BOOL  isServer = (_radioServer.state == NSControlStateValueOn);
 
-	_ipField.enabled    = isServer ? NO : YES;
-	_cachePopup.enabled = isServer ? YES : NO;
+	_ipField.enabled = isServer ? NO : YES;
 }
 
 
@@ -259,7 +242,7 @@ static NSButton* npdlg_make_button(NSString* title, NSRect frame, BOOL isDefault
 	}
 
 	isServer = (_radioServer.state == NSControlStateValueOn);
-	cacheNum = (int)(_cachePopup.indexOfSelectedItem + NPDLG_CACHE_MIN);
+	cacheNum = NP_CACHE_DEFAULT;   // 客户端该参数无效, 以服务端下发的为准
 
 	if (0 != np_begin(isServer ? 1 : 0, [_ipField.stringValue UTF8String], port, _crc32, cacheNum))
 	{
