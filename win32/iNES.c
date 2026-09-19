@@ -275,6 +275,10 @@ void DrawTextToBitmap(ines_byte_t* bits, ines_int_t iWidth, ines_int_t iHeight,
 
 VOID UpdateTitle();
 
+// 联网对战: 结束对局前的二次确认 / 通知对端后收尾(实现见文件末尾, WndProc 与菜单均会调用)
+BOOL ConfirmStopNetPlay(HWND hWnd);
+VOID NotifyPeerQuitAndEnd(VOID);
+
 VOID OnMenuOpen();
 VOID OnMenuClose();
 VOID OnMenuSoftReset();
@@ -622,6 +626,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
 			break;
 		case IDM_EXIT:
+			// 联网中退出: 先确认, 再通知对端一次(否则对端会一直空转等待)
+			if(!ConfirmStopNetPlay(hWnd))
+				break;
+
+			NotifyPeerQuitAndEnd();
 			DestroyWindow(hWnd);
 			break;
 		case IDM_OPEN:   // 载入ROM文件
@@ -644,6 +653,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 					// 硬件复位
 					OnMenuHardReset();
+
+					UpdateTitle();   // 标题栏挂上"联网对战中"
 				}
 			}
 			else
@@ -665,6 +676,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 					// 硬件复位
 					OnMenuHardReset();
+
+					UpdateTitle();   // 标题栏挂上"联网对战中"
 				}
 			}
 			else
@@ -685,9 +698,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			NesOpenFile(lastest_open_files[wmId - IDM_RECENT_FILES]);
 			break;
 		case IDM_SOFTRESET:
-			// 非主机不能复位
+			// 非主机不能复位: 复位会重跑双方的 ROM, 从机擅自发起等于打断主机
 			if(is_net_play)
 			{
+				if(!np_is_server())
+				{
+					MessageBox(hWnd, ISTR("联网对战中只有主机可以复位。"), szTitle, MB_OK|MB_ICONINFORMATION);
+					break;
+				}
+
 				ctrl_key_state = NET_CTRL_CODE_SOFTRESET;
 			}
 			else
@@ -696,9 +715,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			}
 			break;
 		case IDM_HARDRESET:
-			// 非主机不能复位
+			// 非主机不能复位(同上)
 			if(is_net_play)
 			{
+				if(!np_is_server())
+				{
+					MessageBox(hWnd, ISTR("联网对战中只有主机可以复位。"), szTitle, MB_OK|MB_ICONINFORMATION);
+					break;
+				}
+
 				ctrl_key_state = NET_CTRL_CODE_HARDRESET;
 			}
 			else
@@ -707,9 +732,23 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			}
 			break;
 		case IDM_PAUSE:
+			// 暂停会让对端收不到输入包而一直空转, 联网中禁止
+			if(is_net_play)
+			{
+				MessageBox(hWnd, ISTR("联网对战中不能暂停。"), szTitle, MB_OK|MB_ICONINFORMATION);
+				break;
+			}
+
 			OnMenuPause();
 			break;
 		case IDM_FRAME_STEP:
+			// 与暂停同理(单帧执行同样停帧)
+			if(is_net_play)
+			{
+				MessageBox(hWnd, ISTR("联网对战中不能单帧执行。"), szTitle, MB_OK|MB_ICONINFORMATION);
+				break;
+			}
+
 			OnMenuFrameStep();
 			break;
 		case IDM_LOG_TRACE:
@@ -915,6 +954,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			INES_LOG(LOG_DBG, MOD_SYS, ISTR("[%lu] Wave Buffer [%d] Done. \n"), timeGetTime(), (int)(pBuff-wvBuffer));
 		}
 		break;
+	case WM_CLOSE:
+		// 关闭窗口(标题栏 X / 系统菜单)与"退出"走同一条路径: 联网中先确认并通知对端
+		if(!ConfirmStopNetPlay(hWnd))
+			return 0;
+
+		NotifyPeerQuitAndEnd();
+		DestroyWindow(hWnd);
+		return 0;
 	case WM_DESTROY:
 		np_fini();
 		PostQuitMessage(0);
@@ -1075,6 +1122,19 @@ VOID OnIdle()
 	if(is_net_play)
 	{
 		np_frame_begin();
+
+		// 对端主动退出: 退回单机模式并提示(与 mac 端的浮层提示对等)
+		if(np_peer_quit())
+		{
+			np_end();
+			is_net_play = 0;
+
+			UpdateTitle();
+
+			INES_LOG(LOG_NTY, MOD_NET, ISTR("netplay: peer quitted, back to offline\n"));
+
+			MessageBox(hMainWnd, ISTR("对方已退出游戏，继续以单机模式运行。"), szTitle, MB_OK|MB_ICONINFORMATION);
+		}
 	}
 
 
@@ -1487,7 +1547,12 @@ VOID UpdateTitle()
 		case NES_STATUS_FRAME_STEP: LoadString(hInst, IDS_STATUS_FRAME_STEP, szStatus, count_of(szStatus)); break;	
 		default:                    LoadString(hInst, IDS_STATUS_RUNNING, szStatus, count_of(szStatus)); break;	
 		}
-		ines_snprintf(szBuffer, count_of(szBuffer), ISTR("%s - %s (%s)"), szTitle, szROMTitle, szStatus);
+
+		// 联网对战中在状态前加标识, 与 mac 端标题栏的"联网对战中"一致
+		if(is_net_play)
+			ines_snprintf(szBuffer, count_of(szBuffer), ISTR("%s - %s (联网对战中 - %s)"), szTitle, szROMTitle, szStatus);
+		else
+			ines_snprintf(szBuffer, count_of(szBuffer), ISTR("%s - %s (%s)"), szTitle, szROMTitle, szStatus);
 	}
 	
 	SetWindowText(hMainWnd, szBuffer);
@@ -1727,14 +1792,17 @@ LRESULT   OnSizing(HWND hWnd, UINT nSide, LPRECT lpRect)
 BOOL NesOpenFile(LPCTSTR lpszFileName)
 {
 	BOOL bRet;
+
+	// 联网中换 ROM 等于结束当前对局: 先确认(必须在 free host 之前, 取消才不会
+	// 把当前 ROM 也一起卸掉), 确认后通知对端一次。菜单 / 最近文件 / 拖拽都走这里。
+	if(is_net_play && !ConfirmStopNetPlay(hMainWnd))
+		return FALSE;
+
 	ines_host_free(&host);
 	ines_host_init(&host, 1);
 
 	if(is_net_play)
-	{
-		np_end();
-		is_net_play = 0;
-	}
+		NotifyPeerQuitAndEnd();
 
 	pause_flag = 0;
 
@@ -1780,6 +1848,38 @@ LRESULT   OnDropFiles(HWND hWnd, HDROP hDrop)
 	return 0;
 }
 
+
+
+/**
+ * 联网对战中做"会结束对局"的操作(换 ROM / 卸载 ROM / 退出)之前的二次确认。
+ * 非联网时直接放行; 用户取消时返回 FALSE(操作应整体放弃)。
+ */
+BOOL ConfirmStopNetPlay(HWND hWnd)
+{
+	if(!is_net_play)
+		return TRUE;
+
+	return (IDOK == MessageBox(hWnd, ISTR("正在联网游戏中，是否确认结束当前游戏？"),
+							   szTitle, MB_OKCANCEL|MB_ICONQUESTION|MB_DEFBUTTON2));
+}
+
+/**
+ * 本方主动结束: 给对端发一次"我退出了"(NET_CMD_QUIT)再收尾。
+ * win32 是单线程前端(OnIdle 与菜单同在 UI 线程), 可直接调用, 不存在并发。
+ */
+VOID NotifyPeerQuitAndEnd(VOID)
+{
+	if(!is_net_play)
+		return;
+
+	np_notify_quit();
+	np_end();
+	is_net_play = 0;
+
+	UpdateTitle();
+
+	INES_LOG(LOG_NTY, MOD_NET, ISTR("netplay: ended by local user\n"));
+}
 
 
 VOID OnMenuOpen()
@@ -1838,14 +1938,15 @@ VOID OnMenuOpen()
 
 VOID OnMenuClose()
 {
+	// 卸载 ROM 同样会结束联网: 先确认(同样在 free host 之前)
+	if(is_net_play && !ConfirmStopNetPlay(hMainWnd))
+		return;
+
 	ines_host_free(&host);
 	ines_host_init(&host, 1);
 
 	if(is_net_play)
-	{
-		np_end();
-		is_net_play = 0;
-	}
+		NotifyPeerQuitAndEnd();
 
 	nes_cpu_rate = 0;
 	UpdateTitle();
@@ -2197,9 +2298,12 @@ VOID OnMenuLoadState(int index)
 	if(host.status == NES_STATUS_OFF)
 		return;
 
-	// 连网游戏不能加载进度
+	// 连网游戏不能加载进度(读档无法与对端同步, 主机也不行)
 	if(is_net_play)
+	{
+		MessageBox(hMainWnd, ISTR("联网对战中不能载入存档。"), szTitle, MB_OK|MB_ICONINFORMATION);
 		return;
+	}
 
 
 	getStatePath(index, szPath, count_of(szPath));

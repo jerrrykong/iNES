@@ -20,6 +20,7 @@ typedef  ines_word_t   net_port_t;
 #define   NET_CMD_START_RSP   2    // 02  code:1(0:ok,1:version not match, 2:crc32 not match) is_ntsc:1
 #define   NET_CMD_FRAME       3    // 05  frame_num:8 joypad_bits:4
 #define   NET_CMD_CHAT     0x10    // 10  chat_len:4  chat_str:len
+#define   NET_CMD_QUIT     0x11    // 11  本方主动结束对战(仅 cmd, 无载荷); 对端收到后退回单机
 
 #define   NET_CTRL_CODE_HARDRESET  1
 #define   NET_CTRL_CODE_SOFTRESET  2

@@ -36,6 +36,7 @@ static int           s_is_server  = 0;
 static int           s_cache_num  = NP_CACHE_DEFAULT;
 static ines_dword_t  s_crc32      = 0;
 static time_t        s_state_time = 0;
+static int           s_peer_quit  = 0;    // 收到过对端的 NET_CMD_QUIT(由 np_peer_quit() 取走)
 
 // 帧缓存: 31~24 控制码, 15~8 副手柄, 7~0 主手柄(与 win32 的 net_cache 同构)
 static ines_dword_t  s_cache[NP_CACHE_SLOTS];
@@ -105,6 +106,7 @@ static void np_reset(int do_close)
 	s_state_time = 0;
 	s_is_server  = 0;
 	s_cache_size = 0;
+	s_peer_quit  = 0;
 
 	memset(s_cache, 0, sizeof(s_cache));
 }
@@ -230,6 +232,29 @@ void np_end(void)
 	np_reset(1);
 
 	INES_LOG(LOG_NTY, MOD_NET, ISTR("netplay: stopped\n"));
+}
+
+void np_notify_quit(void)
+{
+	ines_byte_t  cmd = NET_CMD_QUIT;
+
+	// 只有"已在对战中"才谈得上通知对端; 握手期对方还在等包, 发了也没人处理
+	if (s_state != NP_ST_PLAYING)
+		return;
+
+	// 尽力而为: 对端可能已经断开, 发送结果不影响本方退出
+	net_send(&cmd, (int)sizeof(cmd));
+
+	INES_LOG(LOG_NTY, MOD_NET, ISTR("netplay: notify peer quit\n"));
+}
+
+int np_peer_quit(void)
+{
+	int  ret = s_peer_quit;
+
+	s_peer_quit = 0;
+
+	return ret;
 }
 
 int np_begin(int is_server, ines_cstr_t ip, int port, ines_dword_t crc32, int cache_num)
@@ -521,6 +546,15 @@ void np_frame_begin(void)
 					}
 				}
 			}
+			break;
+
+		case NET_CMD_QUIT:
+			// 对端主动结束: 置标志交给前端(它在同一帧结束后退回单机), 整包丢弃
+			s_peer_quit = 1;
+			net_del_recv_data((int)sizeof(cmd));
+			flag = 0;
+
+			INES_LOG(LOG_NTY, MOD_NET, ISTR("netplay: peer quitted\n"));
 			break;
 
 		default:

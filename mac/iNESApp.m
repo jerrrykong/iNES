@@ -91,6 +91,7 @@ typedef struct _ines_ctl_
 	ines_int_t   net_play;        // 0 / 1, 是否处于联网对战(主线程开始对战时置 1, 模拟线程结束时置 0)
 	ines_int_t   net_play_start;  // 请求模拟线程进入联网(做一次双方同步的硬复位)
 	ines_int_t   net_ctrl;        // 联网时待发送的控制码(菜单把复位转成它), 0 表示无
+	ines_int_t   net_quit;        // 请求模拟线程"发一次退出通知并结束联网"(换 ROM / 卸载 / 退出前置 1)
 
 	// ---- 模拟线程 -> 主线程: 状态快照 ----
 	ines_int_t   status;          // NES_STATUS_*
@@ -890,6 +891,7 @@ static NSString* app_function_key(ines_int_t n)
 {
 	ines_int_t   status;
 	ines_int_t   pause;
+	ines_int_t   net_play;
 	ines_char_t  title[INES_MAX_TITLE];
 	NSString*    state_text;
 
@@ -900,8 +902,9 @@ static NSString* app_function_key(ines_int_t n)
 	}
 
 	ines_mutex_lock(&s_mutex_ctl);
-	status = s_ctl.status;
-	pause  = s_ctl.pause;
+	status   = s_ctl.status;
+	pause    = s_ctl.pause;
+	net_play = s_ctl.net_play;
 	app_str_copy(title, sizeof(title), s_ctl.rom_title);
 	ines_mutex_unlock(&s_mutex_ctl);
 
@@ -916,8 +919,43 @@ static NSString* app_function_key(ines_int_t n)
 
 	if (status == NES_STATUS_OFF)
 		self.window.title = [NSString stringWithFormat:@"iNES - %@", state_text];
+	else if (net_play)
+		self.window.title = [NSString stringWithFormat:@"iNES - %s - 联网对战中（%@）", title, state_text];
 	else
 		self.window.title = [NSString stringWithFormat:@"iNES - %s - %@", title, state_text];
+}
+
+/**
+ * 联网对战中"会结束对战"的操作(换 ROM / 卸载 ROM / 退出)之前的二次确认。
+ * 非联网时直接放行; 用户取消时返回 NO。
+ */
+- (BOOL)confirmStopNetPlay
+{
+	ines_int_t  net_play = 0;
+
+	ines_mutex_lock(&s_mutex_ctl);
+	net_play = s_ctl.net_play;
+	ines_mutex_unlock(&s_mutex_ctl);
+
+	if (!net_play)
+		return YES;
+
+	NSAlert*  alert = [[NSAlert alloc] init];
+
+	alert.messageText     = @"联网对战中";
+	alert.informativeText = @"正在联网游戏中，是否确认结束当前游戏？";
+	[alert addButtonWithTitle:@"确认结束"];
+	[alert addButtonWithTitle:@"取消"];
+
+	return (NSAlertFirstButtonReturn == [alert runModal]);
+}
+
+/** 请求模拟线程: 给对端发一次退出通知并结束联网(必须主线程调用)。 */
+- (void)requestQuitNetPlay
+{
+	ines_mutex_lock(&s_mutex_ctl);
+	s_ctl.net_quit = 1;
+	ines_mutex_unlock(&s_mutex_ctl);
 }
 
 - (void)showAlert:(NSString*)title message:(NSString*)message
@@ -1065,7 +1103,9 @@ static NSString* app_function_key(ines_int_t n)
 	if (action == @selector(togglePause:))
 	{
 		item.state = ([self currentPause] == NES_STATUS_PAUSE) ? NSControlStateValueOn : NSControlStateValueOff;
-		return rom_loaded;
+
+		// 联网中禁止暂停: 本方停帧后对端收不到输入包, 会一直空转等待
+		return (rom_loaded != 0) && (net_play == 0);
 	}
 
 	if (action == @selector(toggleMute:))
@@ -1090,10 +1130,16 @@ static NSString* app_function_key(ines_int_t n)
 	 || (action == @selector(startLanQuickMatch:)))
 		return (rom_loaded && !net_play);
 
+	// 复位: 联网时只有主机可用 —— 复位会重跑双方的 ROM, 从机发起等于打断主机
+	if ((action == @selector(hardReset:))
+	 || (action == @selector(softReset:)))
+		return (rom_loaded != 0) && ((net_play == 0) || (np_is_server() != 0));
+
+	// 单帧执行: 与暂停同理, 联网中禁用
+	if (action == @selector(frameStep:))
+		return (rom_loaded != 0) && (net_play == 0);
+
 	if ((action == @selector(closeROM:))
-	 || (action == @selector(hardReset:))
-	 || (action == @selector(softReset:))
-	 || (action == @selector(frameStep:))
 	 || (action == @selector(takeSnapshot:)))
 	 return rom_loaded;
 
@@ -1256,8 +1302,15 @@ static NSString* app_function_key(ines_int_t n)
 	if (last_dir.length > 0)
 		SetConfigStr(ISTR("rom"), ISTR("last_dir"), [last_dir fileSystemRepresentation]);
 
+	// 联网对战中换 ROM 等于结束当前对局, 先确认; 确认后由模拟线程通知对端一次
 	if (path.length > 0)
+	{
+		if (![self confirmStopNetPlay])
+			return;
+
+		[self requestQuitNetPlay];
 		[self requestLoadROM:path];
+	}
 }
 
 // 载入对话框的初始目录: 上次使用的文件夹 -> 最近打开的 ROM 所在目录;
@@ -1323,6 +1376,12 @@ static NSString* app_function_key(ines_int_t n)
 	if ([self currentStatus] == NES_STATUS_OFF)
 		return;
 
+	// 卸载 ROM 同样会结束联网: 先确认, 再由模拟线程通知对端
+	if (![self confirmStopNetPlay])
+		return;
+
+	[self requestQuitNetPlay];
+
 	ines_mutex_lock(&s_mutex_ctl);
 	s_ctl.close_request = 1;
 	ines_mutex_unlock(&s_mutex_ctl);
@@ -1334,6 +1393,14 @@ static NSString* app_function_key(ines_int_t n)
 		return;
 
 	ines_mutex_lock(&s_mutex_ctl);
+
+	// 联网时只允许主机复位: 复位会重跑双方的 ROM, 从机擅自发起等于打断主机
+	if (s_ctl.net_play && !np_is_server())
+	{
+		ines_mutex_unlock(&s_mutex_ctl);
+		[self showAlert:@"控制" message:@"联网对战中只有主机可以复位。"];
+		return;
+	}
 
 	// 联网时复位必须发给对端, 由双方在同一帧执行(等价 win32 的 NET_CTRL_CODE_HARDRESET)
 	if (s_ctl.net_play)
@@ -1350,6 +1417,13 @@ static NSString* app_function_key(ines_int_t n)
 		return;
 
 	ines_mutex_lock(&s_mutex_ctl);
+
+	if (s_ctl.net_play && !np_is_server())
+	{
+		ines_mutex_unlock(&s_mutex_ctl);
+		[self showAlert:@"控制" message:@"联网对战中只有主机可以复位。"];
+		return;
+	}
 
 	if (s_ctl.net_play)
 		s_ctl.net_ctrl = NET_CTRL_CODE_SOFTRESET;
@@ -1394,6 +1468,8 @@ static NSString* app_function_key(ines_int_t n)
 	s_ctl.net_play       = 1;
 	s_ctl.net_play_start = 1;
 	ines_mutex_unlock(&s_mutex_ctl);
+
+	[self refreshTitle];   // 标题栏挂上"联网对战中"
 
 	INES_LOG(LOG_NTY, MOD_SYS, ISTR("netplay: start as %s, cache_num=%d\n"),
 			 np_is_server() ? ISTR("server") : ISTR("client"), np_cache_num());
@@ -1444,6 +1520,8 @@ static NSString* app_function_key(ines_int_t n)
 	s_ctl.net_play       = 1;
 	s_ctl.net_play_start = 1;
 	ines_mutex_unlock(&s_mutex_ctl);
+
+	[self refreshTitle];   // 标题栏挂上"联网对战中"
 
 	INES_LOG(LOG_NTY, MOD_SYS, ISTR("lanplay: start as %s, cache_num=%d\n"),
 			 np_is_server() ? ISTR("server") : ISTR("client"), np_cache_num());
@@ -1667,6 +1745,11 @@ static NSString* app_function_key(ines_int_t n)
 	if (latest_open_files[index][0] == 0)
 		return;
 
+	// 与 openROM: 一致: 联网中先确认结束对局, 再由模拟线程通知对端
+	if (![self confirmStopNetPlay])
+		return;
+
+	[self requestQuitNetPlay];
 	[self requestLoadROM:[NSString stringWithUTF8String:latest_open_files[index]]];
 }
 
@@ -1844,6 +1927,8 @@ static NSString* app_function_key(ines_int_t n)
 	{
 		np_end();
 		INES_LOG(LOG_NTY, MOD_SYS, ISTR("netplay: ended\n"));
+
+		[self refreshTitle];   // 标题栏的"联网对战中"要跟着撤掉
 	}
 }
 
@@ -2037,6 +2122,7 @@ static NSString* app_function_key(ines_int_t n)
 		ines_int_t   do_soft;
 		ines_int_t   net_play;        // 本帧是否处于联网对战
 		ines_int_t   net_play_start;  // 请求进入联网(做一次双方同步的硬复位)
+		ines_int_t   net_quit;        // 请求"通知对端一次并结束联网"
 		ines_int_t   net_ctrl_req;    // 本方本帧要发给对端的控制码
 		ines_int_t   this_ctrl = 0;   // 本帧要执行的控制码(来自帧缓存, 双方同帧生效)
 		ines_int_t   do_stop = 0;
@@ -2060,6 +2146,7 @@ static NSString* app_function_key(ines_int_t n)
 			net_play_start = s_ctl.net_play_start; s_ctl.net_play_start = 0;
 			net_ctrl_req   = s_ctl.net_ctrl;       s_ctl.net_ctrl       = 0;
 			net_play       = s_ctl.net_play;
+			net_quit       = s_ctl.net_quit;       s_ctl.net_quit       = 0;
 			save_req = s_ctl.save_state;     s_ctl.save_state    = APP_STATE_NONE;
 			load_req = s_ctl.load_state;     s_ctl.load_state    = APP_STATE_NONE;
 
@@ -2077,6 +2164,16 @@ static NSString* app_function_key(ines_int_t n)
 			ines_mutex_unlock(&s_mutex_ctl);
 
 			// ---- 2) 执行请求(host 只在本线程被访问) ----
+
+			// 本方主动结束(换 ROM / 卸载 / 退出): 先给对端发一次退出通知。
+			// 必须放在 do_close / do_load 之前 —— 它们内部会 endNetPlay, 那时链路已关, 发不出去。
+			if (net_quit)
+			{
+				np_notify_quit();            // 尽力而为, 对端已断开也不影响本方
+				[self endNetPlayOnThread];   // 内部已刷新标题
+				net_play = 0;
+			}
+
 			if (do_close)
 			{
 				[self endNetPlayOnThread];   // 等价 win32 的 OnMenuClose()
@@ -2111,7 +2208,20 @@ static NSString* app_function_key(ines_int_t n)
 
 			// ---- 2.5) 联网: 帧首收包(等价 win32 的 recv_frame(), 位置与 win32 一致) ----
 			if (net_play)
+			{
 				np_frame_begin();
+
+				// 对端主动退出: 退回单机并给一条浮层提示(与 win32 的 MessageBox 对等)
+				if (np_peer_quit())
+				{
+					[self endNetPlayOnThread];   // 内部已刷新标题
+					net_play = 0;
+
+					[self showToast:@"对方已退出游戏，继续以单机模式运行。"];
+
+					INES_LOG(LOG_NTY, MOD_SYS, ISTR("netplay: peer quitted, back to offline\n"));
+				}
+			}
 
 			// ---- 3) 空闲处理 ----
 			if (host.status == NES_STATUS_OFF)
@@ -2485,6 +2595,32 @@ static NSString* app_function_key(ines_int_t n)
 	return YES;
 }
 
+/**
+ * 退出前的确认: 联网对战中先问一次"是否结束当前游戏", 取消则终止退出流程;
+ * 确认后请模拟线程给对端发一次退出通知(NET_CMD_QUIT), 并等它发完再走 shutdown
+ * (shutdown 会停掉模拟线程, 那时链路已关就发不出去了)。
+ */
+- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication*)sender
+{
+	ines_int_t  i;
+
+	if (![self confirmStopNetPlay])
+		return NSTerminateCancel;
+
+	[self requestQuitNetPlay];
+
+	// 模拟线程每帧处理一次请求(60fps 下 1~2 帧); 最多等 500ms, 超时直接退出
+	for (i = 0; i < 50; i++)
+	{
+		if (np_state() == NP_ST_NONE)
+			break;
+
+		app_sleep_ms(10);
+	}
+
+	return NSTerminateNow;
+}
+
 - (void)applicationWillTerminate:(NSNotification*)notification
 {
 	[self shutdown];
@@ -2496,7 +2632,14 @@ static NSString* app_function_key(ines_int_t n)
 	if (self.window == nil)
 		[self setPendingRomPath:filename];
 	else
+	{
+		// Finder 双击 / 拖拽打开: 与菜单"载入ROM…"同一条路径
+		if (![self confirmStopNetPlay])
+			return NO;
+
+		[self requestQuitNetPlay];
 		[self requestLoadROM:filename];
+	}
 
 	return YES;
 }

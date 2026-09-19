@@ -69,6 +69,23 @@ int  np_begin(int is_server, ines_cstr_t ip, int port, ines_dword_t crc32, int c
 /** 结束联网: 关闭链路并清空帧缓存(等价 win32 的 net_close() + is_net_play = 0)。 */
 void np_end(void);
 
+/**
+ * 主动结束对战时给对端发一次"我退出了"(NET_CMD_QUIT), 尽力而为。
+ *
+ * 必须与 np_frame_* 同一线程调用(对战期 comm/net.c 由模拟线程独占; win32 的
+ * OnIdle 也在主线程, 可直接调), 之后由调用方执行 np_end()。
+ * 发送失败(对端已断)不影响本方退出, 故无返回值。
+ */
+void np_notify_quit(void);
+
+/**
+ * 取并清除"对端已主动退出"标志(一次性)。
+ *
+ * 模拟线程每帧在 np_frame_begin() 之后查询: 返回非 0 表示对端点了"结束/退出",
+ * 本方应结束联网并退回单机模式。
+ */
+int  np_peer_quit(void);
+
 /** 当前会话状态, 取值 NP_ST_*。 */
 int  np_state(void);
 
