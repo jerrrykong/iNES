@@ -47,10 +47,11 @@ struct _lan_beacon {
 	ines_byte_t  region;                // 0 NTSC / 1 PAL(仅提示用)
 	ines_byte_t  nick_len;              // ≤ LAN_NICK_MAX
 	ines_byte_t  rom_len;               // ≤ LAN_ROM_MAX
+	ines_byte_t  cache_num;             // 缓冲帧数(房主设定, 加入方以它为准; 0 = 未携带)
 	ines_byte_t  peer_id[16];           // 进程级随机 id: 房间主键 + 过滤自身
 	ines_byte_t  nick[LAN_NICK_MAX];    // 昵称(UTF-8, 不补 0)
 	ines_byte_t  rom[LAN_ROM_MAX];      // ROM 文件名(UTF-8, 不补 0)
-	ines_byte_t  pad[11];               // 补齐到 128 字节
+	ines_byte_t  pad[10];               // 补齐到 128 字节
 };
 
 typedef struct _lan_beacon  lan_beacon_t;
@@ -64,6 +65,7 @@ struct _lan_room {
 	ines_dword_t crc32;
 	ines_word_t  tcp_port;
 	ines_byte_t  region;
+	ines_byte_t  cache_num;                 // 房主的缓冲帧数(0 = 对端未携带)
 	ines_dword_t addr;                      // 对端 IPv4(网络序)
 	ines_dword_t last_seen;                 // 上次收到 beacon 的时间(time(NULL))
 	ines_char_t  nick[LAN_NICK_MAX + 1];
@@ -102,10 +104,11 @@ int  lan_is_open(void);
  * @param region   0 NTSC / 1 PAL
  * @param nick     昵称
  * @param rom      ROM 文件名
+ * @param cache_num 缓冲帧数(房主设定, 发布后不可改; 加入方直接采用)
  * @return 0 成功; -1 未打开或发送失败
  */
 int  lan_advertise(ines_dword_t crc32, ines_word_t tcp_port, ines_byte_t region,
-				   ines_cstr_t nick, ines_cstr_t rom);
+				   ines_cstr_t nick, ines_cstr_t rom, ines_byte_t cache_num);
 
 /**
  * 收一次包并输出房间表快照(调用方按 500ms 节奏调用)。

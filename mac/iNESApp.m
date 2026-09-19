@@ -87,6 +87,7 @@ typedef struct _ines_ctl_
 	ines_int_t   mute;            // 0 / 1
 	ines_int_t   osd;             // 0 / 1, 是否绘制 CPU 占用率
 	ines_dword_t keys;            // IKEY_* 位掩码
+	ines_int64_t key_stamp_us;    // 最近一次按键变化的时刻(仅用于输入延迟诊断)
 	ines_int_t   net_play;        // 0 / 1, 是否处于联网对战(主线程开始对战时置 1, 模拟线程结束时置 0)
 	ines_int_t   net_play_start;  // 请求模拟线程进入联网(做一次双方同步的硬复位)
 	ines_int_t   net_ctrl;        // 联网时待发送的控制码(菜单把复位转成它), 0 表示无
@@ -1999,6 +2000,11 @@ static NSString* app_function_key(ines_int_t n)
 	ines_int_t    diag_refill_cnt  = 0;   // 本统计周期内补静音次数
 	ines_int64_t  diag_playing_sum = 0;   // 本统计周期内在飞缓冲数累计
 	ines_int_t    diag_frames      = 0;   // 本统计周期内帧数
+	ines_int64_t  diag_in_sum      = 0;   // ---- 临时诊断: 按键陈旧时间累计(us) ----
+	ines_int64_t  diag_in_max      = 0;   // ---- 临时诊断: 按键陈旧时间最大值(us) ----
+	ines_int_t    diag_in_cnt      = 0;   // ---- 临时诊断: 采样次数 ----
+	static ines_int64_t  s_diag_last_key_stamp = 0;  // 上一次已统计过的按键时刻
+	static ines_dword_t  s_diag_last_keys      = 0;  // 上一帧取用的按键掩码
 	ines_int64_t  diag_fed_samples = 0;   // 本统计周期内投喂给音频的样本总数
 	ines_int_t    diag_push_cnt    = 0;   // 本统计周期内实际投喂次数(out_len > 0)
 	ines_int_t    diag_push_fail   = 0;   // 本统计周期内 pushFrame 返回 -1 的次数
@@ -2022,7 +2028,7 @@ static NSString* app_function_key(ines_int_t n)
 		ines_int_t   volume;
 		ines_int_t   mute;
 		ines_int_t   osd;
-		ines_dword_t keys;
+		ines_dword_t keys = 0;
 		ines_int_t   save_req;
 		ines_int_t   load_req;
 		ines_int_t   do_load;
@@ -2061,7 +2067,9 @@ static NSString* app_function_key(ines_int_t n)
 			volume = s_ctl.volume;
 			mute   = s_ctl.mute;
 			osd    = s_ctl.osd;
-			keys   = s_ctl.keys;
+			// keys 故意不在这里采样: 帧首取到的是"上一帧开头"的快照, 而它要在
+			// 等待(约 16.7ms)之后才被用于 latch, 白白多出一整帧的输入延迟。
+			// 真正的采样点见 4.55(本帧真正开始前), 与 win32 OnIdle 的时序一致。
 
 			if (do_load)
 				app_str_copy(s_load_path, sizeof(s_load_path), s_ctl.load_path);
@@ -2180,6 +2188,39 @@ static NSString* app_function_key(ines_int_t n)
 			// ---- 4.5) 联网: 缓存为空表示"网络卡", 本帧不推进(等价 win32 的 net_cache_size == 0) ----
 			if (net_play && !np_input_ready())
 				continue;
+
+			// ---- 4.55) P0 验证: 按键改为"本帧真正开始前"采样(与 win32 OnIdle 时序一致) ----
+			ines_mutex_lock(&s_mutex_ctl);
+			keys = s_ctl.keys;
+			ines_mutex_unlock(&s_mutex_ctl);
+
+			// ---- 4.6) 临时诊断: 按键"按下 -> 本帧真正被 latch"的端到端陈旧时间 ----
+			{
+				ines_int64_t  k_stamp = 0;
+				ines_int_t    k_changed = (keys != s_diag_last_keys);
+
+				ines_mutex_lock(&s_mutex_ctl);
+				k_stamp = s_ctl.key_stamp_us;
+				ines_mutex_unlock(&s_mutex_ctl);
+
+				// 只在"本帧取用的 keys 发生变化"时统计: 这才是按键真正生效的那一帧
+				if (k_changed && (k_stamp != 0) && (k_stamp != s_diag_last_key_stamp))
+				{
+					ines_int64_t  k_stale;
+
+					s_diag_last_key_stamp = k_stamp;
+					k_stale = app_cur_time_us() - k_stamp;
+					if (k_stale < 0)
+						k_stale = 0;
+
+					diag_in_cnt++;
+					diag_in_sum += k_stale;
+					if (k_stale > diag_in_max)
+						diag_in_max = k_stale;
+				}
+
+				s_diag_last_keys = keys;
+			}
 
 			// ---- 5) 输入(连发按键按帧相位交替, 等价 win32 的 key_flash_count) ----
 			if (++key_flash_count >= APP_KEY_FLASH_FREQ)
@@ -2323,6 +2364,15 @@ static NSString* app_function_key(ines_int_t n)
 							 (double)diag_playing_sum / (double)n);
 				}
 
+				// ---- 临时诊断: 输入陈旧时间(按键按下 -> 本帧 latch) ----
+				if (diag_in_cnt > 0)
+				{
+					INES_LOG(LOG_NTY, MOD_SYS,
+							 ISTR("input lag: latch_stale avg=%.1fms max=%.1fms n=%d\n"),
+							 (double)diag_in_sum / 1000.0 / (double)diag_in_cnt,
+							 (double)diag_in_max / 1000.0, (int)diag_in_cnt);
+				}
+
 				// ---- 临时诊断: 音频供需对账(APU 每帧产出 vs 设备实播) ----
 				{
 					double  played_now = [self.audio playedSamples];
@@ -2352,6 +2402,9 @@ static NSString* app_function_key(ines_int_t n)
 				diag_refill_us   = 0;
 				diag_refill_cnt  = 0;
 				diag_playing_sum = 0;
+				diag_in_sum      = 0;   // ---- 临时诊断 ----
+				diag_in_max      = 0;   // ---- 临时诊断 ----
+				diag_in_cnt      = 0;   // ---- 临时诊断 ----
 				// ---- 临时诊断结束 ----
 
 				last_fps_time  = cur_us;
@@ -2385,6 +2438,7 @@ static NSString* app_function_key(ines_int_t n)
 {
 	ines_mutex_lock(&s_mutex_ctl);
 	s_ctl.keys = [view pressedKeys];
+	s_ctl.key_stamp_us = app_cur_time_us();   // ---- 临时诊断: 记录按键变化时刻 ----
 	ines_mutex_unlock(&s_mutex_ctl);
 }
 

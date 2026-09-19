@@ -5,6 +5,8 @@
 
 #import "iNESVideo.h"
 
+#import <time.h>
+
 #import "../comm/log.h"
 
 #import "iNESPalette.h"
@@ -23,6 +25,12 @@
 	BOOL           _hasImage;        // 是否已经提交过至少一帧
 	ines_dword_t   _pressedKeys;     // 按下的逻辑按键
 	BOOL           _shiftDown;
+
+	// ---- 临时诊断: 画面提交 -> 主线程绘制完成 ----
+	ines_int64_t   _presentStamp;
+	ines_int64_t   _drawSum;
+	ines_int64_t   _drawMax;
+	ines_int_t     _drawCnt;
 }
 
 @synthesize scalePercent = _scalePercent;
@@ -113,6 +121,14 @@
 	_hasImage = YES;
 	[_lock unlock];
 
+	// ---- 临时诊断: 记录提交时刻 ----
+	{
+		struct timespec  ts;
+
+		clock_gettime(CLOCK_MONOTONIC, &ts);
+		_presentStamp = (ines_int64_t)ts.tv_sec * 1000000 + (ines_int64_t)(ts.tv_nsec / 1000);
+	}
+
 	// 由主线程负责重绘
 	dispatch_async(dispatch_get_main_queue(), ^{
 		[self setNeedsDisplay:YES];
@@ -184,6 +200,37 @@
 		CGContextDrawImage(context, [self imageRectForBounds:bounds], image);
 		CGContextRestoreGState(context);
 		CGImageRelease(image);
+
+		// ---- 临时诊断: 提交 -> 绘制完成 ----
+		if(_presentStamp != 0)
+		{
+			struct timespec  ts;
+			ines_int64_t     now;
+			ines_int64_t     d;
+
+			clock_gettime(CLOCK_MONOTONIC, &ts);
+			now = (ines_int64_t)ts.tv_sec * 1000000 + (ines_int64_t)(ts.tv_nsec / 1000);
+			d   = now - _presentStamp;
+			_presentStamp = 0;
+
+			if(d >= 0 && d < 1000000)
+			{
+				_drawSum += d;
+				if(d > _drawMax)
+					_drawMax = d;
+				_drawCnt++;
+			}
+
+			if(_drawCnt >= 120)
+			{
+				INES_LOG(LOG_NTY, MOD_SYS, ISTR("draw lag: present->draw avg=%.2fms max=%.2fms n=%d\n"),
+						 (double)_drawSum / 1000.0 / (double)_drawCnt,
+						 (double)_drawMax / 1000.0, (int)_drawCnt);
+				_drawSum = 0;
+				_drawMax = 0;
+				_drawCnt = 0;
+			}
+		}
 		return;
 	}
 
