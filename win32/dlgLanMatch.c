@@ -329,6 +329,16 @@ static void dlgLanMatch_RefreshList(HWND hDlg)
 		}
 
 		ListView_SetItemText(hwndList, i, 1, text);
+
+		// 缓冲帧数: 对端未携带该字段(旧版本)时显示 --
+		if((s_rooms[i].cache_num >= NP_CACHE_MIN) && (s_rooms[i].cache_num <= NP_CACHE_MAX))
+			ines_snprintf(text, count_of(text), ISTR("%d 帧"), (int)s_rooms[i].cache_num);
+		else
+			ines_strncpy(text, ISTR("--"), count_of(text) - 1);
+
+		text[count_of(text) - 1] = 0;
+
+		ListView_SetItemText(hwndList, i, 2, text);
 	}
 
 	// 按 peer_id 恢复选中(列表每次刷新都重建, 行号会变)
@@ -470,7 +480,9 @@ static void dlgLanMatch_OnTimer(HWND hDlg)
 		{
 			dlgLanMatch_CurrentNick(hDlg, nick, (int)count_of(nick));
 
-			lan_advertise(s_crc32, (ines_word_t)s_listen_port, 0, nick, szROMTitle);
+			// 缓冲帧数随 beacon 一起广播: 加入方以房主的值为准
+			lan_advertise(s_crc32, (ines_word_t)s_listen_port, 0, nick, szROMTitle,
+						  (ines_byte_t)s_cache_num);
 
 			s_last_adv = now;
 		}
@@ -593,9 +605,15 @@ static BOOL dlgLanMatch_OnInitDialog(HWND hDlg)
 	ListView_InsertColumn(hwndList, 0, &col);
 
 	col.pszText  = ISTR("ROM");
-	col.cx       = 260;
+	col.cx       = 214;
 	col.iSubItem = 1;
 	ListView_InsertColumn(hwndList, 1, &col);
+
+	// 缓冲帧数(房主发布时确定, 不可协商)
+	col.pszText  = ISTR("缓冲");
+	col.cx       = 56;
+	col.iSubItem = 2;
+	ListView_InsertColumn(hwndList, 2, &col);
 
 	EnableWindow(GetDlgItem(hDlg, IDOK), FALSE);
 
