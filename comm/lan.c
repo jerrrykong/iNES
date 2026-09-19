@@ -8,7 +8,11 @@
 //   选定角色 : lan_find(peer_id, &room) -> lan_close() -> net_listen/net_connect
 //
 // 实现要点:
-//   1) 广播目标是 255.255.255.255 的有限广播, 不出本网段(需求: 仅局域网)。
+//   1) 广播按"逐个活动接口的子网定向广播"发送, 有限广播 255.255.255.255 只作兜底:
+//      Windows 上 sendto() 到有限广播只会走**一个**接口(默认路由/绑定顺序最靠前的那个),
+//      多网卡(VPN 隧道 / 虚拟机网卡 + Wi-Fi)时极可能发错网段 —— 表现为单向可见
+//      ("别人能发现我, 我却发现不了别人"); 定向广播由路由表选路, 每个网段都能收到,
+//      且同样不出本网段(需求: 仅局域网)。
 //   2) 同机多实例共存: POSIX 用 SO_REUSEPORT(广播报文会复制到每个绑定者),
 //      Windows 下等价语义是 SO_REUSEADDR; 两者不可互换。
 //   3) socket 全程非阻塞, 因此 lan_poll() 不会卡住 UI。
@@ -19,6 +23,7 @@
 
 #ifdef WIN32
 #include <WinSock2.h>
+#include <ws2tcpip.h>    // INTERFACE_INFO / SIO_GET_INTERFACE_LIST(枚举本机接口)
 #include <windows.h>     // WideCharToMultiByte / MultiByteToWideChar(UTF-8 转换)
 #include <stdlib.h>
 typedef SOCKET  socket_t;
@@ -29,6 +34,8 @@ typedef SOCKET  socket_t;
 #include <sys/ioctl.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <ifaddrs.h>     // getifaddrs()(枚举本机接口)
+#include <net/if.h>      // IFF_UP / IFF_BROADCAST
 #include <errno.h>
 #include <stdlib.h>
 typedef  int  socket_t;
@@ -49,6 +56,18 @@ static lan_room_t   s_rooms[LAN_ROOM_MAX];
 static int          s_room_count = 0;
 static ines_byte_t  s_self_id[16];
 static int          s_have_self  = 0;
+
+// 广播失败只报一次(每秒一次的频率下避免刷屏), 成功后自动复位
+static int          s_adv_warned = 0;
+
+// 单次广播最多覆盖的接口数(同机网卡数量远小于此)
+#define LAN_IFACE_MAX        16
+
+// 一个活动 IPv4 接口(地址与掩码均为网络序)
+typedef struct _lan_iface {
+	ines_dword_t  addr;
+	ines_dword_t  mask;
+} lan_iface_t;
 
 // 自带 LCG: 只为生成 peer_id, 不用全局 rand() 以免污染进程随机序列
 static ines_dword_t s_rand_state = 0;
@@ -235,6 +254,148 @@ static void lan_pack_text(ines_byte_t* dst, int dst_max, ines_byte_t* out_len, i
 	*out_len = (ines_byte_t)len;
 }
 
+// 网络序 IPv4 -> 点分十进制文本(内部日志也用, 故放在工具区; 声明见 comm/lan.h)
+static int lan_addr_str_impl(ines_dword_t addr, ines_str_t buf, int len)
+{
+	ines_byte_t  b[4];
+
+	if ((buf == NULL) || (len <= 0))
+		return -1;
+
+	// addr 为网络序(大端), 按内存顺序取即点分十进制的高位到低位
+	memcpy(b, &addr, 4);
+	ines_snprintf(buf, len, ISTR("%d.%d.%d.%d"),
+				  (int)b[0], (int)b[1], (int)b[2], (int)b[3]);
+
+	return 0;
+}
+
+/** 收集一个可用的广播接口(过滤 0.0.0.0 / 点到点 / 回环网段)。 */
+static void lan_iface_add(lan_iface_t* out, int* pn, int max,
+						  ines_dword_t addr, ines_dword_t mask)
+{
+	if ((out == NULL) || (pn == NULL) || (*pn >= max))
+		return;
+
+	if ((addr == 0) || (mask == 0) || (mask == 0xFFFFFFFFu))
+		return;
+
+	// 回环网段: 广播只会回到本机, 发它毫无意义
+	if ((((ines_dword_t)ntohl(addr)) >> 24) == 127)
+		return;
+
+	out[*pn].addr = addr;
+	out[*pn].mask = mask;
+	(*pn)++;
+}
+
+/** 枚举本机活动的 IPv4 接口; 返回数量, -1 表示枚举失败(调用方退回有限广播)。 */
+#ifdef WIN32
+static int lan_iface_list(lan_iface_t* out, int max)
+{
+	INTERFACE_INFO   list[LAN_IFACE_MAX];
+	DWORD            bytes;
+	int              cnt;
+	int              n = 0;
+	int              i;
+
+	if ((out == NULL) || (max <= 0))
+		return -1;
+
+	bytes = 0;
+
+	// SIO_GET_INTERFACE_LIST 由 ws2_32 提供(已链接), 不必再引入 iphlpapi
+	if (0 != WSAIoctl(s_sock, SIO_GET_INTERFACE_LIST, NULL, 0,
+					  list, (DWORD)sizeof(list), &bytes, NULL, NULL))
+		return -1;
+
+	cnt = (int)(bytes / (DWORD)sizeof(list[0]));
+
+	if (cnt > (int)(sizeof(list) / sizeof(list[0])))
+		cnt = (int)(sizeof(list) / sizeof(list[0]));
+
+	for (i = 0; (i < cnt) && (n < max); i++)
+	{
+		const struct sockaddr_in*  pa = (const struct sockaddr_in*)&list[i].iiAddress;
+		const struct sockaddr_in*  pm = (const struct sockaddr_in*)&list[i].iiNetmask;
+
+		lan_iface_add(out, &n, max,
+					  (ines_dword_t)pa->sin_addr.s_addr,
+					  (ines_dword_t)pm->sin_addr.s_addr);
+	}
+
+	return n;
+}
+#elif defined(INES_POSIX)
+static int lan_iface_list(lan_iface_t* out, int max)
+{
+	struct ifaddrs*  head;
+	struct ifaddrs*  ifa;
+	int              n = 0;
+
+	if ((out == NULL) || (max <= 0))
+		return -1;
+
+	if (0 != getifaddrs(&head))
+		return -1;
+
+	for (ifa = head; (ifa != NULL) && (n < max); ifa = ifa->ifa_next)
+	{
+		const struct sockaddr_in*  pa;
+		const struct sockaddr_in*  pm;
+
+		if ((ifa->ifa_addr == NULL) || (ifa->ifa_netmask == NULL))
+			continue;
+
+		if (ifa->ifa_addr->sa_family != AF_INET)
+			continue;
+
+		if ((ifa->ifa_flags & IFF_UP) == 0)
+			continue;
+
+		if ((ifa->ifa_flags & IFF_BROADCAST) == 0)
+			continue;
+
+		pa = (const struct sockaddr_in*)ifa->ifa_addr;
+		pm = (const struct sockaddr_in*)ifa->ifa_netmask;
+
+		lan_iface_add(out, &n, max,
+					  (ines_dword_t)pa->sin_addr.s_addr,
+					  (ines_dword_t)pm->sin_addr.s_addr);
+	}
+
+	freeifaddrs(head);
+
+	return n;
+}
+#else
+static int lan_iface_list(lan_iface_t* out, int max)
+{
+	// 未知平台: 不枚举, 由 lan_advertise() 退回有限广播
+	return -1;
+}
+#endif
+
+/** 向指定广播地址发一份 beacon(bcast 为网络序)。 */
+static int lan_beacon_send(const lan_beacon_t* b, ines_dword_t bcast)
+{
+	struct sockaddr_in  dst;
+	int                 ret;
+
+	if (b == NULL)
+		return -1;
+
+	memset(&dst, 0, sizeof(dst));
+	dst.sin_family      = AF_INET;
+	dst.sin_port        = htons(LAN_PORT);
+	dst.sin_addr.s_addr = (ines_dword_t)bcast;
+
+	ret = (int)sendto(s_sock, (const char*)b, (int)sizeof(*b), 0,
+					  (struct sockaddr*)&dst, sizeof(dst));
+
+	return (ret == (int)sizeof(*b)) ? 0 : -1;
+}
+
 
 // ---------------------------------------------------------------------
 // 对外接口
@@ -366,9 +527,11 @@ int lan_is_open(void)
 int lan_advertise(ines_dword_t crc32, ines_word_t tcp_port, ines_byte_t region,
 				  ines_cstr_t nick, ines_cstr_t rom)
 {
-	lan_beacon_t        b;
-	struct sockaddr_in  dst;
-	int                 ret;
+	lan_beacon_t  b;
+	lan_iface_t   ifs[LAN_IFACE_MAX];
+	int           cnt;
+	int           ok = 0;
+	int           i;
 
 	if (s_sock == LAN_INVALID_SOCKET)
 		return -1;
@@ -384,16 +547,51 @@ int lan_advertise(ines_dword_t crc32, ines_word_t tcp_port, ines_byte_t region,
 	lan_pack_text(b.nick, LAN_NICK_MAX, &b.nick_len, nick);
 	lan_pack_text(b.rom,  LAN_ROM_MAX,  &b.rom_len,  rom);
 
-	memset(&dst, 0, sizeof(dst));
-	dst.sin_family      = AF_INET;
-	dst.sin_port        = htons(LAN_PORT);
-	dst.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+	// 逐个活动接口发**子网定向广播**: 由路由表选路, 每个网段都能收到;
+	// 有限广播在 Windows 上只走一个接口(见文件头说明), 故不作为首选。
+	cnt = lan_iface_list(ifs, LAN_IFACE_MAX);
 
-	ret = (int)sendto(s_sock, (const char*)&b, sizeof(b), 0,
-					  (struct sockaddr*)&dst, sizeof(dst));
+	for (i = 0; i < cnt; i++)
+	{
+		ines_dword_t  bcast = ifs[i].addr | ~(ifs[i].mask);
+		ines_char_t   ip[32];
 
-	if (ret != (int)sizeof(b))
+		lan_addr_str_impl(bcast, ip, (int)count_of(ip));
+
+		if (0 == lan_beacon_send(&b, bcast))
+		{
+			ok = 1;
+			INES_LOG(LOG_DBG, MOD_NET, ISTR("lan: advertise -> %s\n"), ip);
+		}
+		else
+		{
+			INES_LOG(LOG_DBG, MOD_NET, ISTR("lan: advertise -> %s failed\n"), ip);
+		}
+	}
+
+	// 兜底: 枚举失败(未知平台/没有可用接口)或所有接口都发不出去时,
+	// 退回有限广播, 行为与旧版一致
+	if (!ok)
+	{
+		if (0 == lan_beacon_send(&b, htonl(INADDR_BROADCAST)))
+			ok = 1;
+
+		INES_LOG(LOG_DBG, MOD_NET, ISTR("lan: advertise -> 255.255.255.255 (fallback)\n"));
+	}
+
+	if (!ok)
+	{
+		// 每秒一次, 同样的失败只报一次
+		if (!s_adv_warned)
+		{
+			s_adv_warned = 1;
+			INES_LOG(LOG_ERR, MOD_NET, ISTR("lan: advertise failed, iface=%d\n"), cnt);
+		}
+
 		return -1;
+	}
+
+	s_adv_warned = 0;
 
 	return 0;
 }
@@ -493,15 +691,5 @@ int lan_find(const ines_byte_t* peer_id, lan_room_t* out_room)
 
 int lan_addr_str(ines_dword_t addr, ines_str_t buf, int len)
 {
-	ines_byte_t  b[4];
-
-	if ((buf == NULL) || (len <= 0))
-		return -1;
-
-	// addr 为网络序(大端), 按内存顺序取即点分十进制的高位到低位
-	memcpy(b, &addr, 4);
-	ines_snprintf(buf, len, ISTR("%d.%d.%d.%d"),
-				  (int)b[0], (int)b[1], (int)b[2], (int)b[3]);
-
-	return 0;
+	return lan_addr_str_impl(addr, buf, len);
 }
