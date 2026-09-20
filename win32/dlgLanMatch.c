@@ -63,7 +63,6 @@ static INT_PTR CALLBACK dlgLanMatch_DlgProc(HWND hDlg, UINT message, WPARAM wPar
 static BOOL  dlgLanMatch_OnInitDialog(HWND hDlg);
 static void  dlgLanMatch_OnTimer(HWND hDlg);
 static void  dlgLanMatch_OnJoin(HWND hDlg);
-static void  dlgLanMatch_OnCacheChange(HWND hDlg);
 static BOOL  dlgLanMatch_OnItemChanged(HWND hDlg, NMLISTVIEW* pnm);
 static BOOL  dlgLanMatch_OnCustomDraw(HWND hDlg, NMLVCUSTOMDRAW* pcd);
 
@@ -214,7 +213,7 @@ static void dlgLanMatch_StopAll(void)
 	s_room_count = 0;
 }
 
-/** 握手失败/取消加入/改帧数后恢复发布状态(服务端仍在等待其他人)。 */
+/** 恢复发布状态(握手失败 / 取消加入后重来一次; 服务端仍在等待其他人)。 */
 static void dlgLanMatch_ResumeHosting(HWND hDlg)
 {
 	np_end();
@@ -470,23 +469,6 @@ static void dlgLanMatch_OnJoin(HWND hDlg)
 	dlgLanMatch_SetInfo(hDlg, text);
 }
 
-/** 缓冲帧数改变: 立即以新值重新发布(帧数只在握手时使用)。 */
-static void dlgLanMatch_OnCacheChange(HWND hDlg)
-{
-	int  sel = (int)SendDlgItemMessage(hDlg, IDC_LANMATCH_CMB_CACHE, CB_GETCURSEL, 0, 0);
-
-	if(sel < 0)
-		return;
-
-	s_cache_num = sel + NP_CACHE_MIN;
-
-	if(s_joining || s_connected)
-		return;
-
-	dlgLanMatch_ResumeHosting(hDlg);
-}
-
-
 // ---------------------------------------------------------------------
 // 定时器
 // ---------------------------------------------------------------------
@@ -591,7 +573,6 @@ static BOOL dlgLanMatch_OnInitDialog(HWND hDlg)
 	HWND         hwndList;
 	LVCOLUMN     col;
 	ines_char_t  text[256];
-	int          i;
 
 	icex.dwSize = sizeof(icex);
 	icex.dwICC  = ICC_LISTVIEW_CLASSES;
@@ -613,14 +594,19 @@ static BOOL dlgLanMatch_OnInitDialog(HWND hDlg)
 	ines_snprintf(text, count_of(text), ISTR("ROM：%s"), szROMTitle);
 	SetDlgItemText(hDlg, IDC_LANMATCH_LAB_ROM, text);
 
-	// ---- 缓冲帧数(1~5, 默认 4) ----
-	for(i = NP_CACHE_MIN; i <= NP_CACHE_MAX; i++)
-	{
-		ines_snprintf(text, count_of(text), ISTR("%d"), i);
-		SendDlgItemMessage(hDlg, IDC_LANMATCH_CMB_CACHE, CB_ADDSTRING, 0, (LPARAM)text);
-	}
+	// ---- 说明(与 mac/iNESLanLobby.m 文案对齐, 带上实际缓冲帧数) ----
+	ines_snprintf(text, count_of(text),
+				  ISTR("已发布到局域网（缓冲 %d 帧，发布后固定；可在 config.ini 的 [netplay] cache_num 调整）。加入他人房间后，本机作为副手柄（客户机）。"),
+				  s_cache_num);
 
-	SendDlgItemMessage(hDlg, IDC_LANMATCH_CMB_CACHE, CB_SETCURSEL, s_cache_num - NP_CACHE_MIN, 0);
+	SetDlgItemText(hDlg, IDC_LANMATCH_LAB_HINT, text);
+
+	// ---- 缓冲帧数(只读) ----
+	// 不提供下拉框: 值来自 config.ini 的 [netplay] cache_num, 发布后固定,
+	// 与 mac 端一致。改配置后需重新打开本面板才会生效。
+	ines_snprintf(text, count_of(text), ISTR("缓冲 %d 帧（config.ini [netplay] cache_num）"), s_cache_num);
+
+	SetDlgItemText(hDlg, IDC_LANMATCH_CMB_CACHE, text);
 
 	// ---- 房间列表 ----
 	hwndList = GetDlgItem(hDlg, IDC_LANMATCH_LIST);
@@ -629,13 +615,14 @@ static BOOL dlgLanMatch_OnInitDialog(HWND hDlg)
 
 	memset(&col, 0, sizeof(col));
 	col.mask     = LVCF_TEXT|LVCF_WIDTH|LVCF_SUBITEM;
+	// 列宽与 mac 端一致(110/176/68/56 = 410 < 列表宽度), 避免总宽超出后出现横向滚动条
 	col.pszText  = ISTR("昵称");
-	col.cx       = 120;
+	col.cx       = 110;
 	col.iSubItem = 0;
 	ListView_InsertColumn(hwndList, 0, &col);
 
 	col.pszText  = ISTR("ROM");
-	col.cx       = 180;
+	col.cx       = 176;
 	col.iSubItem = 1;
 	ListView_InsertColumn(hwndList, 1, &col);
 
@@ -764,11 +751,6 @@ static INT_PTR CALLBACK dlgLanMatch_DlgProc(HWND hDlg, UINT message, WPARAM wPar
 			return (INT_PTR)TRUE;
 		}
 
-		if((LOWORD(wParam) == IDC_LANMATCH_CMB_CACHE) && (HIWORD(wParam) == CBN_SELCHANGE))
-		{
-			dlgLanMatch_OnCacheChange(hDlg);
-			return (INT_PTR)TRUE;
-		}
 		break;
 
 	case WM_NOTIFY:

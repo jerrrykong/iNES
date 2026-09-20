@@ -184,6 +184,10 @@ cmake --build build --config Release
 - `win32/iNES.rc:126` 有菜单项 `MENUITEM "选项(&O)...", IDM_OPTIONS`，但 `win32/iNES.c` 里**没有任何 `case IDM_OPTIONS`** —— 这是个死菜单（`Resource.h:50` 有 ID）。
 - 用户已明确"缓冲帧数从配置读取（**后续再加上配置修改功能**）"。落点建议就是复用 `IDM_OPTIONS` 做一个「选项」对话框，至少放一个 1~5 的缓冲帧数选择，写 `[netplay] cache_num`。
 - 此项**本轮不做**，但请在 Win 侧记录，别让 `IDM_OPTIONS` 继续当死菜单。
+- **Win 侧记录（2026-09-20）**：`IDM_OPTIONS`（`Resource.h:50`，菜单项 `MENUITEM "选项(&O)..."`，
+  `win32/iNES.rc:126`）目前仍是**死菜单** —— `win32/iNES.c` 里没有任何 `case IDM_OPTIONS`。
+  后续加 `cache_num` 配置入口时优先复用它（新建 `IDD_OPTIONS` 对话框 + 1~5 的缓冲帧数选择，
+  写 `[netplay] cache_num`；新 `.c` 文件记得手动加进 `CMakeLists.txt` 的 `INES_WIN32_SOURCES`）。
 
 ---
 
@@ -405,16 +409,28 @@ cl /nologo /W3 /utf-8 /DWIN32 /D_WINDOWS /D_CRT_SECURE_NO_WARNINGS /DUNICODE /D_
 
 ## 11. 验收 Checklist（Win 侧完成后逐条打勾）
 
-- [ ] `cmake --build build --config Release` 零 error（warning 按项目现状处理）
-- [ ] §5.1 「联网对战…」的 `IDC_CMB_CACHE` 已改为只读文本（下拉框已删）
-- [ ] §5.2 局域网面板的 `IDC_LANMATCH_CMB_CACHE` 已改为只读文本（下拉框已删），提示文案与 mac 对齐
-- [ ] 两端 UI 一致：mac 与 win32 **都不再有缓冲帧数下拉框**，唯一来源是 `config.ini [netplay] cache_num`
-- [ ] §5.3 房间列表 4 列无横向滚动条、异版本灰显可见
-- [ ] §6 的 V1~V11 全部跑过（V6/V8 为重点）
+> **Win 侧执行结果（2026-09-20）**：P0 与 P1 已完成；P2 中可在单机上完成的用例已用附录 A 的
+> 双进程自测程序跑过，**真机跨端用例（V3/V4/V6~V11）需要两台机器 + 同一 ROM，待用户验证**。
+
+- [x] `cmake --build build --config Release` 零 error、**零 warning**
+- [x] §5.1 「联网对战…」的 `IDC_CMB_CACHE` 已改为只读文本（下拉框已删）
+- [x] §5.2 局域网面板的 `IDC_LANMATCH_CMB_CACHE` 已改为只读文本（下拉框已删），提示文案与 mac 对齐
+- [x] 两端 UI 一致：mac 与 win32 **都不再有缓冲帧数下拉框**，唯一来源是 `config.ini [netplay] cache_num`
+- [x] §5.3 房间列表列宽改为与 mac 一致的 110/176/68/56（合计 410 < 列表宽 427，不会出现横向滚动条）
+      —— 异版本灰显（`NM_CUSTOMDRAW`）需真机目视确认
+- [x] `comm/` 层双进程自测（附录 A，Win32 Release）：
+      - [x] 成功路径：两端 `SYNC OK (loaded=1, len=70000)`
+      - [x] 从机载入失败：两端 `SYNC RESET`，**连接保持**
+      - [x] 版本不一致（服务端 `NET_VER=1`）：客户端 `版本不一致(本机 2 / 对端 1), 请升级到相同版本!`
+      - [x] 缓冲帧数（主机 2 / 客户端 0）：两端 `cache_num=2`（客户端未回落默认 4）
+- [ ] §6 的 V1/V2 手工建服务器（同版本 / 异版本）
+- [ ] §6 的 V3/V4 局域网面板互见与"旧版（需升级）"灰显
+- [ ] §6 的 V5 手工改 `config.ini [netplay] cache_num` 生效，客户端强制采用
+- [ ] §6 的 V6~V11 联机读档相关（V6/V8 为重点）
 - [ ] 与 mac 端（相同 ROM、`NET_VER=2`）跨端对战 + 跨端联机读档成功
-- [ ] 手工改 `config.ini [netplay] cache_num` 生效，客户端强制采用
-- [ ] `docs/netplay-protocol-version-plan.md` §10 / `docs/netplay-state-sync-plan.md` §12 的"实现状态"表把 win32 一栏从"已改未编译"改为"已验证"
-- [ ] （可选）`IDM_OPTIONS` 死菜单记进待办
+- [x] `docs/netplay-protocol-version-plan.md` §10 / `docs/netplay-state-sync-plan.md` §12
+      的 win32 一栏已更新为"已编译 / 已自测"
+- [x] （可选）`IDM_OPTIONS` 死菜单已记进 §5.4
 
 ---
 

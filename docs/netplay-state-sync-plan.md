@@ -176,3 +176,13 @@ crc32( cpu.RAM[0x800] ‖ ppu.NT_RAM[0x1000] ‖ frame_count(8B) ‖ cpu.PC/A/X/
 - **分片**：单片 512B（接收缓冲 1024B，留余量）、每帧最多 8 片；100KB 约 25 帧。
 - **变长包的收包**：`NET_CMD_STATE_DATA` 未收全时必须整包留在缓冲里等下一帧，绝不能落进 `default` 分支（那样会按 1 字节丢弃、把包拆坏）。
 - 主机在 `NP_SYNC_RESET` 时**不复位自己**，而是提交控制码 —— 这样两端在同一逻辑帧复位。
+
+### Win 侧落地记录（2026-09-20）
+
+- `win32/iNES.c` 的接线（`OnMenuSyncState` / `OnIdleSyncState` / `sync_ctrl_req` / `UpdateMenuLoadState` 灰显）
+  已随 `ca1770a` 入库，`cmake --build build --config Release` **0 error / 0 warning**。
+- `comm/` 层用附录 A 的双进程自测程序在 Windows 上跑通两条路径：
+  - 成功：主机 `sync begin (70000 bytes)` → 两端 `SYNC OK (loaded=1)`；
+  - 从机载入失败：两端 `SYNC RESET`，**均不退出**（验证"失败不中断连接"）。
+- 仍需真机验证（需两台机器 + 同一 ROM）：V6 主机读档、V7 从机菜单灰显、V8 失败后双方同帧复位、
+  V9 空槽位只提示不复位、V11 同步中退出不崩溃。判据见 `docs/win32-netplay-handoff.md` §6。

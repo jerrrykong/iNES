@@ -245,7 +245,9 @@ BEGIN
     LTEXT           "端口",IDC_STATIC,196,44,21,14
     EDITTEXT        IDC_EDT_PORT,235,44,44,14,ES_AUTOHSCROLL
     LTEXT           "缓冲帧数",IDC_STATIC,21,65,41,14
-    COMBOBOX        IDC_CMB_CACHE,67,65,114,89,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    // 缓冲帧数不再可选: 唯一来源是 config.ini 的 [netplay] cache_num(与 mac 端一致),
+    // 这里只作只读显示(原来是 COMBOBOX, 改了也不生效, 属误导)
+    LTEXT           "",IDC_CMB_CACHE,67,66,240,10
     LTEXT           "提示信息...",IDC_LAB_INFO,18,95,279,14
     DEFPUSHBUTTON   "开始",IDOK,205,117,50,14
     PUSHBUTTON      "取消",IDCANCEL,258,117,50,14
@@ -275,11 +277,12 @@ BEGIN
     LTEXT           "昵称:",IDC_STATIC,7,12,30,10
     EDITTEXT        IDC_LANMATCH_EDT_NICK,40,8,150,16,ES_AUTOHSCROLL
     LTEXT           "",IDC_LANMATCH_LAB_ROM,200,12,233,10
-    LTEXT           "已发布到局域网。加入他人房间后，本机作为副手柄（客户机）。",IDC_LANMATCH_LAB_HINT,7,32,426,10
-    CONTROL         "",IDC_LANMATCH_LIST,"SysListView32",LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | WS_BORDER | WS_TABSTOP,7,48,427,190
+    LTEXT           "已发布到局域网（缓冲 4 帧，发布后固定；可在 config.ini 的 [netplay] cache_num 调整）。加入他人房间后，本机作为副手柄（客户机）。",IDC_LANMATCH_LAB_HINT,7,30,426,24
+    CONTROL         "",IDC_LANMATCH_LIST,"SysListView32",LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | WS_BORDER | WS_TABSTOP,7,56,427,182
     LTEXT           "缓冲帧数",IDC_STATIC,7,246,40,10
-    COMBOBOX        IDC_LANMATCH_CMB_CACHE,52,242,54,80,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    LTEXT           "",IDC_LANMATCH_LAB_INFO,120,246,314,10
+    // 同"联网对战"对话框: 只读显示, 值来自 config.ini 的 [netplay] cache_num
+    LTEXT           "",IDC_LANMATCH_CMB_CACHE,52,246,300,10
+    LTEXT           "",IDC_LANMATCH_LAB_INFO,7,260,426,10
     DEFPUSHBUTTON   "加入",IDOK,300,275,60,18
     PUSHBUTTON      "关闭",IDCANCEL,368,275,60,18
 END

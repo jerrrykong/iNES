@@ -81,7 +81,6 @@ static INT_PTR CALLBACK dlgNetPlay_DlgProc(HWND hDlg, UINT message, WPARAM wPara
 		else if(LOWORD(wParam) >= IDC_RAD_SERVER && LOWORD(wParam) <= IDC_RAD_CLIENT)
 		{
 			EnableWindow(GetDlgItem(hDlg, IDC_EDT_IP), IsDlgButtonChecked(hDlg, IDC_RAD_CLIENT));
-			EnableWindow(GetDlgItem(hDlg, IDC_CMB_CACHE), IsDlgButtonChecked(hDlg, IDC_RAD_SERVER));
 			return (INT_PTR)TRUE;
 		}
 		break;
@@ -97,16 +96,23 @@ static INT_PTR CALLBACK dlgNetPlay_DlgProc(HWND hDlg, UINT message, WPARAM wPara
 
 static BOOL dlgNetPlay_OnInitDialog(HWND hDlg)
 {
-	// init listbox
-	SendDlgItemMessage(hDlg, IDC_CMB_CACHE, CB_ADDSTRING, 0, (LPARAM)_T("1"));
-	SendDlgItemMessage(hDlg, IDC_CMB_CACHE, CB_ADDSTRING, 0, (LPARAM)_T("2"));
-	SendDlgItemMessage(hDlg, IDC_CMB_CACHE, CB_ADDSTRING, 0, (LPARAM)_T("3"));
-	SendDlgItemMessage(hDlg, IDC_CMB_CACHE, CB_ADDSTRING, 0, (LPARAM)_T("4"));
-	SendDlgItemMessage(hDlg, IDC_CMB_CACHE, CB_ADDSTRING, 0, (LPARAM)_T("5"));
-	// select 4 
-	SendDlgItemMessage(hDlg, IDC_CMB_CACHE, CB_SETCURSEL, NP_CACHE_DEFAULT - NP_CACHE_MIN, 0);
+	ines_char_t  text[128];
+	int          iCache;
 
+	// 缓冲帧数: 只读显示。唯一来源是 config.ini 的 [netplay] cache_num
+	// (未配置则用 NP_CACHE_DEFAULT), 与 mac 端一致 —— 不提供下拉框,
+	// 客户端填什么都不生效(一律以服务端下发的为准)。
+	iCache = (int)GetConfigInt(ISTR("netplay"), ISTR("cache_num"), NP_CACHE_DEFAULT);
 
+	if(iCache < NP_CACHE_MIN)
+		iCache = NP_CACHE_MIN;
+
+	if(iCache > NP_CACHE_MAX)
+		iCache = NP_CACHE_MAX;
+
+	ines_snprintf(text, count_of(text), ISTR("%d 帧（config.ini [netplay] cache_num）"), iCache);
+
+	SetDlgItemText(hDlg, IDC_CMB_CACHE, text);
 
 	// clear status text
 	SetDlgItemText(hDlg, IDC_LAB_INFO, _T(""));
@@ -114,7 +120,6 @@ static BOOL dlgNetPlay_OnInitDialog(HWND hDlg)
 	
 	CheckRadioButton(hDlg, IDC_RAD_SERVER, IDC_RAD_CLIENT, IDC_RAD_SERVER);
 	EnableWindow(GetDlgItem(hDlg, IDC_EDT_IP), FALSE);
-	EnableWindow(GetDlgItem(hDlg, IDC_CMB_CACHE), TRUE);
 
 	// set default ip 	
 	SetDlgItemText(hDlg, IDC_EDT_IP, _T("127.0.0.1"));

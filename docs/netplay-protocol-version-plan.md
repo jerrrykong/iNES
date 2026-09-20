@@ -123,11 +123,11 @@
 
 | 项 | 位置 | 状态 |
 |---|---|---|
-| `NET_VER` 重编号 + 失败回传服务端版本 | `comm/net.h`、`comm/npsession.c` | 完成（mac 编过，win32 未编译验证） |
-| 客户端强制采用服务端 `cache_num`，缺失拒绝 | `comm/npsession.c` | 完成 |
+| `NET_VER` 重编号 + 失败回传服务端版本 | `comm/net.h`、`comm/npsession.c` | 完成（win32 已编译；双进程自测：两端 `VER=2` 正常、服务端 `VER=1` 时客户端提示"版本不一致(本机 2 / 对端 1)"并拒绝） |
+| 客户端强制采用服务端 `cache_num`，缺失拒绝 | `comm/npsession.c` | 完成（win32 双进程自测：主机 2、客户端传 0，两端实测均为 2） |
 | beacon 带 `net_ver` + 房间表输出 | `comm/lan.{h,c}` | 完成 |
 | 列表"版本"列 + 异版本灰显不可选 | `mac/iNESLanLobby.m`、`win32/dlgLanMatch.c` | 完成 |
 | 缓冲帧数改从 `config.ini` 读取（含手工模式） | mac 大厅/联网对话框、win32 两个对话框 | 完成 |
-| 取消缓冲帧数下拉框（两端 UI 一致，只作只读显示） | mac：已取消；win32：`iNES.rc` + `dlgNetPlay.c` / `dlgLanMatch.c` | win32 **待改**（见 `docs/win32-netplay-handoff.md` §5.1 / §5.2） |
-| 状态载入 `STATE_*` + 失败硬件复位 | `comm/npsession.{h,c}`、mac/win32 前端 | 完成（见状态同步文档 §12） |
+| 取消缓冲帧数下拉框（两端 UI 一致，只作只读显示） | mac：已取消；win32：`iNES.rc` + `dlgNetPlay.c` / `dlgLanMatch.c` | **已完成**（win32 两个 `COMBOBOX` 改为只读 `LTEXT`，Release 构建 0 error / 0 warning；房间列表列宽对齐 mac 的 110/176/68/56） |
+| 状态载入 `STATE_*` + 失败硬件复位 | `comm/npsession.{h,c}`、mac/win32 前端 | 完成（win32 双进程自测：成功路径两端 `SYNC OK`；从机载入失败路径两端 `SYNC RESET` 且连接保持。真机 V6~V8 待用户验证） |
 | 配置修改入口（"设置"里改 `cache_num`） | 两端 | **未做**（后续） |
