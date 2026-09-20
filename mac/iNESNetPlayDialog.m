@@ -7,7 +7,10 @@
 
 #import "iNESNetPlayDialog.h"
 #import "iNESConfig.h"
+#import "iNESi18n.h"
+#import "iNESUiLayout.h"
 
+#include "../comm/i18n.h"
 #include "../comm/npsession.h"
 
 
@@ -137,7 +140,7 @@ static NSButton* npdlg_make_button(NSString* title, NSRect frame, BOOL isDefault
 	_connecting = NO;
 	_failMsg    = nil;
 
-	window.title              = @"网络对战";
+	window.title              = L10N("dialog.netplay.title");
 	window.delegate           = self;
 	window.releasedWhenClosed = NO;
 
@@ -153,14 +156,14 @@ static NSButton* npdlg_make_button(NSString* title, NSRect frame, BOOL isDefault
 
 	// ---- 运行为 ----
 	box = [[NSBox alloc] initWithFrame:NSMakeRect(18, 88, 304, 46)];
-	box.title         = @"运行为";
+	box.title         = L10N("dialog.netplay.run_as");
 	box.titlePosition = NSAboveTop;
 	box.titleFont     = [NSFont systemFontOfSize:13.0];
 	box.contentViewMargins = NSMakeSize(0, 0);
 	[root addSubview:box];
 
-	_radioServer       = npdlg_make_radio(@"服务器", NSMakeRect(24, 94, 80, 18));
-	_radioClient       = npdlg_make_radio(@"客户机", NSMakeRect(140, 94, 80, 18));
+	_radioServer       = npdlg_make_radio(L10N("dialog.netplay.server"), NSMakeRect(24, 94, 80, 18));
+	_radioClient       = npdlg_make_radio(L10N("dialog.netplay.client"), NSMakeRect(140, 94, 80, 18));
 	_radioServer.state = NSControlStateValueOn;
 	_radioClient.state = NSControlStateValueOff;
 
@@ -173,15 +176,25 @@ static NSButton* npdlg_make_button(NSString* title, NSRect frame, BOOL isDefault
 	[root addSubview:_radioClient];
 
 	// ---- 地址 / 端口 ----
-	[root addSubview:npdlg_make_label(@"地址", NSMakeRect(20, 62, 36, 17))];
-	_ipField = npdlg_make_edit(NSMakeRect(58, 59, 118, 22));
-	_ipField.stringValue = NPDLG_IP_DEFAULT;
-	[root addSubview:_ipField];
+	{
+		NSTextField*  addr_label = npdlg_make_label(L10N("dialog.netplay.address"), NSMakeRect(20, 62, 36, 17));
+		NSTextField*  port_label = npdlg_make_label(L10N("dialog.netplay.port"),    NSMakeRect(192, 62, 30, 17));
 
-	[root addSubview:npdlg_make_label(@"端口", NSMakeRect(192, 62, 30, 17))];
-	_portField = npdlg_make_edit(NSMakeRect(224, 59, 62, 22));
-	_portField.stringValue = NPDLG_PORT_DEFAULT;
-	[root addSubview:_portField];
+		[root addSubview:addr_label];
+		[root addSubview:port_label];
+
+		_ipField = npdlg_make_edit(NSMakeRect(58, 59, 118, 22));
+		_ipField.stringValue = NPDLG_IP_DEFAULT;
+		[root addSubview:_ipField];
+
+		_portField = npdlg_make_edit(NSMakeRect(224, 59, 62, 22));
+		_portField.stringValue = NPDLG_PORT_DEFAULT;
+		[root addSubview:_portField];
+
+		// 标签按译文长度自适应, 同一行后续控件整体右移(避免重叠)
+		INESFitLabel(addr_label, @[ _ipField ], 6.0);
+		INESFitLabel(port_label, @[ _portField ], 6.0);
+	}
 
 	// ---- 提示信息 ----
 	_infoLabel           = npdlg_make_label(@"", NSMakeRect(18, 32, 304, 17));
@@ -189,17 +202,20 @@ static NSButton* npdlg_make_button(NSString* title, NSRect frame, BOOL isDefault
 	[root addSubview:_infoLabel];
 
 	// ---- 开始 / 取消 ----
-	_startButton         = npdlg_make_button(@"开始", NSMakeRect(172, 12, 74, 28), YES);
+	_startButton         = npdlg_make_button(L10N("dialog.netplay.start"), NSMakeRect(172, 12, 74, 28), YES);
 	_startButton.target  = self;
 	_startButton.action  = @selector(onStart:);
 	[root addSubview:_startButton];
 
 	{
-		NSButton*  cancel = npdlg_make_button(@"取消", NSMakeRect(252, 12, 74, 28), NO);
+		NSButton*  cancel = npdlg_make_button(L10N("dialog.netplay.cancel"), NSMakeRect(252, 12, 74, 28), NO);
 
 		cancel.target = self;
 		cancel.action = @selector(onCancel:);
 		[root addSubview:cancel];
+
+		// 按钮按译文长度自适应: 必要时加宽窗口, 从右往左摆放
+		INESFitButtons(self.window, @[ cancel, _startButton ], 14.0, 8.0, 74.0);
 	}
 
 	[self onRoleChanged:nil];
@@ -239,8 +255,8 @@ static NSButton* npdlg_make_button(NSString* title, NSRect frame, BOOL isDefault
 	if ((port <= 0) || (port > 65535))
 	{
 		// win32: MessageBox("error input port")
-		_failMsg = @"端口无效，请输入 1 ~ 65535 之间的端口号。";
-		[self setInfo:@"端口无效"];
+		_failMsg = L10N("dialog.netplay.err_port");
+		[self setInfo:L10N("dialog.netplay.err_port_short")];
 		[NSApp stopModalWithCode:NSModalResponseCancel];
 		return;
 	}
@@ -267,7 +283,7 @@ static NSButton* npdlg_make_button(NSString* title, NSRect frame, BOOL isDefault
 	_connecting         = YES;
 	_startButton.enabled = NO;
 
-	[self setInfo:isServer ? @"等待客户端的连接..." : @"正在连接到服务器..."];
+	[self setInfo:isServer ? L10N("dialog.netplay.waiting") : L10N("dialog.netplay.connecting")];
 	[self startTimer];
 }
 
@@ -344,7 +360,7 @@ static NSButton* npdlg_make_button(NSString* title, NSRect frame, BOOL isDefault
 
 		_connected  = NO;
 		_connecting = NO;
-		_failMsg    = [NSString stringWithUTF8String:((msg[0] != 0) ? msg : "连接失败")];
+		_failMsg    = [NSString stringWithUTF8String:((msg[0] != 0) ? msg : ines_i18n_text("dialog.netplay.connect_failed"))];
 
 		[NSApp stopModalWithCode:NSModalResponseCancel];
 	}
@@ -409,9 +425,9 @@ static NSButton* npdlg_make_button(NSString* title, NSRect frame, BOOL isDefault
 	{
 		NSAlert*  alert = [[NSAlert alloc] init];
 
-		alert.messageText     = @"网络对战";
+		alert.messageText     = L10N("dialog.netplay.title");
 		alert.informativeText = dialog->_failMsg;
-		[alert addButtonWithTitle:@"确定"];
+		[alert addButtonWithTitle:L10N("msg.ok")];
 		[alert runModal];
 
 		dialog->_failMsg = nil;

@@ -12,7 +12,9 @@
 #import "iNESDebug.h"
 #import "iNESDebugView.h"
 #import "iNESRegisterView.h"
+#import "iNESi18n.h"
 
+#include "../comm/i18n.h"
 #include "../comm/log.h"
 #include "../comm/thread.h"
 
@@ -524,22 +526,23 @@ ines_cstr_t ines_dbg_view_title(ines_int_t viewId)
 {
 	switch (viewId)
 	{
-	case IDBG_VIEW_PATTERN:   return "图形查看器";
-	case IDBG_VIEW_NAMETABLE: return "卷轴查看器";
-	case IDBG_VIEW_PALETTE:   return "色盘查看器";
-	case IDBG_VIEW_MEMORY:    return "内存查看器";
-	case IDBG_VIEW_VMEMORY:   return "图形内存查看器";
-	case IDBG_VIEW_SPMEMORY:  return "精灵内存查看器";
-	case IDBG_VIEW_REGISTER:  return "寄存器查看器";
-	default:                  return "调试窗口";
+	// 与"工具 > 调试视图"菜单项共用同一套 key(菜单项即窗口名)
+	case IDBG_VIEW_PATTERN:   return ines_i18n_text("view.pattern_table");
+	case IDBG_VIEW_NAMETABLE: return ines_i18n_text("view.name_table");
+	case IDBG_VIEW_PALETTE:   return ines_i18n_text("view.palette");
+	case IDBG_VIEW_MEMORY:    return ines_i18n_text("view.memory");
+	case IDBG_VIEW_VMEMORY:   return ines_i18n_text("view.vmemory");
+	case IDBG_VIEW_SPMEMORY:  return ines_i18n_text("view.spmemory");
+	case IDBG_VIEW_REGISTER:  return ines_i18n_text("view.register");
+	default:                  return ines_i18n_text("view.default");
 	}
 }
 
 
 NSString* ines_dbg_pattern_title(ines_int_t patIdx)
 {
-	return [NSString stringWithFormat:@"%s(%s%d)", "图形查看器",
-			((patIdx & 0x04) ? "SP" : "BG"), (int)(patIdx & 0x03)];
+	return L10NF("view.pattern_title_format", ines_dbg_view_title(IDBG_VIEW_PATTERN),
+				 ((patIdx & 0x04) ? "SP" : "BG"), (int)(patIdx & 0x03));
 }
 
 
@@ -600,7 +603,33 @@ static NSSize idbg_initial_content_size(ines_int_t viewId)
 									repeats:YES];
 	[[NSRunLoop mainRunLoop] addTimer:_timer forMode:NSRunLoopCommonModes];
 
+	// 切换界面语言后刷新已打开窗口的标题(窗口内容里的寄存器/助记符是术语, 不翻译)
+	[[NSNotificationCenter defaultCenter] addObserver:self
+											 selector:@selector(ines_languageDidChange:)
+												 name:INESLanguageDidChangeNotification
+											   object:nil];
+
 	return self;
+}
+
+- (void)dealloc
+{
+	[[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (void)ines_languageDidChange:(NSNotification*)note
+{
+	ines_int_t  i;
+
+	for (i = 0; i < IDBG_VIEW_COUNT; i++)
+	{
+		if (_windows[i] == nil)
+			continue;
+
+		// 图形查看窗口的标题带 (BG0)/(SP0) 后缀: 这里只回退到基础标题,
+		// 用户下一次切换图案表时会自动补回后缀。
+		_windows[i].title = [NSString stringWithUTF8String:ines_dbg_view_title(i)];
+	}
 }
 
 - (BOOL)anyWindowVisible
@@ -787,12 +816,10 @@ static NSSize idbg_initial_content_size(ines_int_t viewId)
 
 	alert = [[NSAlert alloc] init];
 	alert.alertStyle  = NSAlertStyleWarning;
-	alert.messageText = @"写入 $4014 (OAMDMA)";
-	alert.informativeText = [NSString stringWithFormat:
-							 @"将立即从 $%02X00 传送 256 字节到精灵内存, 并消耗 514 个 CPU 周期。",
-							 (int)(val & 0xFF)];
-	[alert addButtonWithTitle:@"确定"];
-	[alert addButtonWithTitle:@"取消"];
+	alert.messageText = L10N("debug.dma_confirm_title");
+	alert.informativeText = L10NF("debug.dma_confirm_message", (int)(val & 0xFF));
+	[alert addButtonWithTitle:L10N("msg.ok")];
+	[alert addButtonWithTitle:L10N("msg.cancel")];
 
 	return ([alert runModal] == NSAlertFirstButtonReturn);
 }

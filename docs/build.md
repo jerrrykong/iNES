@@ -74,7 +74,25 @@ Windows 与 macOS 共用一份源稿 `mac/icon/iNES-icon.svg`：
 
 `.ico` 用 32bpp DIB（BGRA + alpha、自下而上）而不是 PNG 条目：`rc.exe` 与各版本 Windows 的资源加载器对 DIB 支持最广。重新生成图标后重新构建 `iNES` 目标即可 —— `.ico` 时间戳变化会触发 `iNES.rc` 重编译。
 
-## 7. Win64
+## 7. i18n 辅助工具（`tools/`，不进入主构建目标）
+
+两个纯 C 小工具，直接 `clang`/`cl` 单文件编译即可：
+
+```bash
+# 导出英文模板: comm/i18n_en.c(真源) -> lang/en.ini
+clang -DINES_POSIX -o /tmp/gen_i18n_template tools/gen_i18n_template.c
+/tmp/gen_i18n_template lang/en.ini
+
+# 校验各语言文件(key 集/占位符/编码/换行)
+clang -DINES_POSIX -o /tmp/i18n_check tools/i18n_check.c
+/tmp/i18n_check lang/zh-CN.ini lang/ja.ini lang/fr.ini   # 全 OK 时退出码 0
+```
+
+Windows（MSVC）同理：`cl /DINES_POSIX /Fe:i18n_check.exe tools\i18n_check.c`（`/utf-8` 视需要添加）。
+
+约定：**改英文必须改 `comm/i18n_en.c` 并重跑 `gen_i18n_template` 覆盖 `lang/en.ini`**；提交前跑 `i18n_check`。
+
+## 8. Win64
 
 评估为安全（无内联汇编、无指针/整型互存、`socket_t` 已按平台定义、LLP64 下 `long` 仍为 32 位）。构建后请关注 `C4267 / C4311 / C4312 / C4244` 警告。
 

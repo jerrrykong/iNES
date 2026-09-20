@@ -10,6 +10,7 @@
 #import "../comm/log.h"
 
 #import "iNESPalette.h"
+#import "iNESi18n.h"
 
 
 // macOS 上 CGBitmapContext 的经典 BGRA 布局:
@@ -239,7 +240,7 @@
 		NSFontAttributeName:            [NSFont systemFontOfSize:14],
 		NSForegroundColorAttributeName: [NSColor colorWithCalibratedWhite:0.55 alpha:1.0]
 	};
-	NSString*      tip = @"将 .nes 文件拖到此处, 或使用 文件 > 载入 ROM… (⌘O)";
+	NSString*      tip = L10N("video.drag_tip");
 	NSSize         size = [tip sizeWithAttributes:attributes];
 	NSRect         rect = NSMakeRect((bounds.size.width - size.width) / 2.0,
 									 (bounds.size.height - size.height) / 2.0,

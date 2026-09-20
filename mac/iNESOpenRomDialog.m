@@ -28,6 +28,10 @@
 // =====================================================================
 
 #import "iNESOpenRomDialog.h"
+#import "iNESi18n.h"
+#import "iNESUiLayout.h"
+
+#include "../comm/i18n.h"
 
 #import "../comm/log.h"
 #import "../core/rom.h"
@@ -69,16 +73,17 @@ typedef struct _openrom_column_
 	BOOL          right_align;
 } openrom_column_t;
 
+/* title 存 i18n key(术语列 Mapper / PRG / CHR / Trainer 也走翻译, 译文与原文同形) */
 static const openrom_column_t s_columns[] =
 {
-	{ "文件名",    220, NO  },
-	{ "ROM大小",    80, YES },
-	{ "Mapper",     60, YES },
-	{ "PRG",        70, YES },
-	{ "CHR",        70, YES },
-	{ "镜像",       60, NO  },
-	{ "电池",       50, NO  },
-	{ "Trainer",    60, NO  }
+	{ "dialog.openrom.col_name",      220, NO  },
+	{ "dialog.openrom.col_rom_size",   80, YES },
+	{ "dialog.openrom.col_mapper",     60, YES },
+	{ "dialog.openrom.col_prg",        70, YES },
+	{ "dialog.openrom.col_chr",        70, YES },
+	{ "dialog.openrom.col_mirror",     60, NO  },
+	{ "dialog.openrom.col_battery",    50, NO  },
+	{ "dialog.openrom.col_trainer",    60, NO  }
 };
 
 // NES 文件属性(全部取自 iNES 文件头)
@@ -181,19 +186,19 @@ static NSString* openrom_mirror_text(ines_byte_t mirror_type)
 	switch (mirror_type)
 	{
 	case MIRROR_VERT:
-		return @"垂直";
+		return L10N("dialog.openrom.mirror_vertical");
 
 	case MIRROR_HORZ:
-		return @"水平";
+		return L10N("dialog.openrom.mirror_horizontal");
 
 	case MIRROR_FOUR_SCREEN:
-		return @"四屏";
+		return L10N("dialog.openrom.mirror_four");
 
 	default:
 		break;
 	}
 
-	return @"未知";
+	return L10N("dialog.openrom.mirror_unknown");
 }
 
 
@@ -353,7 +358,7 @@ static NSTextField* openrom_make_label(NSString* text)
 	if (self == nil)
 		return nil;
 
-	window.title              = @"载入 NES 文件";
+	window.title              = L10N("dialog.openrom.title");
 	window.delegate           = self;
 	window.contentMinSize     = NSMakeSize(OPENROM_MIN_W, OPENROM_MIN_H);
 	window.contentView        = [[iNESOpenRomContentView alloc]
@@ -387,8 +392,8 @@ static NSTextField* openrom_make_label(NSString* text)
 	NSInteger     i;
 
 	// ---- 顶部: 文件夹路径 ----
-	self.dirLabel     = openrom_make_label(@"文件夹:");
-	self.countLabel   = openrom_make_label(@"未选择文件夹");
+	self.dirLabel     = openrom_make_label(L10N("dialog.openrom.folder"));
+	self.countLabel   = openrom_make_label(L10N("dialog.openrom.no_folder"));
 	self.countLabel.font = [NSFont systemFontOfSize:11];
 
 	self.dirField = [[NSTextField alloc] initWithFrame:NSZeroRect];
@@ -444,8 +449,12 @@ static NSTextField* openrom_make_label(NSString* text)
 		NSTableColumn*  col = [[NSTableColumn alloc] initWithIdentifier:
 								[NSString stringWithFormat:@"col%ld", (long)i]];
 
-		col.title  = [NSString stringWithUTF8String:s_columns[i].title];
-		col.width  = s_columns[i].width;
+		NSString*  col_title = [NSString stringWithUTF8String:ines_i18n_text(s_columns[i].title)];
+
+		col.title  = col_title;
+		// 列宽按译文表头测量, 但不小于设计宽度(列表可横向滚动, 故不必加宽窗口)
+		col.width  = MAX((CGFloat)s_columns[i].width,
+						 INESTextWidth(col_title, [NSFont systemFontOfSize:11.0]) + 14.0);
 		col.minWidth = 40;
 		// 表头可点排序: NSTableView 依据 sortDescriptorPrototype 自动在升/降序之间
 		// 切换并绘制排序箭头(等价 win32 想让 HDF_SORTUP / HDF_SORTDOWN 达到的效果)
@@ -467,7 +476,7 @@ static NSTextField* openrom_make_label(NSString* text)
 
 	// ---- 底部: 按钮与统计文字 ----
 	self.loadButton = [[NSButton alloc] initWithFrame:NSZeroRect];
-	self.loadButton.title         = @"加载";
+	self.loadButton.title         = L10N("dialog.openrom.load");
 	self.loadButton.bezelStyle    = NSBezelStyleRounded;
 	self.loadButton.target        = self;
 	self.loadButton.action        = @selector(onLoad:);
@@ -476,7 +485,7 @@ static NSTextField* openrom_make_label(NSString* text)
 	self.loadButton.enabled       = NO;
 
 	self.cancelButton = [[NSButton alloc] initWithFrame:NSZeroRect];
-	self.cancelButton.title         = @"取消";
+	self.cancelButton.title         = L10N("dialog.openrom.cancel");
 	self.cancelButton.bezelStyle    = NSBezelStyleRounded;
 	self.cancelButton.target        = self;
 	self.cancelButton.action        = @selector(onCancel:);
@@ -535,6 +544,10 @@ static NSTextField* openrom_make_label(NSString* text)
 		h = 60;
 
 	self.scrollView.frame = NSMakeRect(OPENROM_MARGIN, y, cx - OPENROM_MARGIN * 2, h);
+
+	// 按钮按译文长度自适应: 空间不足时向右加宽窗口, 从右往左摆放
+	INESFitButtons(self.window, @[ self.loadButton, self.cancelButton ],
+				   OPENROM_MARGIN, OPENROM_BTN_GAP, OPENROM_BTN_W);
 }
 
 #pragma mark - 通用
@@ -551,7 +564,7 @@ static NSTextField* openrom_make_label(NSString* text)
 
 	alert.messageText     = message;
 	alert.alertStyle      = NSAlertStyleWarning;
-	[alert addButtonWithTitle:@"确定"];
+	[alert addButtonWithTitle:L10N("msg.ok")];
 
 	// 用阻塞式模态而不是 sheet: 调用点之后紧跟着"重新扫描"等动作,
 	// 需要等用户确认完再继续(与 win32 的 MessageBox 语义一致)
@@ -621,7 +634,7 @@ static NSComparisonResult openrom_compare_number(long long v1, long long v2)
 	if (normalized.length == 0)
 	{
 		_currentDir = @"";
-		self.countLabel.stringValue = @"未选择文件夹";
+		self.countLabel.stringValue = L10N("dialog.openrom.no_folder");
 		[self updateButtons];
 		return;
 	}
@@ -668,7 +681,7 @@ static NSComparisonResult openrom_compare_number(long long v1, long long v2)
 
 	if (_entries.count == 0)
 	{
-		self.countLabel.stringValue = @"未找到 NES 文件";
+		self.countLabel.stringValue = L10N("dialog.openrom.no_nes_file");
 		INES_LOG(LOG_INF, MOD_SYS, ISTR("scan dir `%s`: no nes file found.\n"),
 			[_currentDir fileSystemRepresentation]);
 		[self updateButtons];
@@ -679,8 +692,8 @@ static NSComparisonResult openrom_compare_number(long long v1, long long v2)
 	_scanNext = 0;
 	_scanning = YES;
 
-	self.countLabel.stringValue = [NSString stringWithFormat:@"正在解析 0/%lu ...",
-									(unsigned long)_entries.count];
+	self.countLabel.stringValue = L10NF("dialog.openrom.parsing_zero_format",
+										(unsigned long)_entries.count);
 
 	INES_LOG(LOG_INF, MOD_SYS, ISTR("scan dir `%s`: %lu nes file(s) enumerated.\n"),
 		[_currentDir fileSystemRepresentation], (unsigned long)_entries.count);
@@ -758,8 +771,7 @@ static NSComparisonResult openrom_compare_number(long long v1, long long v2)
 		return;
 	}
 
-	self.countLabel.stringValue = [NSString stringWithFormat:@"正在解析 %ld/%ld ...",
-									(long)index, (long)count];
+	self.countLabel.stringValue = L10NF("dialog.openrom.parsing_format", (long)index, (long)count);
 }
 
 
@@ -772,8 +784,7 @@ static NSComparisonResult openrom_compare_number(long long v1, long long v2)
 
 	if (_entries.count > 0)
 	{
-		self.countLabel.stringValue = [NSString stringWithFormat:@"共 %lu 个支持的 NES 文件",
-										(unsigned long)_entries.count];
+		self.countLabel.stringValue = L10NF("dialog.openrom.total_format", (unsigned long)_entries.count);
 
 		// 属性已齐, 此时才应用排序(解析期间属性不完整, 排了也不准)
 		[self applySort];
@@ -785,7 +796,7 @@ static NSComparisonResult openrom_compare_number(long long v1, long long v2)
 	}
 	else
 	{
-		self.countLabel.stringValue = @"未找到支持的 NES 文件";
+		self.countLabel.stringValue = L10N("dialog.openrom.no_supported");
 	}
 
 	INES_LOG(LOG_INF, MOD_SYS, ISTR("scan dir `%s`: %lu nes file(s) listed.\n"),
@@ -1023,7 +1034,7 @@ static NSComparisonResult openrom_compare_number(long long v1, long long v2)
 {
 	NSOpenPanel*  panel = [NSOpenPanel openPanel];
 
-	panel.title                   = @"请选择 NES 文件所在文件夹";
+	panel.title                   = L10N("dialog.openrom.select_dir_title");
 	panel.canChooseFiles          = NO;
 	panel.canChooseDirectories    = YES;
 	panel.allowsMultipleSelection = NO;
@@ -1106,7 +1117,7 @@ static NSComparisonResult openrom_compare_number(long long v1, long long v2)
 
 	if (![[NSFileManager defaultManager] fileExistsAtPath:dir isDirectory:&is_dir] || !is_dir)
 	{
-		[self showWarning:@"文件夹不存在或不可访问!"];
+		[self showWarning:L10N("dialog.openrom.dir_invalid")];
 		[self.window makeFirstResponder:self.dirField];
 		return;
 	}
@@ -1133,7 +1144,7 @@ static NSComparisonResult openrom_compare_number(long long v1, long long v2)
 	// 加载前再确认一次文件是否仍然存在
 	if (![[NSFileManager defaultManager] fileExistsAtPath:path])
 	{
-		[self showWarning:@"文件已不存在, 请重新选择!"];
+		[self showWarning:L10N("dialog.openrom.file_missing")];
 		[self scanDir:_currentDir];
 		return;
 	}
@@ -1247,10 +1258,10 @@ sortDescriptorsDidChange:(NSArray<NSSortDescriptor*>*)oldDescriptors
 		return entry.parsed ? openrom_mirror_text(entry.mirrorType) : @"";
 
 	case 6:
-		return entry.parsed ? (entry.hasSram ? @"有" : @"无") : @"";
+		return entry.parsed ? (entry.hasSram ? L10N("dialog.openrom.yes") : L10N("dialog.openrom.no")) : @"";
 
 	case 7:
-		return entry.parsed ? (entry.hasTrainer ? @"有" : @"无") : @"";
+		return entry.parsed ? (entry.hasTrainer ? L10N("dialog.openrom.yes") : L10N("dialog.openrom.no")) : @"";
 
 	default:
 		break;

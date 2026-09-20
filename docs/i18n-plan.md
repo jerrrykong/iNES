@@ -1,19 +1,22 @@
 # iNES 国际化（i18n）方案
 
-> 状态：**设计已定，待最终审阅后开工**。本文只做设计，不含任何代码改动。
+> 状态：**mac 侧 M1+M2+M3（精简）已完成并通过冒烟测试；win32 侧待实施**，交接清单见 §16。
 > 范围：`win32/`（Win32 GUI）+ `mac/`（Cocoa）两端界面文本；英语为原生语言，简体中文/日语/法语通过外部语言文件提供，后续可加语言。
-> 相关文档：`docs/coding-style.md`（编码/命名）、`docs/build.md`（构建）、`docs/api.md`（公共 API 变更需同步）
+> 相关文档：`docs/coding-style.md`（编码/命名）、`docs/build.md`（§7 工具构建）、`docs/api.md`（§10 i18n 公共 API）
 
-### 已拍板决策（2026-09-19）
+### 已拍板决策（2026-09-19 / 09-20）
 
 | # | 议题 | 结论 |
 | --- | --- | --- |
 | ① | 英文真源 | **内置英文编译期表**（方案 A），模板由工具导出（§5） |
-| ② | 语言菜单位置 | 按各平台习惯：两端都放**「工具」菜单**，位置见 §9 |
+| ② | 语言菜单位置 | 按各平台习惯：两端都放**「工具」菜单第 2 项**，位置见 §9 |
 | ③ | 调试/查看窗口翻译范围 | **只翻纯 UI 元素**（窗口标题、按钮、表头）；硬件/CPU 术语保留英文（§10.1） |
 | ④ | mac 是否改 Auto Layout | **本次不改**，仍用手工 frame「测量后定位」；改造留待成本/收益评估后再定（§14） |
 | ⑤ | 交付范围 | **M1 + M2 + M3（精简版）一次做完**，含 `zh-CN.ini` / `ja.ini` / `fr.ini` 完整文件（§13） |
 | ⑥ | 简体中文文案来源 | **直接沿用现有界面中文文案**，仅做少量术语统一（§11.1） |
+| ⑦ | 首次运行的语言选择 | **自动匹配最合适的语言，不弹任何提示**（§1.1、§3.2） |
+| ⑧ | 日语译文语体 | **常体**（不使用 `です・ます`）（§11.2） |
+| ⑨ | 两端分工 | mac 侧先做完并测试，再交接 win32 侧实施（§16） |
 
 ---
 
@@ -24,7 +27,7 @@
 1. 全部界面文本（主窗口标题、菜单、对话框控件、按钮、提示框、状态栏/状态文本）走 i18n，运行时可切换。
 2. **英语为原生语言**：英文是 UI 文本的真源，界面按"英文"设计与排版；其它语言是翻译层。
 3. 新增"语言"菜单项，列出可用语言并标出当前语言，切换即时生效。
-4. 首次运行按**操作系统语言**自动匹配；无匹配 → 英语；用户选择写入 `config.ini` 后优先使用。
+4. 首次运行按**操作系统语言自动匹配**，**不弹任何提示**（决策 ⑦）；无匹配 → 英语；用户选择写入 `config.ini` 后优先使用。
 5. 支持**自定义语言**：外部配置文件（UTF-8 INI），无需改代码、无需重编译即可加语言。
 6. 基于模板产出**日语/法语**完整翻译文件；后续按模板加语言即可。
 7. **控件按译文长度自适应**：按钮/标签/窗口尺寸随文本变长自动调整（两端各自实现）。
@@ -474,6 +477,8 @@ static NSSize app_fit(id control, NSString* text)
 
 ### 11.2 日语 / 法语
 
+**日语一律常体**（决策 ⑧）：不使用 `です・ます`，提示语统一为体言止め / `〜する` / `〜か？`（例：`先に ROM を読み込め。`、`セーブ %d が存在しない、または現在の ROM と一致しない。`）。法语用 `vous`。
+
 1. 由 `tools/gen_i18n_template` 导出 `lang/en.ini`（M1 完成时产出完整模板）。
 2. 复制为 `lang/ja.ini` / `lang/fr.ini`，填 `[meta]`：
 
@@ -489,9 +494,9 @@ static NSSize app_fit(id control, NSString* text)
    | --- | --- | --- | --- |
    | `menu.file.open` | Load ROM... | ROMを読み込む... | Charger une ROM... |
    | `menu.control.pause` | Pause | 一時停止 | Pause |
-   | `msg.load_rom_first` | Please load a ROM first. | 先にROMを読み込んでください。 | Veuillez d'abord charger une ROM. |
+   | `msg.load_rom_first` | Please load a ROM first. | 先に ROM を読み込め。 | Veuillez d'abord charger une ROM. |
    | `dialog.netplay.cache_frames` | Cache frames | バッファフレーム数 | Images en mémoire tampon |
-   | `status.running` | Running | 実行中 | En cours |
+   | `status.running` | Running | 動作中 | En cours |
 
 4. 放到 `<数据目录>/lang/`（或 mac app 的 `Resources/lang/`）→ 重启即出现在"语言"菜单，**无需改代码**。
 5. `tools/i18n_check` 校验：key 集一致、占位符一致、UTF-8 无 BOM、LF。
@@ -515,6 +520,8 @@ static NSSize app_fit(id control, NSString* text)
 | **M3（精简）** | 7 个调试/查看窗口的**纯 UI 元素**（窗口标题、按钮、表头、通用标签），按 §10.1 边界执行；`zh-CN/ja/fr` 补齐相应条目 | ① 7 个窗口标题与按钮随语言切换 ② 寄存器名/助记符/硬件术语保持英文不变 ③ 调试器功能不变（600 帧哈希、断点行为不受影响） |
 
 **本次一次性完成 M1 + M2 + M3（精简）**（决策 ⑤），按上表顺序推进、分三段验收；每段结束同步一次文档与 `CMakeLists.txt`。
+
+> 进度：**mac 侧 M1+M2+M3 已全部完成并通过冒烟测试**（记录见 §17）；**win32 侧待实施**，交接清单见 §16。
 
 每次改动同步：`docs/api.md`（新增 `ines_i18n_*` 公共 API）、`docs/build.md`（工具构建）、`CMakeLists.txt`（新源文件）。
 
@@ -546,9 +553,68 @@ static NSSize app_fit(id control, NSString* text)
 | ④ | mac 是否改 Auto Layout | **本次不改**，仍用手工 frame「测量后定位」；布局收敛成独立函数，日后可评估迁移 | §8.2、§14 |
 | ⑤ | 交付范围 | **M1 + M2 + M3（精简）一次做完**，含 `zh-CN.ini` / `ja.ini` / `fr.ini` | §13 |
 | ⑥ | 简体中文文案来源 | **沿用现有界面中文文案**，仅做少量术语统一与笔误修正 | §11.1 |
+| ⑦ | 首次运行的语言选择 | **自动匹配，不提示**：`系统语言 → zh-Hans-CN/zh-CN/zh → en`，只在日志记 INFO | §1.1、§3.2 |
+| ⑧ | 日语语体 | **常体**（不用 `です・ます`）；法语用 `vous` | §11.2 |
+| ⑨ | 两端分工 | mac 侧先做完并冒烟，再交接 win32 侧按同一 key 表实施 | §16 |
 
-### 开工前仍需你确认的小项（不阻塞设计）
+---
 
-1. **win32 侧编译验证**：`win32/` 改动仍由你在 Win 侧编译；我会先跑通 mac 侧并保持两端 key 表/结构一致。
-2. **日文/法文的翻译风格**：敬体（です・ます）还是常体？法语用 "vous" 还是 "tu"？（拟用：日语敬体 `です・ます`，法语 `vous`，与常见软件一致）
-3. **首屏提示**：首次运行若系统语言无匹配（如德语），是否弹一次"当前为英语，可在工具 → 语言 切换"的提示？（拟：**不弹**，仅在日志记 INFO）
+## 16. Win32 待完成工作（交接清单）
+
+> mac 侧（M1+M2+M3 精简）已全部完成并通过冒烟测试。win32 侧按本章实施，key 表与行为必须与 mac 完全一致。
+> 前置：本机（mac）**无 MSVC / `rc.exe`，win32 改动无法编译验证**，只能靠"同构改写 + 逐条比对 key"来降低返工。
+
+### 16.1 已完成、win32 可直接复用的部分
+
+| 项 | 位置 | 说明 |
+| --- | --- | --- |
+| 公共 i18n 层 | `comm/i18n.{c,h}`、`comm/i18n_en.c` | 纯 C，已在 `CMakeLists.txt` 登记（`inescore` 目标也用得到）；win32 下 `ines_cstr_t` = UTF-16 |
+| 语言文件 | `lang/{en,zh-CN,ja,fr}.ini` | 已随 CMake 拷贝到程序目录 `lang/`（win32 见 CMake 的 `lang` 拷贝段，新加语言文件无需改脚本） |
+| key 真源 | `comm/i18n_en.c` | 约 168 条；**改英文只改这里**，再跑 `gen_i18n_template` 覆盖 `lang/en.ini` |
+| 校验工具 | `tools/gen_i18n_template.c`、`tools/i18n_check.c` | 构建方式见 `docs/build.md` §7；提交前必跑 |
+| 系统语言探测 | 未做 | win32 需自行取（`GetUserDefaultUILanguage` / `GetLocaleInfoEx` → BCP-47 标签），再交给 `ines_i18n_init()` |
+
+### 16.2 win32 侧待办（按序）
+
+1. **初始化**
+   - `main()` 里：`ines_i18n_add_lang_dir("<程序目录>\\lang")`（数据目录 `lang/` 由公共层自动优先）→ 取系统语言标签 → `ines_i18n_init(tag)`。
+   - 读 `config.ini` 的 `[ui] language`：有值且可用则 `ines_i18n_set_language()`（**不存在/不可用时不写回**，保持自动匹配）。
+   - 切语言后同 mac：`SetConfigStr(ISTR("ui"), ISTR("language"), id)`。
+2. **RC 全部改英文**：`win32/iNES.rc` 的菜单/对话框/字符串改为 `en.ini` 对应英文；**助记符 `&` 与快捷键 `\t` 不进语言文件**（决策 §4.2），由 win32 侧维护一张 `ID → 助记符/快捷键` 表，在 `i18n_apply_dialog` 时追加。
+3. **菜单与标题接入**：主菜单文本、`WM_SETTEXT` 类标题、`msg.*` 通用提示走 `ines_i18n_text()`。
+4. **自适应尺寸**（§8.1）：
+   - 对话框：`GetTextExtentPoint32` 测量 → `SetWindowPos` 加宽/下移；按钮最小宽度约 78px（与 mac 一致）。
+   - 列表列名：`ListView_SetColumnWidth` 按表头文本宽度。
+   - 7 个调试窗口复用同一例程（纯 UI 元素，§10.1 边界）。
+5. **语言菜单**：「工具」菜单**第 2 项**（紧跟「选项…」，之前插一个 `IDM_LANGUAGE_BASE + i`），`ines_i18n_enum()` 枚举、当前语言打勾；切换后**重画所有已打开窗口**。
+6. **验收**（对齐 §13）：
+   - 英/中/日/法四语下：按钮无截断、控件无重叠、窗口无裁切。
+   - 系统语言 zh / ja / fr / 德语（无匹配 → 英文）四种首次启动。
+   - 语言切换即时生效（含已打开的调试窗口/对话框）。
+   - `i18n_check` 全绿；MSVC 无新增警告。
+
+### 16.3 win32 实施时的注意点
+
+- UNICODE 下日志格式串：key / 语言 id 是 `char*`，必须用 `%S`（`comm/i18n.c` 已用 `I18N_FMT_S` / `I18N_FMT_KEY` 宏，照抄即可）。
+- `ines_i18n_text()` 返回进程内静态串，**切换语言后旧指针失效**，不要缓存；每次用时取。
+- 语言文件省略号统一写 ASCII `...`；win32 不需要 mac 那个 `…` 替换逻辑。
+- 布局逻辑收敛成"测量—定位"两趟的独立函数（决策 ④ 同样适用于 win32），别把尺寸计算散落在创建代码里。
+
+---
+
+## 17. mac 实施记录（2026-09-20）
+
+已完成：
+
+- `comm/i18n.{c,h}` + `comm/i18n_en.c`（168 条英文）+ `CMakeLists.txt` 登记；语言文件随 bundle 拷贝到 `Resources/lang/`。
+- `mac/iNESi18n.{h,m}`：`L10N` / `L10NF` 宏 + 系统语言探测（`[NSLocale preferredLanguages]`）+ 配置读写；首次运行只记日志、不提示。
+- `mac/iNESUiLayout.{h,m}`：`INESFitLabel` / `INESFitButtons` / `INESFitWindowHeight` / `INESEnsureContentWidth`（测量—定位两趟）。
+- 主菜单/窗口标题/状态、4 个对话框（关于/网络对战/载入 ROM/局域网）、7 个调试窗口的纯 UI 元素、寄存器查看器全部接入；工具菜单第 2 项为「语言」。
+- `tools/gen_i18n_template.c` / `tools/i18n_check.c`；`lang/{en,zh-CN,ja,fr}.ini`。
+
+实施中修掉的两个问题（避免 win32 重踩）：
+
+1. **`en.ini` 与内置英文表漂移** → 用 `gen_i18n_template` 重新生成覆盖（`i18n_check` 提交前必跑）。
+2. **mac 的 `L10NF` 不能用 `[NSString initWithFormat:arguments:]`**：NSString 的 `%s` 按"系统编码"解释字节，UTF-8 的中日文参数会变空串（实测标题变成 `iNES - 90tank - `）。改为先在 C 层 `ines_vsnprintf` 拼好再转 NSString（`mac/iNESi18n.m`）。win32 不受影响（本就走 C 层），但若在哪用了 `StringCchPrintf` 之外的托管格式化，需同样注意。
+
+冒烟结果（mac，系统语言 zh-CN）：四语切换即时生效（标题 `iNES - 90tank - {En cours / 動作中 / 运行中}`、已打开的"寄存器查看器"标题同步刷新）；法语「载入 ROM」对话框 720×552、按钮 `Charger(95)`/`Annuler(93)` 无截断；日语「网络对战」按钮 `開始(76)`/`キャンセル(108)` 无截断；无新增编译警告。

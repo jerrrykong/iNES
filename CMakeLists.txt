@@ -131,6 +131,8 @@ set(INES_CORE_SOURCES
 # comm 公共库(iNES.vcproj 与 iNesCore_DLL.vcproj 均包含 buf/log/net/platform)
 set(INES_COMMON_COMM_SOURCES
     "${INES_DIR}/comm/buf.c"
+    "${INES_DIR}/comm/i18n.c"
+    "${INES_DIR}/comm/i18n_en.c"
     "${INES_DIR}/comm/lan.c"
     "${INES_DIR}/comm/log.c"
     "${INES_DIR}/comm/net.c"
@@ -159,6 +161,8 @@ set(INES_WIN32_SOURCES
 set(INES_MAC_OBJC_SOURCES
     "${INES_DIR}/mac/main.m"
     "${INES_DIR}/mac/iNESApp.m"
+    "${INES_DIR}/mac/iNESi18n.m"
+    "${INES_DIR}/mac/iNESUiLayout.m"
     "${INES_DIR}/mac/iNESOpenRomDialog.m"
     "${INES_DIR}/mac/iNESVideo.m"
     "${INES_DIR}/mac/iNESAudio.m"
@@ -176,6 +180,14 @@ set(INES_MAC_C_SOURCES
 set(INES_MAC_SOURCES
     ${INES_MAC_OBJC_SOURCES}
     ${INES_MAC_C_SOURCES})
+
+# 语言文件(lang/*.ini): UTF-8 无 BOM + LF, 由 comm/i18n 在运行时加载。
+# macOS: 随 bundle 拷进 Resources/lang; win32: 构建后拷到可执行文件同目录(数据目录)的 lang/。
+file(GLOB INES_LANG_FILES CONFIGURE_DEPENDS "${INES_DIR}/lang/*.ini")
+if(APPLE)
+    set_source_files_properties(${INES_LANG_FILES}
+        PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/lang")
+endif()
 
 # macOS 应用图标: 由 mac/icon/iNES-icon.svg 生成(见 mac/icon/make-icns.sh 与 mac/icon/make-ico.ps1)。
 # 借助 MACOSX_PACKAGE_LOCATION 让 CMake 把它拷进 iNES.app/Contents/Resources/。
@@ -322,6 +334,12 @@ if(INES_BUILD_GUI)
 
         ines_set_output_dirs(iNES)
 
+        # 语言文件拷到可执行文件同目录(即 win32 侧的数据目录)的 lang/, 供 comm/i18n 加载
+        add_custom_command(TARGET iNES POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                    "${INES_DIR}/lang" "$<TARGET_FILE_DIR:iNES>/lang"
+            COMMENT "iNES: 复制语言文件到 $<TARGET_FILE_DIR:iNES>/lang")
+
         if(MSVC)
             target_compile_options(iNES PRIVATE /W3 /utf-8)
         endif()
@@ -344,7 +362,8 @@ if(INES_BUILD_MAC_GUI)
             ${INES_COMMON_COMM_SOURCES}
             ${INES_THREAD_SOURCE}
             ${INES_MAC_SOURCES}
-            ${INES_MAC_ICON})
+            ${INES_MAC_ICON}
+            ${INES_LANG_FILES})
 
         target_include_directories(iNES PRIVATE "${INES_DIR}")
 
