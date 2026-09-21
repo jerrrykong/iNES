@@ -222,6 +222,26 @@ ines_thread_init(th, func, ud) / ines_thread_start / ines_thread_wait / ines_thr
 ines_thread_set_auto_detach(th)   ines_thread_getcurid()
 ```
 
+### 国际化 `comm/i18n.h`（两端共用，纯 C）
+
+```c
+int          ines_i18n_init(const char* preferred);   // preferred=前端探测到的系统语言(可 NULL)
+void         ines_i18n_fini(void);
+void         ines_i18n_add_lang_dir(const char* dir); // init 之前追加搜索目录(如 mac bundle 的 Resources/lang)
+int          ines_i18n_enum(ines_i18n_lang_t* langs, int max_count);  // 含内置 en
+const char*  ines_i18n_match(const char* lang_tag);   // "zh-Hans-CN" -> "zh-CN" -> "zh" -> "en"
+int          ines_i18n_set_language(const char* id);
+const char*  ines_i18n_language(void);
+ines_cstr_t  ines_i18n_text(const char* key);         // key 为 ASCII("menu.file.open")
+ines_str_t   ines_i18n_text_fmt(ines_str_t buf, ines_size_t len, const char* key, ...);
+```
+
+- 返回 `ines_cstr_t`：win32 为 UTF-16，POSIX 为 UTF-8，前端可直接使用。
+- key 缺失 → 回退内置英文 → 仍缺 → 返回 key 本身并 `LOG_WAR`。
+- 英文真源为内置编译期表 `comm/i18n_en.c`；外部 `lang/*.ini`（UTF-8 无 BOM + LF）按 key 覆盖。
+- 只在 UI 线程调用；语言切换后旧的返回指针失效，不要跨切换缓存。
+- 设计见 `docs/i18n-plan.md`。
+
 ### 其它
 
 - `comm/buf.h`：循环/动态缓冲（音视频、网络）

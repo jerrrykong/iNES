@@ -26,6 +26,7 @@
 #import "iNESRegisterView.h"
 #import "iNESNetPlayDialog.h"
 #import "iNESLanLobby.h"
+#import "iNESi18n.h"
 
 #import "../comm/log.h"
 #include "../comm/npsession.h"
@@ -401,6 +402,7 @@ static int nes_proc(void* ud);
 @property (nonatomic, strong) NSMenu*         recentFilesMenu;
 @property (nonatomic, strong) NSMenu*         saveStateMenu;
 @property (nonatomic, strong) NSMenu*         loadStateMenu;
+@property (nonatomic, strong) NSMenu*         languageMenu;
 
 - (void)initDataDirs;
 - (void)loadConfig;
@@ -554,7 +556,7 @@ static NSString* app_function_key(ines_int_t n)
 	if (0 != ines_thread_start(&s_thread))
 	{
 		INES_LOG(LOG_ERR, MOD_SYS, ISTR("Create simulation thread failed!\n"));
-		[self showAlert:@"启动失败" message:@"无法创建模拟线程, 请查看日志。"];
+		[self showAlert:L10N("msg.startup_failed_title") message:L10N("msg.startup_no_thread")];
 		return;
 	}
 	s_thread_started = 1;
@@ -623,6 +625,9 @@ static NSString* app_function_key(ines_int_t n)
 
 	ines_snprintf(config_file, sizeof(config_file), ISTR("%s/config.ini"), data_dir);
 	iNES_config_set_file(config_file);
+
+	// i18n: 配置文件就绪后才能读 [ui] language; 界面创建前必须完成
+	iNES_i18n_init();
 
 	INES_LOG(LOG_NTY, MOD_SYS, ISTR("Data directory: '%s'\n"), data_dir);
 	INES_LOG(LOG_NTY, MOD_SYS, ISTR("Snapshot directory: '%s'\n"), s_picture_dir);
@@ -769,58 +774,58 @@ static NSString* app_function_key(ines_int_t n)
 	NSApp.mainMenu = main_menu;
 
 	// ------------------ 应用菜单 ------------------
-	root = [self addSubmenuToMenu:main_menu title:@"iNES"];
+	root = [self addSubmenuToMenu:main_menu title:L10N("app.title")];
 	menu = root.submenu;
-	[self addItemToMenu:menu title:@"关于 iNES" action:@selector(showAbout:) keyEquiv:nil modifiers:0 tag:0 group:nil];
+	[self addItemToMenu:menu title:L10N("menu.app.about") action:@selector(showAbout:) keyEquiv:nil modifiers:0 tag:0 group:nil];
 	[menu addItem:[NSMenuItem separatorItem]];
-	item = [self addItemToMenu:menu title:@"隐藏 iNES" action:@selector(hide:) keyEquiv:@"h"
+	item = [self addItemToMenu:menu title:L10N("menu.app.hide") action:@selector(hide:) keyEquiv:@"h"
 					 modifiers:NSEventModifierFlagCommand tag:0 group:nil];
 	item.target = nil;
 	[menu addItem:[NSMenuItem separatorItem]];
-	item = [self addItemToMenu:menu title:@"退出 iNES" action:@selector(terminate:) keyEquiv:@"q"
+	item = [self addItemToMenu:menu title:L10N("menu.app.quit") action:@selector(terminate:) keyEquiv:@"q"
 					 modifiers:NSEventModifierFlagCommand tag:0 group:nil];
 	item.target = nil;
 
 	// ------------------ 文件 ------------------
-	root = [self addSubmenuToMenu:main_menu title:@"文件"];
+	root = [self addSubmenuToMenu:main_menu title:L10N("menu.file")];
 	menu = root.submenu;
-	[self addItemToMenu:menu title:@"载入ROM…" action:@selector(openROM:) keyEquiv:@"o"
+	[self addItemToMenu:menu title:L10N("menu.file.open") action:@selector(openROM:) keyEquiv:@"o"
 			  modifiers:NSEventModifierFlagCommand tag:0 group:nil];
-	[self addItemToMenu:menu title:@"卸载ROM" action:@selector(closeROM:) keyEquiv:@"u"
+	[self addItemToMenu:menu title:L10N("menu.file.close") action:@selector(closeROM:) keyEquiv:@"u"
 			  modifiers:NSEventModifierFlagCommand tag:0 group:nil];
-	[self addItemToMenu:menu title:@"联网对战…" action:@selector(startNetPlay:) keyEquiv:nil
+	[self addItemToMenu:menu title:L10N("menu.file.net_play") action:@selector(startNetPlay:) keyEquiv:nil
 			  modifiers:0 tag:0 group:nil];
-	[self addItemToMenu:menu title:@"局域网快速对战…" action:@selector(startLanQuickMatch:) keyEquiv:nil
+	[self addItemToMenu:menu title:L10N("menu.file.lan_match") action:@selector(startLanQuickMatch:) keyEquiv:nil
 			  modifiers:0 tag:0 group:nil];
 	[menu addItem:[NSMenuItem separatorItem]];
 
-	root = [self addSubmenuToMenu:menu title:@"最近文件"];
+	root = [self addSubmenuToMenu:menu title:L10N("menu.file.recent")];
 	self.recentFilesMenu           = root.submenu;
 	self.recentFilesMenu.delegate  = self;
 
 	// ------------------ 控制 ------------------
-	root = [self addSubmenuToMenu:main_menu title:@"控制"];
+	root = [self addSubmenuToMenu:main_menu title:L10N("menu.control")];
 	menu = root.submenu;
-	[self addItemToMenu:menu title:@"重新上电" action:@selector(hardReset:) keyEquiv:app_function_key(1)
+	[self addItemToMenu:menu title:L10N("menu.control.hard_reset") action:@selector(hardReset:) keyEquiv:app_function_key(1)
 			  modifiers:NSEventModifierFlagCommand tag:0 group:nil];
-	[self addItemToMenu:menu title:@"软件复位" action:@selector(softReset:) keyEquiv:app_function_key(1)
+	[self addItemToMenu:menu title:L10N("menu.control.soft_reset") action:@selector(softReset:) keyEquiv:app_function_key(1)
 			  modifiers:0 tag:0 group:nil];
 	[menu addItem:[NSMenuItem separatorItem]];
-	[self addItemToMenu:menu title:@"暂停" action:@selector(togglePause:) keyEquiv:@"p" modifiers:0 tag:0 group:nil];
-	[self addItemToMenu:menu title:@"单帧执行" action:@selector(frameStep:) keyEquiv:@" " modifiers:0 tag:0 group:nil];
+	[self addItemToMenu:menu title:L10N("menu.control.pause") action:@selector(togglePause:) keyEquiv:@"p" modifiers:0 tag:0 group:nil];
+	[self addItemToMenu:menu title:L10N("menu.control.frame_step") action:@selector(frameStep:) keyEquiv:@" " modifiers:0 tag:0 group:nil];
 	[menu addItem:[NSMenuItem separatorItem]];
-	[self addItemToMenu:menu title:@"全屏" action:@selector(toggleFullScreen:) keyEquiv:app_function_key(12)
+	[self addItemToMenu:menu title:L10N("menu.control.full_screen") action:@selector(toggleFullScreen:) keyEquiv:app_function_key(12)
 			  modifiers:0 tag:0 group:nil];
 	[menu addItem:[NSMenuItem separatorItem]];
 
 	{
 		ines_int_t  scales[] = {100, 200, 300, 400};
 
-		root = [self addSubmenuToMenu:menu title:@"缩放"];
+		root = [self addSubmenuToMenu:menu title:L10N("menu.control.zoom")];
 		for (i = 0; i < (ines_int_t)count_of(scales); i++)
 		{
 			[self addItemToMenu:root.submenu
-						  title:[NSString stringWithFormat:@"x %d", (int)(scales[i] / 100)]
+						  title:L10NF("menu.zoom.x_format", (int)(scales[i] / 100))
 						 action:@selector(setScale:)
 					   keyEquiv:app_function_key(5 + i)
 					  modifiers:0
@@ -829,8 +834,8 @@ static NSString* app_function_key(ines_int_t n)
 		}
 	}
 
-	root = [self addSubmenuToMenu:menu title:@"比例"];
-	[self addItemToMenu:root.submenu title:@"原始比例" action:@selector(setAspect:) keyEquiv:nil
+	root = [self addSubmenuToMenu:menu title:L10N("menu.control.aspect")];
+	[self addItemToMenu:root.submenu title:L10N("menu.control.aspect_original") action:@selector(setAspect:) keyEquiv:nil
 			  modifiers:0 tag:INES_ASPECT_ORIGINAL group:APP_GROUP_ASPECT];
 	[self addItemToMenu:root.submenu title:@"4：3" action:@selector(setAspect:) keyEquiv:nil
 			  modifiers:0 tag:INES_ASPECT_4_3 group:APP_GROUP_ASPECT];
@@ -838,17 +843,17 @@ static NSString* app_function_key(ines_int_t n)
 			  modifiers:0 tag:INES_ASPECT_16_9 group:APP_GROUP_ASPECT];
 
 	[menu addItem:[NSMenuItem separatorItem]];
-	[self addItemToMenu:menu title:@"静音" action:@selector(toggleMute:) keyEquiv:app_function_key(9)
+	[self addItemToMenu:menu title:L10N("menu.control.mute") action:@selector(toggleMute:) keyEquiv:app_function_key(9)
 			  modifiers:0 tag:0 group:nil];
 
 	{
 		ines_int_t  volumes[] = {100, 80, 60, 40, 20, 0};
 
-		root = [self addSubmenuToMenu:menu title:@"音量"];
+		root = [self addSubmenuToMenu:menu title:L10N("menu.control.volume")];
 		for (i = 0; i < (ines_int_t)count_of(volumes); i++)
 		{
 			[self addItemToMenu:root.submenu
-						  title:[NSString stringWithFormat:@"%d%%", (int)volumes[i]]
+						  title:L10NF("menu.volume.percent_format", (int)volumes[i])
 						 action:@selector(setVolume:)
 					   keyEquiv:nil
 					  modifiers:0
@@ -859,13 +864,13 @@ static NSString* app_function_key(ines_int_t n)
 
 	[menu addItem:[NSMenuItem separatorItem]];
 
-	root = [self addSubmenuToMenu:menu title:@"即时存档"];
+	root = [self addSubmenuToMenu:menu title:L10N("menu.control.save_state")];
 	self.saveStateMenu          = root.submenu;
 	self.saveStateMenu.delegate = self;
 	for (i = 0; i < APP_STATE_COUNT; i++)
 	{
 		[self addItemToMenu:self.saveStateMenu
-					  title:[NSString stringWithFormat:@"存档 %d", (int)i]
+					  title:L10NF("menu.state.save_format", (int)i)
 					 action:@selector(saveState:)
 				   keyEquiv:[NSString stringWithFormat:@"%d", (int)i]
 				  modifiers:NSEventModifierFlagCommand
@@ -873,13 +878,13 @@ static NSString* app_function_key(ines_int_t n)
 					  group:APP_GROUP_SAVESTATE];
 	}
 
-	root = [self addSubmenuToMenu:menu title:@"载入存档"];
+	root = [self addSubmenuToMenu:menu title:L10N("menu.control.load_state")];
 	self.loadStateMenu          = root.submenu;
 	self.loadStateMenu.delegate = self;
 	for (i = 0; i < APP_STATE_COUNT; i++)
 	{
 		[self addItemToMenu:self.loadStateMenu
-					  title:[NSString stringWithFormat:@"读档 %d", (int)i]
+					  title:L10NF("menu.state.load_format", (int)i)
 					 action:@selector(loadState:)
 				   keyEquiv:[NSString stringWithFormat:@"%d", (int)i]
 				  modifiers:(NSEventModifierFlagCommand | NSEventModifierFlagOption)
@@ -890,20 +895,43 @@ static NSString* app_function_key(ines_int_t n)
 	[menu addItem:[NSMenuItem separatorItem]];
 	// 截图用 Cmd+F10(与 win32 的 Ctrl+F10 对齐): 裸功能键会被 macOS 的系统快捷键/媒体键
 	// 抢占(F11 "显示桌面" 已实测按不动), 加 Command 后系统不再拦截。
-	[self addItemToMenu:menu title:@"截图" action:@selector(takeSnapshot:) keyEquiv:app_function_key(10)
+	[self addItemToMenu:menu title:L10N("menu.control.snapshot") action:@selector(takeSnapshot:) keyEquiv:app_function_key(10)
 			  modifiers:NSEventModifierFlagCommand tag:0 group:nil];
 
 	// ------------------ 工具 ------------------
-	root = [self addSubmenuToMenu:main_menu title:@"工具"];
+	root = [self addSubmenuToMenu:main_menu title:L10N("menu.tools")];
 	menu = root.submenu;
-	[self addItemToMenu:menu title:@"选项…" action:@selector(showUnimplemented:) keyEquiv:nil
+	[self addItemToMenu:menu title:L10N("menu.tools.options") action:@selector(showUnimplemented:) keyEquiv:nil
 			  modifiers:0 tag:0 group:nil];
+
+	// 语言: 各语言以本语言自身的名称显示(不懂当前界面语言时也认得), 当前项打勾。
+	// win32 侧同样放在"工具"菜单的"选项"之后, 两端位置一致。
+	root = [self addSubmenuToMenu:menu title:L10N("menu.language")];
+	{
+		NSArray<NSArray<NSString*>*>*  langs = iNES_i18n_languages();
+		NSString*                      cur   = iNES_i18n_language_id();
+
+		self.languageMenu = root.submenu;
+		for (NSArray<NSString*>* lang in langs)
+		{
+			NSMenuItem*  lang_item = [self addItemToMenu:self.languageMenu
+												   title:lang[1]
+												  action:@selector(selectLanguage:)
+												keyEquiv:nil
+											   modifiers:0
+													 tag:0
+												   group:nil];
+
+			lang_item.representedObject = lang[0];    // 语言 ID(ASCII, 如 "zh-CN")
+			lang_item.state = [lang[0] isEqualToString:cur] ? NSControlStateValueOn : NSControlStateValueOff;
+		}
+	}
 	[menu addItem:[NSMenuItem separatorItem]];
-	[self addItemToMenu:menu title:@"显示 OSD" action:@selector(toggleOsd:) keyEquiv:nil
+	[self addItemToMenu:menu title:L10N("menu.tools.osd") action:@selector(toggleOsd:) keyEquiv:nil
 			  modifiers:0 tag:0 group:nil];
 	[menu addItem:[NSMenuItem separatorItem]];
 
-	root = [self addSubmenuToMenu:menu title:@"日志"];
+	root = [self addSubmenuToMenu:menu title:L10N("menu.tools.log")];
 	{
 		struct _app_log_level_ { ines_int_t level; const char* title; };
 		const struct _app_log_level_  levels[] = {
@@ -927,17 +955,20 @@ static NSString* app_function_key(ines_int_t n)
 						  group:APP_GROUP_LOGLEVEL];
 		}
 	}
-	[self addItemToMenu:menu title:@"CPU TRACE" action:@selector(toggleCpuTrace:) keyEquiv:nil
+	[self addItemToMenu:menu title:L10N("menu.tools.cpu_trace") action:@selector(toggleCpuTrace:) keyEquiv:nil
 			  modifiers:0 tag:0 group:nil];
 	[menu addItem:[NSMenuItem separatorItem]];
 
 	// 调试视图: 7 个独立工具窗口(与 win32 的 IDM_VIEW_* 一一对应, tag 即视图标识)。
 	// 与 win32 一致: 菜单始终可点, 未载入 ROM 时窗口内为灰色。
 	// 第 7 项"寄存器"在 win32 中是空实现, mac 端补齐(见 docs/register-view-plan.md)。
-	root = [self addSubmenuToMenu:menu title:@"调试视图"];
+	root = [self addSubmenuToMenu:menu title:L10N("menu.tools.debug_view")];
 	{
-		NSArray<NSString*>*  titles = @[@"图形查看…", @"卷轴查看", @"调色板查看…", @"程序内存查看…",
-										@"图案内存查看…", @"精灵内存查看…", @"寄存器查看…"];
+		// 与窗口标题共用一套 key(打开窗口的菜单项即窗口名, 两端一致)
+		NSArray<NSString*>*  titles = @[ L10N("view.pattern_table"), L10N("view.name_table"),
+										L10N("view.palette"),       L10N("view.memory"),
+										L10N("view.vmemory"),       L10N("view.spmemory"),
+										L10N("view.register") ];
 		ines_int_t           view_id;
 
 		for (view_id = 0; view_id < (ines_int_t)titles.count; view_id++)
@@ -947,9 +978,31 @@ static NSString* app_function_key(ines_int_t n)
 		}
 	}
 	// ------------------ 帮助 ------------------
-	root = [self addSubmenuToMenu:main_menu title:@"帮助"];
-	[self addItemToMenu:root.submenu title:@"关于 iNES" action:@selector(showAbout:) keyEquiv:nil
+	root = [self addSubmenuToMenu:main_menu title:L10N("menu.help")];
+	[self addItemToMenu:root.submenu title:L10N("menu.help.about") action:@selector(showAbout:) keyEquiv:nil
 			  modifiers:0 tag:0 group:nil];
+}
+
+/**
+ * 切换界面语言: 写回 config.ini 后重建菜单、刷新窗口标题, 并广播通知
+ * (已打开的对话框/调试窗口据此刷新自身文本)。
+ */
+- (void)selectLanguage:(id)sender
+{
+	NSString*  lang_id;
+
+	if (![sender isKindOfClass:[NSMenuItem class]])
+		return;
+
+	lang_id = ((NSMenuItem*)sender).representedObject;
+	if (![lang_id isKindOfClass:[NSString class]] || lang_id.length == 0)
+		return;
+
+	if (!iNES_i18n_set_language(lang_id))
+		return;
+
+	[self buildMenuBar];
+	[self refreshTitle];
 }
 
 
@@ -1036,20 +1089,21 @@ static NSString* app_function_key(ines_int_t n)
 	ines_mutex_unlock(&s_mutex_ctl);
 
 	if (status == NES_STATUS_OFF)
-		state_text = @"未运行";
+		state_text = L10N("status.not_running");
 	else if (pause == NES_STATUS_PAUSE)
-		state_text = @"暂停";
+		state_text = L10N("status.paused");
 	else if (pause == NES_STATUS_FRAME_STEP)
-		state_text = @"逐帧";
+		state_text = L10N("status.frame_step");
 	else
-		state_text = @"运行中";
+		state_text = L10N("status.running");
 
 	if (status == NES_STATUS_OFF)
-		self.window.title = [NSString stringWithFormat:@"iNES - %@", state_text];
+		self.window.title = L10NF("app.title_off_format", L10N("app.title").UTF8String, state_text.UTF8String);
 	else if (net_play)
-		self.window.title = [NSString stringWithFormat:@"iNES - %s - 联网对战中（%@）", title, state_text];
+		self.window.title = L10NF("app.title_net_format", L10N("app.title").UTF8String, title,
+								  L10N("status.net_play_tag").UTF8String, state_text.UTF8String);
 	else
-		self.window.title = [NSString stringWithFormat:@"iNES - %s - %@", title, state_text];
+		self.window.title = L10NF("app.title_rom_format", L10N("app.title").UTF8String, title, state_text.UTF8String);
 }
 
 /**
@@ -1069,10 +1123,10 @@ static NSString* app_function_key(ines_int_t n)
 
 	NSAlert*  alert = [[NSAlert alloc] init];
 
-	alert.messageText     = @"联网对战中";
-	alert.informativeText = @"正在联网游戏中，是否确认结束当前游戏？";
-	[alert addButtonWithTitle:@"确认结束"];
-	[alert addButtonWithTitle:@"取消"];
+	alert.messageText     = L10N("msg.netplay_quit_title");
+	alert.informativeText = L10N("msg.netplay_quit_message");
+	[alert addButtonWithTitle:L10N("msg.netplay_quit_confirm")];
+	[alert addButtonWithTitle:L10N("msg.cancel")];
 
 	return (NSAlertFirstButtonReturn == [alert runModal]);
 }
@@ -1091,7 +1145,7 @@ static NSString* app_function_key(ines_int_t n)
 
 	alert.messageText     = (title != nil) ? title : @"";
 	alert.informativeText = (message != nil) ? message : @"";
-	[alert addButtonWithTitle:@"确定"];
+	[alert addButtonWithTitle:L10N("msg.ok")];
 
 	[alert runModal];
 }
@@ -1285,7 +1339,8 @@ static NSString* app_function_key(ines_int_t n)
 	if (menu == self.recentFilesMenu)
 		[self updateRecentFilesMenu];
 	else if ((menu == self.saveStateMenu) || (menu == self.loadStateMenu))
-		[self updateStateMenu:menu label:(menu == self.saveStateMenu) ? @"存档" : @"读档"];
+		[self updateStateMenu:menu label:(menu == self.saveStateMenu) ? L10N("menu.control.save_state")
+																	 : L10N("menu.control.load_state")];
 }
 
 - (void)updateRecentFilesMenu
@@ -1319,7 +1374,7 @@ static NSString* app_function_key(ines_int_t n)
 
 	if (self.recentFilesMenu.numberOfItems == 0)
 	{
-		NSMenuItem*  item = [[NSMenuItem alloc] initWithTitle:@"（无）" action:nil keyEquivalent:@""];
+		NSMenuItem*  item = [[NSMenuItem alloc] initWithTitle:L10N("menu.recent.none") action:nil keyEquivalent:@""];
 		item.enabled = NO;
 		[self.recentFilesMenu addItem:item];
 	}
@@ -1347,7 +1402,7 @@ static NSString* app_function_key(ines_int_t n)
 
 		if (save_time == 0)
 		{
-			item.title = [NSString stringWithFormat:@"%@ %d (空)", label, (int)i];
+			item.title = L10NF("menu.state.empty_format", label.UTF8String, (int)i);
 			continue;
 		}
 
@@ -1532,7 +1587,7 @@ static NSString* app_function_key(ines_int_t n)
 	if (s_ctl.net_play && !np_is_server())
 	{
 		ines_mutex_unlock(&s_mutex_ctl);
-		[self showAlert:@"控制" message:@"联网对战中只有主机可以复位。"];
+		[self showAlert:L10N("msg.control_title") message:L10N("msg.netplay_host_reset_only")];
 		return;
 	}
 
@@ -1555,7 +1610,7 @@ static NSString* app_function_key(ines_int_t n)
 	if (s_ctl.net_play && !np_is_server())
 	{
 		ines_mutex_unlock(&s_mutex_ctl);
-		[self showAlert:@"控制" message:@"联网对战中只有主机可以复位。"];
+		[self showAlert:L10N("msg.control_title") message:L10N("msg.netplay_host_reset_only")];
 		return;
 	}
 
@@ -1579,7 +1634,7 @@ static NSString* app_function_key(ines_int_t n)
 
 	if ([self currentStatus] == NES_STATUS_OFF)
 	{
-		[self showAlert:@"网络对战" message:@"请先载入一个 ROM。"];
+		[self showAlert:L10N("dialog.netplay.title") message:L10N("msg.load_rom_first")];
 		return;
 	}
 
@@ -1589,7 +1644,7 @@ static NSString* app_function_key(ines_int_t n)
 
 	if (in_play)
 	{
-		[self showAlert:@"网络对战" message:@"已经在联网对战中。"];
+		[self showAlert:L10N("dialog.netplay.title") message:L10N("msg.netplay_already")];
 		return;
 	}
 
@@ -1622,7 +1677,7 @@ static NSString* app_function_key(ines_int_t n)
 
 	if ([self currentStatus] == NES_STATUS_OFF)
 	{
-		[self showAlert:@"局域网快速对战" message:@"请先载入一个 ROM。"];
+		[self showAlert:L10N("dialog.lan.title") message:L10N("msg.load_rom_first")];
 		return;
 	}
 
@@ -1632,7 +1687,7 @@ static NSString* app_function_key(ines_int_t n)
 
 	if (in_play)
 	{
-		[self showAlert:@"局域网快速对战" message:@"已经在联网对战中。"];
+		[self showAlert:L10N("dialog.lan.title") message:L10N("msg.netplay_already")];
 		return;
 	}
 
@@ -1824,10 +1879,10 @@ static NSString* app_function_key(ines_int_t n)
 	{
 		NSAlert*  alert = [[NSAlert alloc] init];
 
-		alert.messageText     = @"覆盖存档";
-		alert.informativeText = [NSString stringWithFormat:@"存档 %d 已存在，是否覆盖？", (int)index];
-		[alert addButtonWithTitle:@"覆盖"];
-		[alert addButtonWithTitle:@"取消"];
+		alert.messageText     = L10N("msg.overwrite_state_title");
+		alert.informativeText = L10NF("msg.overwrite_state_format", (int)index);
+		[alert addButtonWithTitle:L10N("msg.overwrite")];
+		[alert addButtonWithTitle:L10N("msg.cancel")];
 
 		if ([alert runModal] != NSAlertFirstButtonReturn)
 			return;
@@ -1949,7 +2004,7 @@ static NSString* app_function_key(ines_int_t n)
 						bitsPerPixel:32];
 	if ((rep == nil) || (rep.bitmapData == NULL))
 	{
-		[self showAlert:@"截图失败" message:@"无法生成图像数据。"];
+		[self showAlert:L10N("msg.snapshot_failed_title") message:L10N("msg.snapshot_no_image")];
 		return;
 	}
 
@@ -1959,12 +2014,13 @@ static NSString* app_function_key(ines_int_t n)
 	if ((png == nil) || ![png writeToFile:path atomically:YES])
 	{
 		INES_LOG(LOG_ERR, MOD_SYS, ISTR("Save snapshot to '%s' Failed!\n"), path.UTF8String);
-		[self showAlert:@"截图失败" message:[NSString stringWithFormat:@"无法写入截图文件:\n%@", path]];
+		[self showAlert:L10N("msg.snapshot_failed_title")
+				message:L10NF("msg.snapshot_write_failed_format", path.UTF8String)];
 		return;
 	}
 
 	INES_LOG(LOG_NTY, MOD_SYS, ISTR("Save snapshot to '%s' OK!\n"), path.UTF8String);
-	[self showToast:@"截图已保存到 ~/Pictures/iNES"];
+	[self showToast:L10N("msg.snapshot_saved")];
 }
 
 // 打开调试视图工具窗口(对应 win32 的 IDM_VIEW_* 菜单命令)
@@ -1983,12 +2039,12 @@ static NSString* app_function_key(ines_int_t n)
 
 - (IBAction)showUnimplemented:(id)sender
 {
-	[self showAlert:@"选项" message:@"该功能尚未在当前版本中实现。"];
+	[self showAlert:L10N("msg.option_title") message:L10N("msg.option_unimplemented")];
 }
 
 - (IBAction)showAbout:(id)sender
 {
-	[self showAlert:@"关于 iNES" message:@"iNES，1.0 版\nCopyright (C) 2015"];
+	[self showAlert:L10N("msg.about_title") message:L10N("msg.about")];
 }
 
 // 模拟线程回调: ROM 载入结果(切回主线程处理界面)
@@ -2003,8 +2059,8 @@ static NSString* app_function_key(ines_int_t n)
 - (void)romDidFailOnMain:(NSString*)path
 {
 	[self refreshTitle];
-	[self showAlert:@"载入 ROM 失败"
-			message:[NSString stringWithFormat:@"无法载入文件：\n%@\n\n请确认它是有效的 NES ROM 且 mapper 受支持。", path]];
+	[self showAlert:L10N("msg.load_rom_failed_title")
+			message:L10NF("msg.load_rom_failed_format", path.UTF8String)];
 }
 
 
@@ -2221,13 +2277,13 @@ static NSString* app_function_key(ines_int_t n)
 
 	if (np_is_server() == 0)
 	{
-		[self showToast:@"联网对战中只有主机可以载入存档。"];
+		[self showToast:L10N("msg.state_host_only")];
 		return;
 	}
 
 	if (np_sync_state() != NP_SYNC_NONE)
 	{
-		[self showToast:@"正在同步存档，请稍候。"];
+		[self showToast:L10N("msg.state_syncing")];
 		return;
 	}
 
@@ -2236,7 +2292,7 @@ static NSString* app_function_key(ines_int_t n)
 	// 本地校验(与菜单可用性一致: 文件头 magic + ROM crc32)
 	if (0 == app_state_file_time(path, [self currentRomCrc32]))
 	{
-		[self showToast:[NSString stringWithFormat:@"存档 %d 不存在或与当前 ROM 不符。", (int)index]];
+		[self showToast:L10NF("msg.state_not_found_format", (int)index)];
 		return;
 	}
 
@@ -2244,14 +2300,14 @@ static NSString* app_function_key(ines_int_t n)
 
 	if (fp == NULL)
 	{
-		[self showToast:@"存档读取失败。"];
+		[self showToast:L10N("msg.state_load_failed")];
 		return;
 	}
 
 	if ((fseek(fp, 0, SEEK_END) != 0) || ((size = ftell(fp)) <= 0))
 	{
 		fclose(fp);
-		[self showToast:@"存档读取失败。"];
+		[self showToast:L10N("msg.state_load_failed")];
 		return;
 	}
 
@@ -2260,7 +2316,7 @@ static NSString* app_function_key(ines_int_t n)
 	if (size > NP_SYNC_MAX_SIZE)
 	{
 		fclose(fp);
-		[self showToast:@"存档过大，无法同步。"];
+		[self showToast:L10N("msg.state_too_large")];
 		return;
 	}
 
@@ -2276,7 +2332,7 @@ static NSString* app_function_key(ines_int_t n)
 	{
 		free(buf);
 		fclose(fp);
-		[self showToast:@"存档读取失败。"];
+		[self showToast:L10N("msg.state_load_failed")];
 		return;
 	}
 
@@ -2286,7 +2342,7 @@ static NSString* app_function_key(ines_int_t n)
 	if (0 != np_sync_begin(buf, (int)size))
 	{
 		free(buf);
-		[self showToast:@"存档同步发起失败。"];
+		[self showToast:L10N("msg.state_sync_begin_failed")];
 		return;
 	}
 
@@ -2294,7 +2350,7 @@ static NSString* app_function_key(ines_int_t n)
 
 	INES_LOG(LOG_NTY, MOD_SYS, ISTR("netplay: sync state slot %d, %ld bytes\n"), (int)index, size);
 
-	[self showToast:@"正在同步存档…"];
+	[self showToast:L10N("msg.state_syncing_start")];
 }
 
 /**
@@ -2325,7 +2381,7 @@ static NSString* app_function_key(ines_int_t n)
 	if (st == NP_SYNC_OK)
 	{
 		[self publishHostState];
-		[self showToast:@"存档已同步，继续对战。"];
+		[self showToast:L10N("msg.state_sync_done")];
 		return NO;
 	}
 
@@ -2335,14 +2391,14 @@ static NSString* app_function_key(ines_int_t n)
 		if (np_is_server() != 0)
 			s_sync_ctrl_req = NET_CTRL_CODE_HARDRESET;
 
-		[self showToast:@"存档载入失败，已复位重开。"];
+		[self showToast:L10N("msg.state_sync_reset")];
 		return NO;
 	}
 
 	// NP_SYNC_FAILED: 同步中断(链路断开 / 超时) —— 状态可能已分叉, 只能结束联网
 	[self endNetPlayOnThread];   // 内部已刷新标题
 
-	[self showToast:@"存档同步失败，已结束联网。"];
+	[self showToast:L10N("msg.state_sync_failed_end")];
 	return YES;
 }
 
@@ -2500,7 +2556,7 @@ static NSString* app_function_key(ines_int_t n)
 					[self endNetPlayOnThread];   // 内部已刷新标题
 					net_play = 0;
 
-					[self showToast:@"对方已退出游戏，继续以单机模式运行。"];
+					[self showToast:L10N("msg.peer_left")];
 
 					INES_LOG(LOG_NTY, MOD_SYS, ISTR("netplay: peer quitted, back to offline\n"));
 				}

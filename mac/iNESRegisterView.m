@@ -13,6 +13,7 @@
 // =====================================================================
 
 #import "iNESRegisterView.h"
+#import "iNESi18n.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -804,7 +805,7 @@ static NSFont* idbg_rv_bold_font(void)
 
 	if (pDef->wmask == 0)
 	{
-		[self showTips:@"该寄存器只读"];
+		[self showTips:L10N("debug.reg.tip_reg_readonly")];
 		[self setNeedsDisplayAll];
 		return;
 	}
@@ -850,7 +851,7 @@ static NSFont* idbg_rv_bold_font(void)
 
 	if (((pDef->wmask >> bit) & 1) == 0)
 	{
-		[self showTips:@"该位只读"];
+		[self showTips:L10N("debug.reg.tip_bit_readonly")];
 		[self setNeedsDisplayAll];
 		return;
 	}
@@ -1082,7 +1083,7 @@ static NSFont* idbg_rv_bold_font(void)
 				[self setNeedsDisplayAll];
 			}
 			else
-				[self showTips:@"只能输入 0 / 1"];
+				[self showTips:L10N("debug.reg.tip_binary_only")];
 
 			return;
 		}
@@ -1102,12 +1103,12 @@ static NSFont* idbg_rv_bold_font(void)
 
 				if ((width != 8) && (width != 16))
 				{
-					[self showTips:@"该寄存器只读"];
+					[self showTips:L10N("debug.reg.tip_reg_readonly")];
 					return;
 				}
 				if (s_defs[reg].wmask == 0)
 				{
-					[self showTips:@"该寄存器只读"];
+					[self showTips:L10N("debug.reg.tip_reg_readonly")];
 					return;
 				}
 
@@ -1146,11 +1147,11 @@ static NSFont* idbg_rv_bold_font(void)
 	NSMenu*      menu  = [[NSMenu alloc] initWithTitle:@""];
 	NSMenuItem*  item;
 
-	item = [[NSMenuItem alloc] initWithTitle:@"复制值" action:@selector(copyValue:) keyEquivalent:@""];
+	item = [[NSMenuItem alloc] initWithTitle:L10N("debug.reg.copy_value") action:@selector(copyValue:) keyEquivalent:@""];
 	item.target = self;
 	[menu addItem:item];
 
-	item = [[NSMenuItem alloc] initWithTitle:@"复制全部" action:@selector(copyAll:) keyEquivalent:@""];
+	item = [[NSMenuItem alloc] initWithTitle:L10N("debug.reg.copy_all") action:@selector(copyAll:) keyEquivalent:@""];
 	item.target = self;
 	[menu addItem:item];
 
@@ -1412,7 +1413,7 @@ static void idbg_rv_stroke_focus(NSRect rc)
 		[@"NAME"  drawAtPoint:NSMakePoint(px, y)                                     withAttributes:_attrs];
 		[@"ADDR"  drawAtPoint:NSMakePoint(px + IDBG_RV_COL_ADDR  * _charW, y)         withAttributes:_attrs];
 		[@"VALUE" drawAtPoint:NSMakePoint(px + IDBG_RV_COL_VALUE * _charW, y)         withAttributes:_attrs];
-		[@"说明"   drawAtPoint:NSMakePoint(px + IDBG_RV_COL_NOTE  * _charW, y)         withAttributes:_attrs];
+		[L10N("debug.reg.note") drawAtPoint:NSMakePoint(px + IDBG_RV_COL_NOTE * _charW, y) withAttributes:_attrs];
 
 		// 位号: 每行只 8 位, 头部标 7..0(高低字节行共用同一组位号)
 		for (bitIdx = 0; bitIdx < 8; bitIdx++)

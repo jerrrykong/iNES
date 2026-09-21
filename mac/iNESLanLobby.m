@@ -9,7 +9,10 @@
 
 #import "iNESLanLobby.h"
 #import "iNESConfig.h"
+#import "iNESi18n.h"
+#import "iNESUiLayout.h"
 
+#include "../comm/i18n.h"
 #include "../comm/npsession.h"
 
 #include "../comm/net.h"
@@ -213,7 +216,7 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 
 	lan_gen_peer_id(_peerId);
 
-	window.title              = @"局域网快速对战";
+	window.title              = L10N("dialog.lan.title");
 	window.delegate           = self;
 	window.releasedWhenClosed = NO;
 
@@ -229,7 +232,9 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 	NSString*     nick;
 
 	// ---- 昵称 ----
-	[root addSubview:lobby_make_label(@"昵称", NSMakeRect(18, 292, 36, 17))];
+	NSTextField*  nickLabel = lobby_make_label(L10N("dialog.lan.nickname"), NSMakeRect(18, 292, 36, 17));
+
+	[root addSubview:nickLabel];
 
 	nick = [NSString stringWithUTF8String:GetConfigStr(LOBBY_CFG_SECTION, LOBBY_CFG_NICKKEY, ISTR(""))];
 
@@ -246,18 +251,18 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 	_nickField.stringValue    = nick;
 	[root addSubview:_nickField];
 
+	INESFitLabel(nickLabel, @[ _nickField ], 6.0);
+
 	// ---- 本机 ROM ----
 	_romLabel           = lobby_make_label(@"", NSMakeRect(240, 292, 202, 17));
-	_romLabel.stringValue = [NSString stringWithFormat:@"ROM：%@", lobby_clip_utf8(_romName, 24)];
+	_romLabel.stringValue = L10NF("dialog.lan.rom_prefix_format", lobby_clip_utf8(_romName, 24).UTF8String);
 	_romLabel.textColor = [NSColor secondaryLabelColor];
 	[root addSubview:_romLabel];
 
 	// ---- 说明 ----
 	{
-		NSTextField*  hint = lobby_make_label(
-			[NSString stringWithFormat:@"已发布到局域网（缓冲 %d 帧，发布后固定；可在 config.ini 的 [netplay] cache_num 调整）。加入他人房间后，本机作为副手柄（客户机）。",
-					  _cacheNum],
-			NSMakeRect(18, 264, 424, 17));
+		NSTextField*  hint = lobby_make_label(L10NF("dialog.lan.hint_format", (int)_cacheNum),
+											  NSMakeRect(18, 264, 424, 17));
 
 		hint.textColor = [NSColor secondaryLabelColor];
 		hint.font      = [NSFont systemFontOfSize:11.0];
@@ -282,14 +287,15 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 		NSTableColumn*  c3 = [[NSTableColumn alloc] initWithIdentifier:@"ver"];
 		NSTableColumn*  c4 = [[NSTableColumn alloc] initWithIdentifier:@"cache"];
 
-		c1.title = @"昵称";
-		c1.width = 110.0;
-		c2.title = @"ROM";
-		c2.width = 176.0;
-		c3.title = @"版本";
-		c3.width = 68.0;
-		c4.title = @"缓冲";
-		c4.width = 56.0;
+		// 表头: 术语(ROM)不翻译; 列宽按译文测量, 但不小于设计宽度
+		c1.title = L10N("dialog.lan.col_nick");
+		c1.width = MAX(110.0, INESTextWidth(c1.title, [NSFont systemFontOfSize:11.0]) + 14.0);
+		c2.title = L10N("dialog.lan.col_rom");
+		c2.width = MAX(176.0, INESTextWidth(c2.title, [NSFont systemFontOfSize:11.0]) + 14.0);
+		c3.title = L10N("dialog.lan.col_ver");
+		c3.width = MAX(68.0,  INESTextWidth(c3.title, [NSFont systemFontOfSize:11.0]) + 14.0);
+		c4.title = L10N("dialog.lan.col_cache");
+		c4.width = MAX(56.0,  INESTextWidth(c4.title, [NSFont systemFontOfSize:11.0]) + 14.0);
 
 		[_table addTableColumn:c1];
 		[_table addTableColumn:c2];
@@ -306,18 +312,21 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 	[root addSubview:_infoLabel];
 
 	// ---- 按钮 ----
-	_joinButton         = lobby_make_button(@"加入", NSMakeRect(288, 12, 74, 28), YES);
+	_joinButton         = lobby_make_button(L10N("dialog.lan.join"), NSMakeRect(288, 12, 74, 28), YES);
 	_joinButton.target  = self;
 	_joinButton.action  = @selector(onJoin:);
 	_joinButton.enabled = NO;
 	[root addSubview:_joinButton];
 
 	{
-		NSButton*  cancel = lobby_make_button(@"关闭", NSMakeRect(368, 12, 74, 28), NO);
+		NSButton*  cancel = lobby_make_button(L10N("dialog.lan.close"), NSMakeRect(368, 12, 74, 28), NO);
 
 		cancel.target = self;
 		cancel.action = @selector(onCancel:);
 		[root addSubview:cancel];
+
+		// 按钮按译文长度自适应: 必要时加宽窗口, 从右往左摆放
+		INESFitButtons(self.window, @[ _joinButton, cancel ], 14.0, 8.0, 74.0);
 	}
 }
 
@@ -336,7 +345,7 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 
 	if (0 != lan_open(_peerId))
 	{
-		_failMsg = @"无法开启局域网发现（UDP 8892 不可用）。";
+		_failMsg = L10N("dialog.lan.err_open_failed");
 		return NO;
 	}
 
@@ -382,7 +391,7 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 	if (![self startHosting])
 	{
 		[self stopTimer];
-		[self setInfo:(_failMsg != nil) ? _failMsg : @"无法继续发布"];
+		[self setInfo:(_failMsg != nil) ? _failMsg : L10N("dialog.lan.err_resume_failed")];
 		return;
 	}
 
@@ -399,8 +408,8 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 - (void)refreshInfo
 {
 	[self setInfo:(_roomCount > 0)
-		 ? [NSString stringWithFormat:@"已发布，等待其他玩家加入（发现 %d 个房间）", _roomCount]
-		 : @"已发布，等待其他玩家加入（未发现房间：需同一局域网、且未被防火墙拦截）"];
+	 ? L10NF("dialog.lan.rooms_format", (int)_roomCount)
+	 : L10N("dialog.lan.no_rooms")];
 }
 
 
@@ -417,27 +426,27 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 
 	if (_rooms[row].crc32 != _crc32)
 	{
-		[self setInfo:@"ROM 不同，无法加入。"];
+		[self setInfo:L10N("dialog.lan.err_rom_diff")];
 		return;
 	}
 
 	// 版本不同: 列表里已灰显, 这里再拦一次(双击可能被拖选/键盘触发)
 	if (_rooms[row].net_ver != (ines_dword_t)NET_VER)
 	{
-		[self setInfo:@"协议版本不一致，请升级到相同版本后再联机。"];
+		[self setInfo:L10N("dialog.lan.err_ver_diff")];
 		return;
 	}
 
 	// 取最新的房间信息(可能刚好超时消失)
 	if (0 != lan_find(_rooms[row].peer_id, &room))
 	{
-		[self setInfo:@"该房间已消失，请稍候重试。"];
+		[self setInfo:L10N("dialog.lan.err_room_gone")];
 		return;
 	}
 
 	if (0 != lan_addr_str(room.addr, ip, (int)sizeof(ip)))
 	{
-		[self setInfo:@"该房间地址无效。"];
+		[self setInfo:L10N("dialog.lan.err_addr_invalid")];
 		return;
 	}
 
@@ -460,7 +469,7 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 	_joining           = YES;
 	_joinButton.enabled = NO;
 
-	[self setInfo:[NSString stringWithFormat:@"正在加入 %s 的房间…", room.nick]];
+	[self setInfo:L10NF("dialog.lan.joining_format", room.nick)];
 }
 
 - (IBAction)onCancel:(id)sender
@@ -551,18 +560,20 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 
 	if (rc == NP_POLL_FAILED)
 	{
-		NSString*  reason = [NSString stringWithUTF8String:((msg[0] != 0) ? msg : "连接失败")];
+		NSString*  reason = [NSString stringWithUTF8String:
+							 ((msg[0] != 0) ? msg : ines_i18n_text("dialog.lan.connect_failed"))];
 
 		_failMsg = reason;
 
 		// 服务端继续等待其他人; 客户端退回发布状态
 		[self resumeHosting];
-		[self setInfo:[NSString stringWithFormat:@"%@（已恢复发布）", reason]];
+		[self setInfo:L10NF("dialog.lan.restore_format", reason.UTF8String)];
 		return;
 	}
 
 	if (_joining)
-		[self setInfo:[NSString stringWithUTF8String:((msg[0] != 0) ? msg : "正在连接...")]];
+		[self setInfo:[NSString stringWithUTF8String:
+					   ((msg[0] != 0) ? msg : ines_i18n_text("dialog.lan.connecting"))]];
 	else
 		[self refreshInfo];
 }
@@ -591,15 +602,15 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 
 		// 0 = 旧版 beacon 未携带该字段
 		return (_rooms[row].net_ver != 0)
-			 ? [NSString stringWithFormat:@"%u（需升级）", (unsigned)_rooms[row].net_ver]
-			 : @"旧版（需升级）";
+			 ? L10NF("dialog.lan.ver_upgrade_format", (unsigned)_rooms[row].net_ver)
+			 : L10N("dialog.lan.ver_old");
 	}
 
 	// 缓冲帧数由房主发布时确定(对端未携带该字段时显示 --)
 	if ([column.identifier isEqualToString:@"cache"])
 	{
 		return ((_rooms[row].cache_num >= NP_CACHE_MIN) && (_rooms[row].cache_num <= NP_CACHE_MAX))
-			 ? [NSString stringWithFormat:@"%d 帧", (int)_rooms[row].cache_num]
+			 ? L10NF("dialog.lan.cache_frames_format", (int)_rooms[row].cache_num)
 			 : @"--";
 	}
 
@@ -608,7 +619,7 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 
 		// ROM 不同的房间: 可见、但标注出来(选中被 shouldSelectRow 拦掉)
 		if (_rooms[row].crc32 != _crc32)
-			name = [name stringByAppendingString:@"（ROM 不同）"];
+			name = [name stringByAppendingString:L10N("dialog.lan.rom_diff_suffix")];
 
 		return name;
 	}
@@ -653,8 +664,8 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 	if (!ok && (row >= 0) && (row < _roomCount))
 	{
 		[self setInfo:(_rooms[row].net_ver != (ines_dword_t)NET_VER)
-			 ? @"协议版本不一致，请升级到相同版本后再联机。"
-			 : @"ROM 不同，无法加入。"];
+			 ? L10N("dialog.lan.err_ver_diff")
+			 : L10N("dialog.lan.err_rom_diff")];
 	}
 
 	return ok;
@@ -700,16 +711,16 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 
 	if (![lobby startHosting])
 	{
-		NSString*  msg = (lobby->_failMsg != nil) ? lobby->_failMsg : @"无法开启局域网发现。";
+		NSString*  msg = (lobby->_failMsg != nil) ? lobby->_failMsg : L10N("dialog.lan.err_generic");
 
 		[lobby stopAll];
 
 		{
 			NSAlert*  alert = [[NSAlert alloc] init];
 
-			alert.messageText     = @"局域网快速对战";
+			alert.messageText     = L10N("dialog.lan.title");
 			alert.informativeText = msg;
-			[alert addButtonWithTitle:@"确定"];
+			[alert addButtonWithTitle:L10N("msg.ok")];
 			[alert runModal];
 		}
 
@@ -734,9 +745,9 @@ static NSButton* lobby_make_button(NSString* title, NSRect frame, BOOL isDefault
 	{
 		NSAlert*  alert = [[NSAlert alloc] init];
 
-		alert.messageText     = @"局域网快速对战";
+		alert.messageText     = L10N("dialog.lan.title");
 		alert.informativeText = lobby->_failMsg;
-		[alert addButtonWithTitle:@"确定"];
+		[alert addButtonWithTitle:L10N("msg.ok")];
 		[alert runModal];
 
 		lobby->_failMsg = nil;
