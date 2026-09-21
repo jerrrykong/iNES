@@ -19,6 +19,7 @@
 
 #include "stdafx.h"
 #include <shlobj.h>
+#include "i18n_ui.h"
 #include "../comm/log.h"
 #include "../core/rom.h"
 #include "../core/ppu.h"
@@ -65,21 +66,21 @@ typedef struct _dlgOpenRom_rominfo_
 // 列表列定义
 typedef struct _dlgOpenRom_column_
 {
-	ines_cstr_t  name;
-	ines_int_t   width;
-	ines_int_t   fmt;
+	const char*   key;      /* lang/*.ini 的 key —— 源码里不写任何界面文本 */
+	ines_int_t    width;
+	ines_int_t    fmt;
 } dlgOpenRom_column_t;
 
 static const dlgOpenRom_column_t s_columns[] =
 {
-	{ ISTR("文件名"),    220, LVCFMT_LEFT  },
-	{ ISTR("ROM大小"),    80, LVCFMT_RIGHT },
-	{ ISTR("Mapper"),     60, LVCFMT_RIGHT },
-	{ ISTR("PRG"),        70, LVCFMT_RIGHT },
-	{ ISTR("CHR"),        70, LVCFMT_RIGHT },
-	{ ISTR("镜像"),        60, LVCFMT_LEFT  },
-	{ ISTR("电池"),        50, LVCFMT_LEFT  },
-	{ ISTR("Trainer"),    60, LVCFMT_LEFT  }
+	{ "dialog.openrom.col_name",      220, LVCFMT_LEFT  },
+	{ "dialog.openrom.col_rom_size",   80, LVCFMT_RIGHT },
+	{ "dialog.openrom.col_mapper",     60, LVCFMT_RIGHT },
+	{ "dialog.openrom.col_prg",        70, LVCFMT_RIGHT },
+	{ "dialog.openrom.col_chr",        70, LVCFMT_RIGHT },
+	{ "dialog.openrom.col_mirror",     60, LVCFMT_LEFT  },
+	{ "dialog.openrom.col_battery",    50, LVCFMT_LEFT  },
+	{ "dialog.openrom.col_trainer",    60, LVCFMT_LEFT  }
 };
 
 // 列表项的排序数据: 与列表项通过 LVIF_PARAM 一一关联
@@ -109,6 +110,7 @@ static ines_bool_t         s_bScanning = ines_false;
 
 static INT_PTR CALLBACK dlgOpenRom_DlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
 static BOOL     dlgOpenRom_OnInitDialog(HWND hDlg);
+static VOID     dlgOpenRom_ApplyLanguage(HWND hDlg);
 static INT_PTR  dlgOpenRom_OnCommand(HWND hDlg, UINT nID, UINT nCode);
 static INT_PTR  dlgOpenRom_OnNotify(HWND hDlg, LPNMHDR pNMHDR);
 static VOID     dlgOpenRom_OnDestroy(HWND hDlg);
@@ -116,6 +118,7 @@ static VOID     dlgOpenRom_OnDestroy(HWND hDlg);
 static VOID     dlgOpenRom_InitCommonControls(VOID);
 static VOID     dlgOpenRom_Layout(HWND hDlg);
 static VOID     dlgOpenRom_InitList(HWND hDlg);
+static VOID     dlgOpenRom_UpdateColumns(HWND hList);
 static VOID     dlgOpenRom_SetBrowseIcon(HWND hDlg);
 static VOID     dlgOpenRom_UpdateButtons(HWND hDlg);
 static VOID     dlgOpenRom_ScanDir(HWND hDlg);
@@ -263,6 +266,13 @@ static INT_PTR CALLBACK dlgOpenRom_DlgProc(HWND hDlg, UINT message, WPARAM wPara
 		}
 		return (INT_PTR)TRUE;
 
+	case WM_APP_LANGCHANGED:
+		/* 语言切换: 标题 / 静态文本 / 表头都重来; 行内的镜像与"有无"由重扫解决 */
+		dlgOpenRom_ApplyLanguage(hDlg);
+		dlgOpenRom_UpdateColumns(GetDlgItem(hDlg, IDC_OPENROM_LIST));
+		dlgOpenRom_ScanDir(hDlg);
+		return (INT_PTR)TRUE;
+
 	case WM_NOTIFY:
 		return dlgOpenRom_OnNotify(hDlg, (LPNMHDR)lParam);
 
@@ -286,6 +296,24 @@ static INT_PTR CALLBACK dlgOpenRom_DlgProc(HWND hDlg, UINT message, WPARAM wPara
 	return (INT_PTR)FALSE;
 }
 
+
+/**
+ * IDD_OPENROM 的静态文本(文件夹标签 + 按钮)。计数提示分多种情况,
+ * 由 dlgOpenRom_ScanDir() / _OnScanTimer() / _FinishScan() 各自 SetDlgItemText。
+ */
+static const APP_DLG_ITEM  s_openrom_items[] =
+{
+	{ IDC_OPENROM_LAB_DIR, "dialog.openrom.folder", APP_FIT_NONE },
+	{ IDOK,                "dialog.openrom.load",   APP_FIT_ANCHOR_RIGHT },
+	{ IDCANCEL,            "dialog.openrom.cancel", APP_FIT_ANCHOR_RIGHT },
+};
+
+/** 贴 dialog.openrom.* 的文本; WM_INITDIALOG 与语言切换后都要走一遍 */
+static VOID dlgOpenRom_ApplyLanguage(HWND hDlg)
+{
+	SetWindowText(hDlg, L10N("dialog.openrom.title"));
+	i18n_ui_apply_dialog(hDlg, s_openrom_items, count_of(s_openrom_items));
+}
 
 /**
  * 初始化对话框: 设置初始大小/位置, 初始化列表并扫描当前目录。
@@ -341,6 +369,9 @@ static BOOL dlgOpenRom_OnInitDialog(HWND hDlg)
 
 	// 保证布局正确(WM_SIZE 可能尚未到达)
 	dlgOpenRom_Layout(hDlg);
+
+	// i18n: 标题与静态文本要在布局之后再贴 —— apply_dialog 按译文宽度重算了尺寸
+	dlgOpenRom_ApplyLanguage(hDlg);
 
 	hList = GetDlgItem(hDlg, IDC_OPENROM_LIST);
 	if(hList != NULL)
@@ -422,13 +453,56 @@ static VOID dlgOpenRom_Layout(HWND hDlg)
 
 
 /**
+ * 写列表表头: 列已存在则只改文本(语言切换时用), 否则插入新列。
+ */
+static VOID dlgOpenRom_UpdateColumns(HWND hList)
+{
+	HWND       hHeader;
+	LVCOLUMN   col;
+	LVCOLUMN   old;
+	ines_int_t nExist;
+	ines_int_t i;
+
+	if(hList == NULL)
+		return;
+
+	hHeader = ListView_GetHeader(hList);
+	nExist  = (hHeader != NULL) ? (ines_int_t)Header_GetItemCount(hHeader) : 0;
+
+	memset(&col, 0, sizeof(col));
+	col.mask = LVCF_TEXT | LVCF_WIDTH | LVCF_FMT | LVCF_SUBITEM;
+
+	for(i = 0; i < (ines_int_t)count_of(s_columns); i++)
+	{
+		col.iSubItem = i;
+		col.pszText  = (ines_str_t)L10N(s_columns[i].key);
+		col.cx       = s_columns[i].width;
+		col.fmt      = s_columns[i].fmt;
+
+		if(i < nExist)      /* 保留用户拖出来的列宽 */
+		{
+			memset(&old, 0, sizeof(old));
+			old.mask = LVCF_WIDTH;
+
+			if(ListView_GetColumn(hList, i, &old) && (old.cx > 0))
+				col.cx = old.cx;
+
+			ListView_SetColumn(hList, i, &col);
+		}
+		else
+			ListView_InsertColumn(hList, i, &col);
+	}
+
+	// i18n: 表头按译文宽度加宽(不小于设计宽度)
+	i18n_ui_fit_columns(hList);
+}
+
+/**
  * 初始化文件列表的列。
  */
 static VOID dlgOpenRom_InitList(HWND hDlg)
 {
-	HWND        hList;
-	LVCOLUMN    col;
-	ines_int_t  i;
+	HWND  hList;
 
 	hList = GetDlgItem(hDlg, IDC_OPENROM_LIST);
 	if(hList == NULL)
@@ -437,17 +511,7 @@ static VOID dlgOpenRom_InitList(HWND hDlg)
 	// 整行选中 + 双缓冲(减少刷新闪烁)
 	ListView_SetExtendedListViewStyle(hList, LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
 
-	memset(&col, 0, sizeof(col));
-	col.mask = LVCF_TEXT | LVCF_WIDTH | LVCF_FMT | LVCF_SUBITEM;
-
-	for(i = 0; i < (ines_int_t)count_of(s_columns); i++)
-	{
-		col.iSubItem = i;
-		col.pszText  = (ines_str_t)s_columns[i].name;
-		col.cx       = s_columns[i].width;
-		col.fmt      = s_columns[i].fmt;
-		ListView_InsertColumn(hList, i, &col);
-	}
+	dlgOpenRom_UpdateColumns(hList);
 }
 
 
@@ -533,7 +597,7 @@ static VOID dlgOpenRom_ScanDir(HWND hDlg)
 
 	if(s_szCurDir[0] == 0)
 	{
-		SetDlgItemText(hDlg, IDC_OPENROM_LAB_COUNT, ISTR("未选择文件夹"));
+		SetDlgItemText(hDlg, IDC_OPENROM_LAB_COUNT, L10N("dialog.openrom.no_folder"));
 		dlgOpenRom_UpdateButtons(hDlg);
 		return;
 	}
@@ -602,7 +666,7 @@ static VOID dlgOpenRom_ScanDir(HWND hDlg)
 
 	if(iCount <= 0)
 	{
-		SetDlgItemText(hDlg, IDC_OPENROM_LAB_COUNT, ISTR("未找到 NES 文件"));
+		SetDlgItemText(hDlg, IDC_OPENROM_LAB_COUNT, L10N("dialog.openrom.no_nes_file"));
 		INES_LOG(LOG_INF, MOD_SYS, ISTR("scan dir `%s`: no nes file found.\n"), s_szCurDir);
 		dlgOpenRom_UpdateButtons(hDlg);
 		return;
@@ -612,7 +676,9 @@ static VOID dlgOpenRom_ScanDir(HWND hDlg)
 	s_iScanNext = 0;
 	s_bScanning = ines_true;
 
-	ines_snprintf(szBuf, count_of(szBuf), ISTR("正在解析 0/%d ..."), iCount);
+	// i18n: 计数文本走 lang 文件(%ld 需要 long 实参)
+	ines_strncpy(szBuf, L10NF("dialog.openrom.parsing_zero_format", (long)iCount), count_of(szBuf) - 1);
+	szBuf[count_of(szBuf) - 1] = '\0';
 	SetDlgItemText(hDlg, IDC_OPENROM_LAB_COUNT, szBuf);
 
 	INES_LOG(LOG_INF, MOD_SYS, ISTR("scan dir `%s`: %d nes file(s) enumerated.\n"), s_szCurDir, iCount);
@@ -675,7 +741,8 @@ static VOID dlgOpenRom_OnScanTimer(HWND hDlg)
 		return;
 	}
 
-	ines_snprintf(szBuf, count_of(szBuf), ISTR("正在解析 %d/%d ..."), iItem, iCount);
+	ines_strncpy(szBuf, L10NF("dialog.openrom.parsing_format", (long)iItem, (long)iCount), count_of(szBuf) - 1);
+	szBuf[count_of(szBuf) - 1] = '\0';
 	SetDlgItemText(hDlg, IDC_OPENROM_LAB_COUNT, szBuf);
 }
 
@@ -699,7 +766,8 @@ static VOID dlgOpenRom_FinishScan(HWND hDlg)
 
 	if(iCount > 0)
 	{
-		ines_snprintf(szBuf, count_of(szBuf), ISTR("共 %d 个支持的 NES 文件"), iCount);
+		ines_strncpy(szBuf, L10NF("dialog.openrom.total_format", (unsigned long)iCount), count_of(szBuf) - 1);
+		szBuf[count_of(szBuf) - 1] = '\0';
 		SetDlgItemText(hDlg, IDC_OPENROM_LAB_COUNT, szBuf);
 
 		// 属性已齐, 此时才应用排序(解析期间属性不完整, 排了也不准)
@@ -710,7 +778,7 @@ static VOID dlgOpenRom_FinishScan(HWND hDlg)
 	}
 	else
 	{
-		SetDlgItemText(hDlg, IDC_OPENROM_LAB_COUNT, ISTR("未找到支持的 NES 文件"));
+		SetDlgItemText(hDlg, IDC_OPENROM_LAB_COUNT, L10N("dialog.openrom.no_supported"));
 	}
 
 	INES_LOG(LOG_INF, MOD_SYS, ISTR("scan dir `%s`: %d nes file(s) listed.\n"), s_szCurDir, iCount);
@@ -795,8 +863,8 @@ static ines_bool_t dlgOpenRom_ParseRow(HWND hList, ines_int_t iItem)
 	dlgOpenRom_SetItemText(hList, iItem, 4, szBuf);
 
 	dlgOpenRom_SetItemText(hList, iItem, 5, dlgOpenRom_GetMirrorText(info.mirror_type));
-	dlgOpenRom_SetItemText(hList, iItem, 6, (info.has_sram != 0) ? ISTR("有") : ISTR("无"));
-	dlgOpenRom_SetItemText(hList, iItem, 7, (info.has_trainer != 0) ? ISTR("有") : ISTR("无"));
+	dlgOpenRom_SetItemText(hList, iItem, 6, (info.has_sram    != 0) ? L10N("dialog.openrom.yes") : L10N("dialog.openrom.no"));
+	dlgOpenRom_SetItemText(hList, iItem, 7, (info.has_trainer != 0) ? L10N("dialog.openrom.yes") : L10N("dialog.openrom.no"));
 
 	return ines_true;
 }
@@ -1105,7 +1173,7 @@ static VOID dlgOpenRom_OnBrowseDir(HWND hDlg)
 
 	bi.hwndOwner      = hDlg;
 	bi.pszDisplayName = szDir;
-	bi.lpszTitle      = ISTR("请选择 NES 文件所在文件夹");
+	bi.lpszTitle      = L10N("dialog.openrom.select_dir_title");
 	bi.ulFlags        = BIF_RETURNONLYFSDIRS;
 	bi.lpfn           = dlgOpenRom_BrowseCallback;
 	bi.lParam         = (s_szCurDir[0] != 0) ? (LPARAM)s_szCurDir : 0;
@@ -1162,7 +1230,8 @@ static VOID dlgOpenRom_ApplyTypedDir(HWND hDlg)
 	dwAttr = GetFileAttributes(szDir);
 	if(dwAttr == INVALID_FILE_ATTRIBUTES || 0 == (dwAttr & FILE_ATTRIBUTE_DIRECTORY))
 	{
-		MessageBox(hDlg, ISTR("文件夹不存在或不可访问!"), ISTR("iNes"), MB_OK | MB_ICONWARNING);
+		MessageBox(hDlg, L10N("dialog.openrom.dir_invalid"), L10N("dialog.openrom.title"),
+				   MB_OK | MB_ICONWARNING);
 		SetFocus(GetDlgItem(hDlg, IDC_OPENROM_EDT_DIR));
 		return;
 	}
@@ -1212,7 +1281,8 @@ static BOOL dlgOpenRom_OnLoad(HWND hDlg)
 	// 加载前再确认一次文件是否仍然存在
 	if(GetFileAttributes(szPath) == INVALID_FILE_ATTRIBUTES)
 	{
-		MessageBox(hDlg, ISTR("文件已不存在, 请重新选择!"), ISTR("iNes"), MB_OK | MB_ICONWARNING);
+		MessageBox(hDlg, L10N("dialog.openrom.file_missing"), L10N("dialog.openrom.title"),
+				   MB_OK | MB_ICONWARNING);
 		dlgOpenRom_ScanDir(hDlg);
 		return FALSE;
 	}
@@ -1409,19 +1479,19 @@ static ines_cstr_t dlgOpenRom_GetMirrorText(ines_byte_t mirror_type)
 	switch(mirror_type)
 	{
 	case MIRROR_VERT:
-		return ISTR("垂直");
+		return L10N("dialog.openrom.mirror_vertical");
 
 	case MIRROR_HORZ:
-		return ISTR("水平");
+		return L10N("dialog.openrom.mirror_horizontal");
 
 	case MIRROR_FOUR_SCREEN:
-		return ISTR("四屏");
+		return L10N("dialog.openrom.mirror_four");
 
 	default:
 		break;
 	}
 
-	return ISTR("未知");
+	return L10N("dialog.openrom.mirror_unknown");
 }
 
 

@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include "i18n_ui.h"
 #include "../comm/log.h"
 #include "../core/nes.h"
 #include "wPatternTable.h"
@@ -45,6 +46,16 @@ static ATOM wPal_RegisterClass(HINSTANCE  hInstance)
 
 
 
+/** 标题取自语言文件(view.palette); 语言切换时重取。 */
+static VOID wPal_UpdateTitle(VOID)
+{
+	ines_strncpy(wPal_szTitle, L10N("view.palette"), count_of(wPal_szTitle) - 1);
+	wPal_szTitle[count_of(wPal_szTitle) - 1] = 0;
+
+	if(wPal_hWnd != NULL)
+		SetWindowText(wPal_hWnd, wPal_szTitle);
+}
+
 BOOL wPal_Create(HINSTANCE hInstance, HWND hParentWnd)
 {
 	// already created
@@ -54,7 +65,7 @@ BOOL wPal_Create(HINSTANCE hInstance, HWND hParentWnd)
 		return TRUE;
 	}
 
-	LoadString(hInstance, IDS_WND_PAL_TITLE, wPal_szTitle, count_of(wPal_szTitle));
+	wPal_UpdateTitle();
 
 	wPal_RegisterClass(hInstance);
 	 
@@ -301,6 +312,9 @@ static LRESULT CALLBACK	wPal_WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
 		DestroyWindow(hWnd);
 		return 0;
 		break;
+	case WM_APP_LANGCHANGED:      /* 语言切换: 重取标题 */
+		wPal_UpdateTitle();
+		return 0;
 	case WM_PAINT:
 		wPal_OnPaint(hWnd);
 		return 0;

@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include "i18n_ui.h"
 #include "../comm/log.h"
 #include "../core/nes.h"
 #include "wVMemory.h"
@@ -56,6 +57,16 @@ static ATOM wVMemory_RegisterClass(HINSTANCE  hInstance)
 
 
 
+/** 标题取自语言文件(view.vmemory); 语言切换时重取。 */
+static VOID wVMemory_UpdateTitle(VOID)
+{
+	ines_strncpy(wVMemory_szTitle, L10N("view.vmemory"), count_of(wVMemory_szTitle) - 1);
+	wVMemory_szTitle[count_of(wVMemory_szTitle) - 1] = 0;
+
+	if(wVMemory_hWnd != NULL)
+		SetWindowText(wVMemory_hWnd, wVMemory_szTitle);
+}
+
 BOOL wVMemory_Create(HINSTANCE hInstance, HWND hParentWnd)
 {
 	// already created
@@ -65,7 +76,7 @@ BOOL wVMemory_Create(HINSTANCE hInstance, HWND hParentWnd)
 		return TRUE;
 	}
 
-	LoadString(hInstance, IDS_WND_VMEMORY_TITLE, wVMemory_szTitle, count_of(wVMemory_szTitle));
+	wVMemory_UpdateTitle();
 
 	wVMemory_RegisterClass(hInstance);
 	 
@@ -811,6 +822,9 @@ static LRESULT CALLBACK	wVMemory_WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam,
 		DestroyWindow(hWnd);
 		return 0;
 		break;
+	case WM_APP_LANGCHANGED:      /* 语言切换: 重取标题 */
+		wVMemory_UpdateTitle();
+		return 0;
 	case WM_PAINT:
 		wVMemory_OnPaint(hWnd);
 		return 0;

@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include "i18n_ui.h"
 #include "../comm/log.h"
 #include "../core/nes.h"
 #include "wSPMemory.h"
@@ -54,6 +55,16 @@ static ATOM wSPMemory_RegisterClass(HINSTANCE  hInstance)
 
 
 
+/** 标题取自语言文件(view.spmemory); 语言切换时重取。 */
+static VOID wSPMemory_UpdateTitle(VOID)
+{
+	ines_strncpy(wSPMemory_szTitle, L10N("view.spmemory"), count_of(wSPMemory_szTitle) - 1);
+	wSPMemory_szTitle[count_of(wSPMemory_szTitle) - 1] = 0;
+
+	if(wSPMemory_hWnd != NULL)
+		SetWindowText(wSPMemory_hWnd, wSPMemory_szTitle);
+}
+
 BOOL wSPMemory_Create(HINSTANCE hInstance, HWND hParentWnd)
 {
 	// already created
@@ -63,7 +74,7 @@ BOOL wSPMemory_Create(HINSTANCE hInstance, HWND hParentWnd)
 		return TRUE;
 	}
 
-	LoadString(hInstance, IDS_WND_SPMEMORY_TITLE, wSPMemory_szTitle, count_of(wSPMemory_szTitle));
+	wSPMemory_UpdateTitle();
 
 	wSPMemory_RegisterClass(hInstance);
 	 
@@ -784,6 +795,9 @@ static LRESULT CALLBACK	wSPMemory_WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam
 		DestroyWindow(hWnd);
 		return 0;
 		break;
+	case WM_APP_LANGCHANGED:      /* 语言切换: 重取标题 */
+		wSPMemory_UpdateTitle();
+		return 0;
 	case WM_PAINT:
 		wSPMemory_OnPaint(hWnd);
 		return 0;

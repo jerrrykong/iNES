@@ -7,6 +7,7 @@
 // =====================================================================
 
 #include "stdafx.h"
+#include "i18n_ui.h"
 #include "../comm/net.h"
 #include "../comm/npsession.h"
 #include "Resource.h"
@@ -30,7 +31,25 @@ static VOID dlgNetPlay_OnStartConnect(HWND hDlg);
 static VOID dlgNetPlay_TimedCheck(HWND hDlg);
 
 static VOID dlgNetPlay_SetInfo(HWND hDlg, const char* utf8);
+static VOID dlgNetPlay_SetInfoText(HWND hDlg, ines_cstr_t text);
 static VOID dlgNetPlay_StopConnecting(HWND hDlg);
+
+
+/**
+ * IDD_NETPLAY 的静态文本(key 取自 lang/*.ini 的 [dialog] 段)。
+ * 编辑框 / IDC_CMB_CACHE 的"值"不翻译; IDC_NETPLAY_LAB_CACHE 是"缓冲帧数"标签。
+ */
+static const APP_DLG_ITEM  s_netplay_items[] =
+{
+	{ IDC_NETPLAY_GRP_RUN_AS,   "dialog.netplay.run_as",  APP_FIT_GROW_W },
+	{ IDC_RAD_SERVER,           "dialog.netplay.server",  APP_FIT_NONE },
+	{ IDC_RAD_CLIENT,           "dialog.netplay.client",  APP_FIT_NONE },
+	{ IDC_NETPLAY_LAB_ADDRESS,  "dialog.netplay.address", APP_FIT_NONE },
+	{ IDC_NETPLAY_LAB_PORT,     "dialog.netplay.port",    APP_FIT_NONE },
+	{ IDC_NETPLAY_LAB_CACHE,    "dialog.cache_frames",    APP_FIT_NONE },
+	{ IDOK,                     "dialog.netplay.start",   APP_FIT_ANCHOR_RIGHT },
+	{ IDCANCEL,                 "dialog.netplay.cancel",  APP_FIT_ANCHOR_RIGHT },
+};
 
 
 BOOL dlgNetPlay_DoModal(HINSTANCE hInstance, HWND hParentWnd, ines_dword_t  crc32)
@@ -88,6 +107,10 @@ static INT_PTR CALLBACK dlgNetPlay_DlgProc(HWND hDlg, UINT message, WPARAM wPara
 		dlgNetPlay_TimedCheck(hDlg);
 		return (INT_PTR)TRUE;
 		break;
+	case WM_APP_LANGCHANGED:      /* 语言切换: 重贴标题与静态文本 */
+		SetWindowText(hDlg, L10N("dialog.netplay.title"));
+		i18n_ui_apply_dialog(hDlg, s_netplay_items, count_of(s_netplay_items));
+		return (INT_PTR)TRUE;
 	}
 	return (INT_PTR)FALSE;
 
@@ -110,12 +133,18 @@ static BOOL dlgNetPlay_OnInitDialog(HWND hDlg)
 	if(iCache > NP_CACHE_MAX)
 		iCache = NP_CACHE_MAX;
 
-	ines_snprintf(text, count_of(text), ISTR("%d 帧（config.ini [netplay] cache_num）"), iCache);
+	/* "%d frames" —— 与 mac 端的只读显示一致(config.ini 提示在 lang 文件里说明) */
+	ines_strncpy(text, L10NF("dialog.lan.cache_frames_format", iCache), count_of(text) - 1);
+	text[count_of(text) - 1] = 0;
 
 	SetDlgItemText(hDlg, IDC_CMB_CACHE, text);
 
 	// clear status text
 	SetDlgItemText(hDlg, IDC_LAB_INFO, _T(""));
+
+	// i18n: 标题与静态文本(含按钮), 控件尺寸按译文自适应
+	SetWindowText(hDlg, L10N("dialog.netplay.title"));
+	i18n_ui_apply_dialog(hDlg, s_netplay_items, count_of(s_netplay_items));
 	
 	
 	CheckRadioButton(hDlg, IDC_RAD_SERVER, IDC_RAD_CLIENT, IDC_RAD_SERVER);
@@ -159,6 +188,12 @@ static VOID dlgNetPlay_SetInfo(HWND hDlg, const char* utf8)
 	SetDlgItemText(hDlg, IDC_LAB_INFO, text);
 }
 
+/** 显示语言文件里的文本(已是 TCHAR, 无需再转码) */
+static VOID dlgNetPlay_SetInfoText(HWND hDlg, ines_cstr_t text)
+{
+	SetDlgItemText(hDlg, IDC_LAB_INFO, (text != NULL) ? text : ISTR(""));
+}
+
 /** 停止握手并恢复界面(失败或用户取消连接)。 */
 static VOID dlgNetPlay_StopConnecting(HWND hDlg)
 {
@@ -190,7 +225,9 @@ static VOID dlgNetPlay_OnStartConnect(HWND hDlg)
 
 	if(!b)
 	{
-		MessageBox(hDlg, ISTR("error input port"), ISTR("iNes"), MB_OK|MB_ICONSTOP);
+		// 与 mac 一致: 弹窗给完整原因, 状态行给短提示
+		MessageBox(hDlg, L10N("dialog.netplay.err_port"), L10N("dialog.netplay.title"), MB_OK|MB_ICONSTOP);
+		dlgNetPlay_SetInfoText(hDlg, L10N("dialog.netplay.err_port_short"));
 		return;
 	}
 
@@ -210,7 +247,7 @@ static VOID dlgNetPlay_OnStartConnect(HWND hDlg)
 	// 开始握手: 服务端监听, 客户端连接(会话层内部状态机与 mac 端完全一致)
 	if(0 != np_begin(s_is_server, szIP, iPort, s_crc32, iCache))
 	{
-		MessageBox(hDlg, net_get_last_error(), ISTR("iNes"), MB_OK|MB_ICONSTOP);
+		MessageBox(hDlg, net_get_last_error(), L10N("dialog.netplay.title"), MB_OK|MB_ICONSTOP);
 		return;	
 	}
 
@@ -218,7 +255,7 @@ static VOID dlgNetPlay_OnStartConnect(HWND hDlg)
 
 	EnableWindow(GetDlgItem(hDlg, IDOK), FALSE);
 
-	dlgNetPlay_SetInfo(hDlg, s_is_server ? "等待客户端的连接..." : "正在连接到服务器...");
+	dlgNetPlay_SetInfoText(hDlg, L10N(s_is_server ? "dialog.netplay.waiting" : "dialog.netplay.connecting"));
 
 	// timed check(与 mac 的 0.05s 定时器一致)
 	SetTimer(hDlg, 100, 50, NULL);
@@ -260,7 +297,8 @@ static VOID dlgNetPlay_TimedCheck(HWND hDlg)
 		text[count_of(text) - 1] = 0;
 #endif
 
-		MessageBox(hDlg, (text[0] != 0) ? text : ISTR("连接失败"), ISTR("iNes"), MB_OK|MB_ICONSTOP);
+		MessageBox(hDlg, (text[0] != 0) ? text : L10N("dialog.netplay.connect_failed"),
+				   L10N("dialog.netplay.title"), MB_OK|MB_ICONSTOP);
 		return;
 	}
 }

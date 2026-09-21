@@ -20,12 +20,12 @@
 #undef APSTUDIO_READONLY_SYMBOLS
 
 /////////////////////////////////////////////////////////////////////////////
-// 中文(中华人民共和国) resources
+// English baseline resources —— 这里的文本只是底稿, 运行时由 lang/*.ini 覆盖
 
-#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_CHS)
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
 #ifdef _WIN32
-LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
-// 本文件已转换为 UTF-8(无 BOM), 资源编译器需按 65001 读取, 否则中文乱码
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+// 本文件是 UTF-8(无 BOM), 资源编译器需按 65001 读取
 #pragma code_page(65001)
 #endif //_WIN32
 
@@ -44,122 +44,135 @@ IDI_SMALL               ICON                    "small.ico"
 // Menu
 //
 
+/*
+ * 菜单文本只是英文底稿: 启动后由 win32/i18n_ui.c 按 lang/*.ini 整份替换。
+ * 因此这里一律不写助记符 '&' 与快捷键 '\tCtrl+O' —— 它们由 i18n_ui.c 的平台表追加,
+ * 避免译文把原文里针对英文设计的 '&' 位置吃掉(见 docs/i18n-plan.md §4.2)。
+ * 不翻译的条目(日志等级 "1 - TRACE"、数值 "4:3")保留原文。
+ *
+ * 注意: 各项的排列顺序与 win32/i18n_ui.c 里 s_menu_pops 的位置路径一一对应,
+ *       调整本菜单时两边必须同步改。
+ */
 IDC_INES MENU 
 BEGIN
-    POPUP "文件(&F)"
+    POPUP "File"
     BEGIN
-        MENUITEM "载入ROM(&O)...\tCtrl+O",        IDM_OPEN
-        MENUITEM "卸载ROM(&U)\tCtrl+U",           IDM_CLOSE
+        MENUITEM "Load ROM...",                 IDM_OPEN
+        MENUITEM "Unload ROM",                  IDM_CLOSE
         MENUITEM SEPARATOR
-        MENUITEM "联网对战",                        IDM_NET_PLAY
-        MENUITEM "局域网快速对战(&L)",               IDM_LAN_MATCH
+        MENUITEM "Net Play...",                 IDM_NET_PLAY
+        MENUITEM "LAN Quick Match...",          IDM_LAN_MATCH
         MENUITEM SEPARATOR
-        MENUITEM "最近文件",                        32990, INACTIVE
+        MENUITEM "Recent Files",                32990, INACTIVE
         MENUITEM SEPARATOR
-        MENUITEM "退出(&X)\tAlt+Q",               IDM_EXIT
+        MENUITEM "Exit",                        IDM_EXIT
     END
-    POPUP "控制(&C)"
+    POPUP "Control"
     BEGIN
-        MENUITEM "重新上电(&R)\tCtrl+F1",           IDM_HARDRESET
-        MENUITEM "软件复位(&S)\tF1",                IDM_SOFTRESET
+        MENUITEM "Hard Reset",                  IDM_HARDRESET
+        MENUITEM "Soft Reset",                  IDM_SOFTRESET
         MENUITEM SEPARATOR
-        MENUITEM "暂停(&P)\tP",                   IDM_PAUSE
-        MENUITEM "单帧执行(&T)\tSpace",             IDM_FRAME_STEP
+        MENUITEM "Pause",                       IDM_PAUSE
+        MENUITEM "Frame Step",                  IDM_FRAME_STEP
         MENUITEM SEPARATOR
-        MENUITEM "全屏(&F)\tF12",                 IDM_FULL_SCREEN
-        POPUP "缩放(&X)"
+        MENUITEM "Full Screen",                 IDM_FULL_SCREEN
+        POPUP "Zoom"
         BEGIN
-            MENUITEM "x 1\tF5",                     IDM_ZOOM_X1
-            MENUITEM "x 2\tF6",                     IDM_ZOOM_X2
-            MENUITEM "x 3\tF7",                     IDM_ZOOM_X3
-            MENUITEM "x 4\tF8",                     IDM_ZOOM_X4
+            MENUITEM "x 1",                     IDM_ZOOM_X1
+            MENUITEM "x 2",                     IDM_ZOOM_X2
+            MENUITEM "x 3",                     IDM_ZOOM_X3
+            MENUITEM "x 4",                     IDM_ZOOM_X4
         END
-        POPUP "比例(&C)"
+        POPUP "Aspect Ratio"
         BEGIN
-            MENUITEM "原始比例",                        IDM_SCALE_ORIG
-            MENUITEM "4：3",                         IDM_SCALE_4x3
-            MENUITEM "16：9",                        IDM_SCALE_16x9
-        END
-        MENUITEM SEPARATOR
-        MENUITEM "静音(&M)\tF9",                  IDM_MUTE
-        POPUP "音量(&V)"
-        BEGIN
-            MENUITEM "100%",                        IDM_VOLUMN_100
-            MENUITEM "80%",                         IDM_VOLUMN_80
-            MENUITEM "60%",                         IDM_VOLUMN_60
-            MENUITEM "40%",                         IDM_VOLUMN_40
-            MENUITEM "20%",                         IDM_VOLUMN_20
-            MENUITEM "0%",                          IDM_VOLUMN_0
+            MENUITEM "Original",                IDM_SCALE_ORIG
+            MENUITEM "4:3",                     IDM_SCALE_4x3
+            MENUITEM "16:9",                    IDM_SCALE_16x9
         END
         MENUITEM SEPARATOR
-        POPUP "即时存档(&V)"
+        MENUITEM "Mute",                        IDM_MUTE
+        POPUP "Volume"
         BEGIN
-            MENUITEM "存档 0\tCtrl+0",                IDM_SAVE_STATE_0
-            MENUITEM "存档 1\tCtrl+1",                IDM_SAVE_STATE_1
-            MENUITEM "存档 2\tCtrl+2",                IDM_SAVE_STATE_2
-            MENUITEM "存档 3\tCtrl+3",                IDM_SAVE_STATE_3
-            MENUITEM "存档 4\tCtrl+4",                IDM_SAVE_STATE_4
-            MENUITEM "存档 5\tCtrl+5",                IDM_SAVE_STATE_5
-            MENUITEM "存档 6\tCtrl+6",                IDM_SAVE_STATE_6
-            MENUITEM "存档 7\tCtrl+7",                IDM_SAVE_STATE_7
-            MENUITEM "存档 8\tCtrl+8",                IDM_SAVE_STATE_8
-            MENUITEM "存档 9\tCtrl+9",                IDM_SAVE_STATE_9
-        END
-        POPUP "载入存档(&L)"
-        BEGIN
-            MENUITEM "读档 0\tCtrl+Alt+0",            IDM_LOAD_STATE_0
-            MENUITEM "读档 1\tCtrl+Alt+1",            IDM_LOAD_STATE_1
-            MENUITEM "读档 2\tCtrl+Alt+2",            IDM_LOAD_STATE_2
-            MENUITEM "读档 3\tCtrl+Alt+3",            IDM_LOAD_STATE_3
-            MENUITEM "读档 4\tCtrl+Alt+4",            IDM_LOAD_STATE_4
-            MENUITEM "读档 5\tCtrl+Alt+5",            IDM_LOAD_STATE_5
-            MENUITEM "读档 6\tCtrl+Alt+6",            IDM_LOAD_STATE_6
-            MENUITEM "读档 7\tCtrl+Alt+7",            IDM_LOAD_STATE_7
-            MENUITEM "读档 8\tCtrl+Alt+8",            IDM_LOAD_STATE_8
-            MENUITEM "读档 9\tCtrl+Alt+9",            IDM_LOAD_STATE_9
+            MENUITEM "Volume: 100%",            IDM_VOLUMN_100
+            MENUITEM "Volume: 80%",             IDM_VOLUMN_80
+            MENUITEM "Volume: 60%",             IDM_VOLUMN_60
+            MENUITEM "Volume: 40%",             IDM_VOLUMN_40
+            MENUITEM "Volume: 20%",             IDM_VOLUMN_20
+            MENUITEM "Volume: 0%",              IDM_VOLUMN_0
         END
         MENUITEM SEPARATOR
-        MENUITEM "截图(S)\tCtrl+F10",             IDM_SNAPSHOT
+        POPUP "Save State"
+        BEGIN
+            MENUITEM "Save 0",                  IDM_SAVE_STATE_0
+            MENUITEM "Save 1",                  IDM_SAVE_STATE_1
+            MENUITEM "Save 2",                  IDM_SAVE_STATE_2
+            MENUITEM "Save 3",                  IDM_SAVE_STATE_3
+            MENUITEM "Save 4",                  IDM_SAVE_STATE_4
+            MENUITEM "Save 5",                  IDM_SAVE_STATE_5
+            MENUITEM "Save 6",                  IDM_SAVE_STATE_6
+            MENUITEM "Save 7",                  IDM_SAVE_STATE_7
+            MENUITEM "Save 8",                  IDM_SAVE_STATE_8
+            MENUITEM "Save 9",                  IDM_SAVE_STATE_9
+        END
+        POPUP "Load State"
+        BEGIN
+            MENUITEM "Load 0",                  IDM_LOAD_STATE_0
+            MENUITEM "Load 1",                  IDM_LOAD_STATE_1
+            MENUITEM "Load 2",                  IDM_LOAD_STATE_2
+            MENUITEM "Load 3",                  IDM_LOAD_STATE_3
+            MENUITEM "Load 4",                  IDM_LOAD_STATE_4
+            MENUITEM "Load 5",                  IDM_LOAD_STATE_5
+            MENUITEM "Load 6",                  IDM_LOAD_STATE_6
+            MENUITEM "Load 7",                  IDM_LOAD_STATE_7
+            MENUITEM "Load 8",                  IDM_LOAD_STATE_8
+            MENUITEM "Load 9",                  IDM_LOAD_STATE_9
+        END
+        MENUITEM SEPARATOR
+        MENUITEM "Snapshot",                    IDM_SNAPSHOT
     END
-    POPUP "工具(&T)"
+    POPUP "Tools"
     BEGIN
-        MENUITEM "选项(&O)...",                   IDM_OPTIONS
-        MENUITEM SEPARATOR
-        MENUITEM "图形查看(&I)...",                 IDM_VIEW_PT
-        MENUITEM "卷轴查看(&N),,,",                 IDM_VIEW_NT
-        MENUITEM "调色板查看(&P)...",                IDM_VIEW_PAL
-        MENUITEM "程序内存查看(&M)...",               IDM_VIEW_MEMORY
-        MENUITEM "图案内存查看(&V)...",               IDM_VIEW_VMEMORY
-        MENUITEM "精灵内存查看(&S)...",               IDM_VIEW_SPMEMORY
-        MENUITEM "寄存器(&R)...",                  IDM_VIEW_REG
-        MENUITEM SEPARATOR
-        POPUP "日志(&L)"
+        MENUITEM "Options...",                  IDM_OPTIONS
+        POPUP "Language"                        /* 菜单项由 i18n_ui.c 运行时替换 */
         BEGIN
-            MENUITEM "&1 - TRACE",                  IDM_LOG_TRACE
-            MENUITEM "&2 - DEBUG",                  IDM_LOG_DEBUG
-            MENUITEM "&3 - INFO",                   IDM_LOG_INFO
-            MENUITEM "&4 - WARNING",                IDM_LOG_WARNING
-            MENUITEM "&5 - ERROR",                  IDM_LOG_WARNING
-            MENUITEM "1&0 - NOTIFY",                IDM_LOG_ERROR
-            MENUITEM "&N - NONE",                   IDM_LOG_NONE
+            MENUITEM "English",                 IDM_LANGUAGE_BASE
+        END
+        MENUITEM SEPARATOR
+        MENUITEM "Pattern Table Viewer...",     IDM_VIEW_PT
+        MENUITEM "Name Table Viewer...",        IDM_VIEW_NT
+        MENUITEM "Palette Viewer...",           IDM_VIEW_PAL
+        MENUITEM "Memory Viewer...",            IDM_VIEW_MEMORY
+        MENUITEM "Pattern Memory Viewer...",    IDM_VIEW_VMEMORY
+        MENUITEM "Sprite Memory Viewer...",     IDM_VIEW_SPMEMORY
+        MENUITEM "Register Viewer...",          IDM_VIEW_REG
+        MENUITEM SEPARATOR
+        POPUP "Log"
+        BEGIN
+            MENUITEM "&1 - TRACE",              IDM_LOG_TRACE
+            MENUITEM "&2 - DEBUG",              IDM_LOG_DEBUG
+            MENUITEM "&3 - INFO",               IDM_LOG_INFO
+            MENUITEM "&4 - WARNING",            IDM_LOG_WARNING
+            MENUITEM "&5 - ERROR",              IDM_LOG_WARNING
+            MENUITEM "1&0 - NOTIFY",            IDM_LOG_ERROR
+            MENUITEM "&N - NONE",               IDM_LOG_NONE
             MENUITEM SEPARATOR
-            MENUITEM "&C - CPU TRACE",              IDM_CPU_TRACE
+            MENUITEM "&C - CPU TRACE",          IDM_CPU_TRACE
         END
-        MENUITEM "调试器(&D)...",                  IDM_DEBUGGER
+        MENUITEM "Debugger...",                 IDM_DEBUGGER
     END
-    POPUP "帮助(&H)"
+    POPUP "Help"
     BEGIN
-        MENUITEM "关于(&A) ...",                  IDM_ABOUT
+        MENUITEM "About...",                    IDM_ABOUT
     END
 END
 
 IDC_POPUP MENU 
 BEGIN
-    POPUP "MEMORY"
+    POPUP "Memory"
     BEGIN
-        MENUITEM "程序内存",                        ID_MEMORY_CPU
-        MENUITEM "图像内存",                        ID_MEMORY_PPU
-        MENUITEM "精灵内存",                        ID_MEMORY_SPRIT
+        MENUITEM "CPU Memory",                  ID_MEMORY_CPU
+        MENUITEM "PPU Memory",                  ID_MEMORY_PPU
+        MENUITEM "Sprite Memory",               ID_MEMORY_SPRIT
     END
 END
 
@@ -223,68 +236,68 @@ END
 
 IDD_ABOUTBOX DIALOGEX 0, 0, 170, 62
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "关于 iNES"
+CAPTION "About iNES"
 FONT 9, "MS Shell Dlg", 0, 0, 0x1
 BEGIN
     ICON            IDI_INES,IDC_STATIC,14,14,21,20
-    LTEXT           "iNES，1.0 版",IDC_STATIC,42,14,114,8,SS_NOPREFIX
-    LTEXT           "Copyright (C) 2015",IDC_STATIC,42,26,114,8
-    DEFPUSHBUTTON   "确定",IDOK,113,41,50,14,WS_GROUP
+    LTEXT           "iNES, version 1.0",IDC_ABOUT_LAB_VERSION,42,14,114,8,SS_NOPREFIX
+    LTEXT           "Copyright (C) 2015",IDC_ABOUT_LAB_COPYRIGHT,42,26,114,8
+    DEFPUSHBUTTON   "OK",IDOK,113,41,50,14,WS_GROUP
 END
 
 IDD_NETPLAY DIALOGEX 0, 0, 315, 138
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "网络对战"
+CAPTION "Net Play"
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-    GROUPBOX        "运行为",IDC_STATIC,23,8,262,31
-    CONTROL         "服务器",IDC_RAD_SERVER,"Button",BS_AUTORADIOBUTTON | WS_GROUP,31,22,40,10
-    CONTROL         "客户机",IDC_RAD_CLIENT,"Button",BS_AUTORADIOBUTTON,150,22,40,10
-    LTEXT           "地址",IDC_STATIC,24,44,37,14
+    GROUPBOX        "Run as",IDC_NETPLAY_GRP_RUN_AS,23,8,262,31
+    CONTROL         "Server",IDC_RAD_SERVER,"Button",BS_AUTORADIOBUTTON | WS_GROUP,31,22,40,10
+    CONTROL         "Client",IDC_RAD_CLIENT,"Button",BS_AUTORADIOBUTTON,150,22,40,10
+    LTEXT           "Address",IDC_NETPLAY_LAB_ADDRESS,24,44,37,14
     EDITTEXT        IDC_EDT_IP,69,44,112,14,ES_AUTOHSCROLL
-    LTEXT           "端口",IDC_STATIC,196,44,21,14
+    LTEXT           "Port",IDC_NETPLAY_LAB_PORT,196,44,21,14
     EDITTEXT        IDC_EDT_PORT,235,44,44,14,ES_AUTOHSCROLL
-    LTEXT           "缓冲帧数",IDC_STATIC,21,65,41,14
+    LTEXT           "Cache frames",IDC_NETPLAY_LAB_CACHE,21,65,41,14
     // 缓冲帧数不再可选: 唯一来源是 config.ini 的 [netplay] cache_num(与 mac 端一致),
     // 这里只作只读显示(原来是 COMBOBOX, 改了也不生效, 属误导)
     LTEXT           "",IDC_CMB_CACHE,67,66,240,10
-    LTEXT           "提示信息...",IDC_LAB_INFO,18,95,279,14
-    DEFPUSHBUTTON   "开始",IDOK,205,117,50,14
-    PUSHBUTTON      "取消",IDCANCEL,258,117,50,14
+    LTEXT           "",IDC_LAB_INFO,18,95,279,14
+    DEFPUSHBUTTON   "Start",IDOK,205,117,50,14
+    PUSHBUTTON      "Cancel",IDCANCEL,258,117,50,14
 END
 
 // 载入 NES 文件管理器: 上(文件夹选择) / 中(可拉伸文件列表) / 下(加载、取消)
 IDD_OPENROM DIALOGEX 0, 0, 440, 300
 STYLE DS_SETFONT | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_CLIPCHILDREN
-CAPTION "载入 NES 文件"
+CAPTION "Load NES File"
 FONT 9, "MS Shell Dlg", 0, 0, 0x1
 BEGIN
-    LTEXT           "文件夹:",IDC_OPENROM_LAB_DIR,7,12,40,10
+    LTEXT           "Folder:",IDC_OPENROM_LAB_DIR,7,12,40,10
     EDITTEXT        IDC_OPENROM_EDT_DIR,52,8,350,16,ES_AUTOHSCROLL
     CONTROL         "",IDC_OPENROM_BTN_DIR,"Button",BS_PUSHBUTTON | BS_ICON | WS_TABSTOP,408,8,26,16
     CONTROL         "",IDC_OPENROM_LIST,"SysListView32",LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | WS_BORDER | WS_TABSTOP,7,30,427,240
     LTEXT           "",IDC_OPENROM_LAB_COUNT,7,278,240,12
-    DEFPUSHBUTTON   "加载",IDOK,300,275,60,18
-    PUSHBUTTON      "取消",IDCANCEL,368,275,60,18
+    DEFPUSHBUTTON   "Load",IDOK,300,275,60,18
+    PUSHBUTTON      "Cancel",IDCANCEL,368,275,60,18
 END
 
 // 局域网快速对战: 上(昵称/本机 ROM/说明) / 中(房间列表) / 下(缓冲帧数、提示、加入、关闭)
 IDD_LANMATCH DIALOGEX 0, 0, 440, 300
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "局域网快速对战"
+CAPTION "LAN Quick Match"
 FONT 9, "MS Shell Dlg", 0, 0, 0x1
 BEGIN
-    LTEXT           "昵称:",IDC_STATIC,7,12,30,10
+    LTEXT           "Nickname:",IDC_LANMATCH_LAB_NICK,7,12,30,10
     EDITTEXT        IDC_LANMATCH_EDT_NICK,40,8,150,16,ES_AUTOHSCROLL
     LTEXT           "",IDC_LANMATCH_LAB_ROM,200,12,233,10
-    LTEXT           "已发布到局域网（缓冲 4 帧，发布后固定；可在 config.ini 的 [netplay] cache_num 调整）。加入他人房间后，本机作为副手柄（客户机）。",IDC_LANMATCH_LAB_HINT,7,30,426,24
+    LTEXT           "",IDC_LANMATCH_LAB_HINT,7,30,426,24
     CONTROL         "",IDC_LANMATCH_LIST,"SysListView32",LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | WS_BORDER | WS_TABSTOP,7,56,427,182
-    LTEXT           "缓冲帧数",IDC_STATIC,7,246,40,10
+    LTEXT           "Cache frames",IDC_LANMATCH_LAB_CACHE,7,246,40,10
     // 同"联网对战"对话框: 只读显示, 值来自 config.ini 的 [netplay] cache_num
     LTEXT           "",IDC_LANMATCH_CMB_CACHE,52,246,300,10
     LTEXT           "",IDC_LANMATCH_LAB_INFO,7,260,426,10
-    DEFPUSHBUTTON   "加入",IDOK,300,275,60,18
-    PUSHBUTTON      "关闭",IDCANCEL,368,275,60,18
+    DEFPUSHBUTTON   "Join",IDOK,300,275,60,18
+    PUSHBUTTON      "Close",IDCANCEL,368,275,60,18
 END
 
 
@@ -351,40 +364,44 @@ END
 // String Table
 //
 
+/*
+ * 字符串表同样只是英文底稿: 状态文本 / 调试窗口标题在运行时由 lang/*.ini 提供
+ * (status.*、view.*), 这里保留英文作为"语言文件缺失时的兜底"。
+ */
 STRINGTABLE 
 BEGIN
     IDS_APP_TITLE           "iNES"
-    IDS_STATUS_OFF          "未运行"
-    IDS_STATUS_RUNNING      "运行中"
-    IDS_STATUS_PAUSE        "暂停"
-    IDS_STATUS_FRAME_STEP   "逐帧"
-    IDS_WND_MEMORY_TITLE    "内存查看器"
+    IDS_STATUS_OFF          "Not running"
+    IDS_STATUS_RUNNING      "Running"
+    IDS_STATUS_PAUSE        "Paused"
+    IDS_STATUS_FRAME_STEP   "Frame step"
+    IDS_WND_MEMORY_TITLE    "Memory Viewer"
     IDC_INES                "INES"
-    IDS_WND_VMEMORY_TITLE   "图形内存查看器"
-    IDS_WND_SPMEMORY_TITLE  "精灵内存查看器"
+    IDS_WND_VMEMORY_TITLE   "Pattern Memory Viewer"
+    IDS_WND_SPMEMORY_TITLE  "Sprite Memory Viewer"
 END
 
 STRINGTABLE 
 BEGIN
-    IDM_OPEN                "打开NES文件"
+    IDM_OPEN                "Load NES File"
 END
 
 STRINGTABLE 
 BEGIN
-    IDS_ERR_FILE_FORMAT     "不正确的文件格式"
-    IDS_ERR_UNSUPPORT_MAPPER_ID "不支持的映射模式【%1】"
-    IDS_ERR_ILLEGAL_INSTRUCTION "非法指令 %1"
+    IDS_ERR_FILE_FORMAT     "Incorrect file format"
+    IDS_ERR_UNSUPPORT_MAPPER_ID "Unsupported mapper [%1]"
+    IDS_ERR_ILLEGAL_INSTRUCTION "Illegal instruction %1"
 END
 
 STRINGTABLE 
 BEGIN
-    IDS_WND_NT_TITLE        "卷轴查看器"
-    IDS_WND_PT_TITLE        "图形查看器"
-    IDS_WND_PAL_TITLE       "色盘查看器"
-    IDS_WND_REG_TITLE       "寄存器查看器"
+    IDS_WND_NT_TITLE        "Name Table Viewer"
+    IDS_WND_PT_TITLE        "Pattern Table Viewer"
+    IDS_WND_PAL_TITLE       "Palette Viewer"
+    IDS_WND_REG_TITLE       "Register Viewer"
 END
 
-#endif    // 中文(中华人民共和国) resources
+#endif    // English baseline resources
 /////////////////////////////////////////////////////////////////////////////
 
 

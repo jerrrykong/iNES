@@ -148,6 +148,7 @@ set(INES_WIN32_SOURCES
     "${INES_DIR}/win32/dlgOpenRom.c"
     "${INES_DIR}/win32/dlgNetPlay.c"
     "${INES_DIR}/win32/iNES.c"
+    "${INES_DIR}/win32/i18n_ui.c"
     "${INES_DIR}/win32/stdafx.c"
     "${INES_DIR}/win32/wMemory.c"
     "${INES_DIR}/win32/wNameTable.c"

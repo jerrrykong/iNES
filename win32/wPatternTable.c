@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include "i18n_ui.h"
 #include "../comm/log.h"
 #include "../core/nes.h"
 #include "wPatternTable.h"
@@ -22,6 +23,7 @@ static int   wPT_PatIdx = 0;  // 0~7: BG0,BG1,BG2,BG3,SP0,SP1,SP2,SP3
 
 
 static LRESULT CALLBACK	wPT_WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+static VOID	            wPT_UpdateTitle(HWND hWnd);
 
 static ATOM wPT_RegisterClass(HINSTANCE  hInstance)
 {
@@ -46,6 +48,16 @@ static ATOM wPT_RegisterClass(HINSTANCE  hInstance)
 
 
 
+/** 基础标题取自语言文件(view.pattern_table); 语言切换时重取并连带刷新窗口标题。 */
+static VOID wPT_UpdateTitleBase(VOID)
+{
+	ines_strncpy(wPT_szTitle, L10N("view.pattern_table"), count_of(wPT_szTitle) - 1);
+	wPT_szTitle[count_of(wPT_szTitle) - 1] = 0;
+
+	if(wPT_hWnd != NULL)
+		wPT_UpdateTitle(wPT_hWnd);
+}
+
 BOOL wPT_Create(HINSTANCE hInstance, HWND hParentWnd)
 {
 	// already created
@@ -55,7 +67,8 @@ BOOL wPT_Create(HINSTANCE hInstance, HWND hParentWnd)
 		return TRUE;
 	}
 
-	LoadString(hInstance, IDS_WND_PT_TITLE, wPT_szTitle, count_of(wPT_szTitle));
+	// i18n: 基础标题先取好(wPT_UpdateTitle() 在 WM_CREATE 之后要用它拼后缀)
+	wPT_UpdateTitleBase();
 
 	wPT_RegisterClass(hInstance);
 	 
@@ -100,11 +113,17 @@ VOID wPT_Destroy()
 	}	
 }
 
+/**
+ * 窗口标题 = "基础标题(BG|SP<索引>)"。
+ * BG / SP 是 PPU 术语, 不翻译; 括号与拼接方式走 view.pattern_title_format。
+ */
 static VOID  wPT_UpdateTitle(HWND hWnd)
 {
-	TCHAR  szTitle[128];
+	ines_char_t  szTitle[128];
 
-	wsprintf(szTitle,  _T("%s(%s%d)"), wPT_szTitle, wPT_PatIdx&0x4?_T("SP"):_T("BG"), wPT_PatIdx&0x03);
+	ines_snprintf(szTitle, count_of(szTitle), L10N("view.pattern_title_format"), wPT_szTitle,
+				  ((wPT_PatIdx & 0x4) != 0) ? ISTR("SP") : ISTR("BG"), (wPT_PatIdx & 0x03));
+	szTitle[count_of(szTitle) - 1] = 0;
 
 	SetWindowText(hWnd, szTitle);
 }
@@ -328,6 +347,9 @@ static LRESULT CALLBACK	wPT_WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 		DestroyWindow(hWnd);
 		return 0;
 		break;
+	case WM_APP_LANGCHANGED:      /* 语言切换: 重取标题 */
+		wPT_UpdateTitleBase();
+		return 0;
 	case WM_PAINT:
 		wPT_OnPaint(hWnd);
 		return 0;

@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include "i18n_ui.h"
 #include "../comm/log.h"
 #include "../core/nes.h"
 #include "wNameTable.h"
@@ -45,6 +46,16 @@ static ATOM wNT_RegisterClass(HINSTANCE  hInstance)
 
 
 
+/** 标题取自语言文件(view.name_table); 语言切换时重取。 */
+static VOID wNT_UpdateTitle(VOID)
+{
+	ines_strncpy(wNT_szTitle, L10N("view.name_table"), count_of(wNT_szTitle) - 1);
+	wNT_szTitle[count_of(wNT_szTitle) - 1] = 0;
+
+	if(wNT_hWnd != NULL)
+		SetWindowText(wNT_hWnd, wNT_szTitle);
+}
+
 BOOL wNT_Create(HINSTANCE hInstance, HWND hParentWnd)
 {
 	// already created
@@ -54,7 +65,7 @@ BOOL wNT_Create(HINSTANCE hInstance, HWND hParentWnd)
 		return TRUE;
 	}
 
-	LoadString(hInstance, IDS_WND_NT_TITLE, wNT_szTitle, count_of(wNT_szTitle));
+	wNT_UpdateTitle();
 
 	wNT_RegisterClass(hInstance);
 	 
@@ -323,6 +334,9 @@ static LRESULT CALLBACK	wNT_WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 		DestroyWindow(hWnd);
 		return 0;
 		break;
+	case WM_APP_LANGCHANGED:      /* 语言切换: 重取标题 */
+		wNT_UpdateTitle();
+		return 0;
 	case WM_PAINT:
 		wNT_OnPaint(hWnd);
 		return 0;

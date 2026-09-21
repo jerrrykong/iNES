@@ -42,6 +42,19 @@
 #define IDC_LANMATCH_LAB_INFO           1014
 #define IDC_LANMATCH_CMB_CACHE          1015
 #define IDC_LANMATCH_LAB_HINT           1016
+
+/*
+ * i18n: 原来写 IDC_STATIC 的静态标签拿到 ID 后, 才能在运行时被 lang/*.ini 换文
+ *       (ID 重复的控件 GetDlgItem 取不到, 详见 win32/i18n_ui.c 的表驱动方式)。
+ */
+#define IDC_NETPLAY_GRP_RUN_AS          1017
+#define IDC_NETPLAY_LAB_ADDRESS         1018
+#define IDC_NETPLAY_LAB_PORT            1019
+#define IDC_NETPLAY_LAB_CACHE           1020
+#define IDC_LANMATCH_LAB_NICK           1021
+#define IDC_LANMATCH_LAB_CACHE          1022
+#define IDC_ABOUT_LAB_VERSION           1023
+#define IDC_ABOUT_LAB_COPYRIGHT         1024
 #define IDS_ERR_FILE_FORMAT             10001
 #define IDS_ERR_UNSUPPORT_MAPPER_ID     10002
 #define IDS_ERR_ILLEGAL_INSTRUCTION     10003
@@ -112,6 +125,13 @@
 #define IDM_VOLUMN_100                  32899
 #define IDM_NET_PLAY                    32902
 #define IDM_LAN_MATCH                   32903
+
+/*
+ * "工具 -> 语言" 子菜单: 第 i 项 = IDM_LANGUAGE_BASE + i。
+ * 资源里只有一个空 POPUP, 菜单项由 win32/i18n_ui.c 按 lang/*.ini 在运行时插入。
+ * 32905 ~ 32920 为本菜单保留, 不要再安排其它命令 ID。
+ */
+#define IDM_LANGUAGE_BASE               32905
 #define IDC_STATIC                      -1
 
 // Next default values for new objects
@@ -120,8 +140,8 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
 #define _APS_NEXT_RESOURCE_VALUE        133
-#define _APS_NEXT_COMMAND_VALUE         32904
-#define _APS_NEXT_CONTROL_VALUE         1017
+#define _APS_NEXT_COMMAND_VALUE         32921
+#define _APS_NEXT_CONTROL_VALUE         1025
 #define _APS_NEXT_SYMED_VALUE           110
 #endif
 #endif

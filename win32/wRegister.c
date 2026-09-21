@@ -21,6 +21,7 @@
 // =====================================================================
 
 #include "stdafx.h"
+#include "i18n_ui.h"
 #include "../comm/log.h"
 #include "../core/nes.h"
 #include "wRegister.h"
@@ -150,65 +151,65 @@ typedef struct _wreg_def_
 	ines_int_t     width;     // 8 / 16 / 64 / 0(纯文本行)
 	unsigned int   wmask;     // 可写位掩码(0 = 整行只读)
 	const char*    bits;      // 位缩写, MSB -> LSB
-	const char*    note;      // 说明
+	const char*    note_id;   // 说明: 语言文件 key = "debug.reg." + note_id + ".note"
 } wreg_def_t;
 
 
 static const wreg_def_t  s_defs[WREG_REG_COUNT] =
 {
 	/* ---------------- CPU ---------------- */
-	{ WREG_REG_A,          "A",         "-",      WREG_FMT_HEX,  8, 0x00FF, "76543210",         "累加器" },
-	{ WREG_REG_X,          "X",         "-",      WREG_FMT_HEX,  8, 0x00FF, "76543210",         "变址寄存器 X" },
-	{ WREG_REG_Y,          "Y",         "-",      WREG_FMT_HEX,  8, 0x00FF, "76543210",         "变址寄存器 Y" },
-	{ WREG_REG_P,          "P",         "-",      WREG_FMT_HEX,  8, 0x00FF, "NVRBDIZC",         "状态 N V R B D I Z C" },
-	{ WREG_REG_SP,         "SP",        "-",      WREG_FMT_HEX,  8, 0x00FF, "76543210",         "栈指针(页 1)" },
-	{ WREG_REG_PC,         "PC",        "-",      WREG_FMT_HEX, 16, 0xFFFF, "FEDCBA9876543210", "程序计数器" },
-	{ WREG_REG_IRQ_PEND,   "IRQ.PEND",  "-",      WREG_FMT_HEX,  8, 0x0007, "     AMN",         "NMI/MMC/APU 挂起" },
-	{ WREG_REG_CYCLES,     "CYCLES",    "-",      WREG_FMT_DEC, 64, 0x0000, "",                 "累计周期(只读)" },
+	{ WREG_REG_A,          "A",         "-",      WREG_FMT_HEX,  8, 0x00FF, "76543210",         "a" },
+	{ WREG_REG_X,          "X",         "-",      WREG_FMT_HEX,  8, 0x00FF, "76543210",         "x" },
+	{ WREG_REG_Y,          "Y",         "-",      WREG_FMT_HEX,  8, 0x00FF, "76543210",         "y" },
+	{ WREG_REG_P,          "P",         "-",      WREG_FMT_HEX,  8, 0x00FF, "NVRBDIZC",         "p" },
+	{ WREG_REG_SP,         "SP",        "-",      WREG_FMT_HEX,  8, 0x00FF, "76543210",         "sp" },
+	{ WREG_REG_PC,         "PC",        "-",      WREG_FMT_HEX, 16, 0xFFFF, "FEDCBA9876543210", "pc" },
+	{ WREG_REG_IRQ_PEND,   "IRQ.PEND",  "-",      WREG_FMT_HEX,  8, 0x0007, "     AMN",         "irq_pend" },
+	{ WREG_REG_CYCLES,     "CYCLES",    "-",      WREG_FMT_DEC, 64, 0x0000, "",                 "cycles" },
 
 	/* ---------------- PPU ---------------- */
-	{ WREG_REG_PPUCTRL,    "PPUCTRL",   "$2000",  WREG_FMT_HEX,  8, 0x00FF, "NMSBsInn",         "NMI/图样/尺寸/增量/NT" },
-	{ WREG_REG_PPUMASK,    "PPUMASK",   "$2001",  WREG_FMT_HEX,  8, 0x00FF, "BGRsbmMg",         "色彩/BG/SPR 显示控制" },
-	{ WREG_REG_PPUSTATUS,  "PPUSTATUS", "$2002",  WREG_FMT_HEX,  8, 0x0000, "VSO-----",         "VBlank/Spr0/溢出(只读)" },
-	{ WREG_REG_OAMADDR,    "OAMADDR",   "$2003",  WREG_FMT_HEX,  8, 0x00FF, "76543210",         "OAM 地址" },
-	{ WREG_REG_OAMDATA,    "OAMDATA",   "$2004",  WREG_FMT_HEX,  8, 0x00FF, "76543210",         "OAM 数据(写后地址+1)" },
-	{ WREG_REG_PPUSCROLL,  "PPUSCROLL", "$2005",  WREG_FMT_TEXT, 0, 0x0000, "",                 "X=--- FX=- Y=--- FY=-" },
-	{ WREG_REG_PPU_T,      "PPUADDR.T", "$2006T", WREG_FMT_HEX, 16, 0x7FFF, "0YYYNNYYYYYXXXXX", "内部 T(直改字段)" },
-	{ WREG_REG_PPU_V,      "PPUADDR.V", "$2006V", WREG_FMT_HEX, 16, 0x7FFF, "0YYYNNYYYYYXXXXX", "当前 VRAM 地址 V" },
-	{ WREG_REG_PPUDATA,    "PPUDATA",   "$2007",  WREG_FMT_HEX,  8, 0x00FF, "76543210",         "写: VRAM; 读: 缓冲" },
-	{ WREG_REG_SCANLINE,   "SCANLINE",  "-",      WREG_FMT_DEC, 16, 0x0000, "FEDCBA9876543210", "当前扫描行(只读)" },
-	{ WREG_REG_VBLANK,     "VBLANK",    "-",      WREG_FMT_HEX,  8, 0x0000, "-------V",         "VBlank 标志(只读)" },
-	{ WREG_REG_TOGGLE,     "TOGGLE",    "-",      WREG_FMT_HEX,  8, 0x0000, "-------T",         "0=首字节 1=次字节" },
+	{ WREG_REG_PPUCTRL,    "PPUCTRL",   "$2000",  WREG_FMT_HEX,  8, 0x00FF, "NMSBsInn",         "ppuctrl" },
+	{ WREG_REG_PPUMASK,    "PPUMASK",   "$2001",  WREG_FMT_HEX,  8, 0x00FF, "BGRsbmMg",         "ppumask" },
+	{ WREG_REG_PPUSTATUS,  "PPUSTATUS", "$2002",  WREG_FMT_HEX,  8, 0x0000, "VSO-----",         "ppustatus" },
+	{ WREG_REG_OAMADDR,    "OAMADDR",   "$2003",  WREG_FMT_HEX,  8, 0x00FF, "76543210",         "oamaddr" },
+	{ WREG_REG_OAMDATA,    "OAMDATA",   "$2004",  WREG_FMT_HEX,  8, 0x00FF, "76543210",         "oamdata" },
+	{ WREG_REG_PPUSCROLL,  "PPUSCROLL", "$2005",  WREG_FMT_TEXT, 0, 0x0000, "",                 "ppuscroll" },
+	{ WREG_REG_PPU_T,      "PPUADDR.T", "$2006T", WREG_FMT_HEX, 16, 0x7FFF, "0YYYNNYYYYYXXXXX", "ppu_t" },
+	{ WREG_REG_PPU_V,      "PPUADDR.V", "$2006V", WREG_FMT_HEX, 16, 0x7FFF, "0YYYNNYYYYYXXXXX", "ppu_v" },
+	{ WREG_REG_PPUDATA,    "PPUDATA",   "$2007",  WREG_FMT_HEX,  8, 0x00FF, "76543210",         "ppudata" },
+	{ WREG_REG_SCANLINE,   "SCANLINE",  "-",      WREG_FMT_DEC, 16, 0x0000, "FEDCBA9876543210", "scanline" },
+	{ WREG_REG_VBLANK,     "VBLANK",    "-",      WREG_FMT_HEX,  8, 0x0000, "-------V",         "vblank" },
+	{ WREG_REG_TOGGLE,     "TOGGLE",    "-",      WREG_FMT_HEX,  8, 0x0000, "-------T",         "toggle" },
 
 	/* ---------------- APU ---------------- */
-	{ WREG_REG_P1VOL,      "P1VOL",     "$4000",  WREG_FMT_HEX,  8, 0x00FF, "ddLCvvvv",         "音量/包络/占空比" },
-	{ WREG_REG_P1SWP,      "P1SWP",     "$4001",  WREG_FMT_HEX,  8, 0x00FF, "EpppNsss",         "扫频" },
-	{ WREG_REG_P1TLO,      "P1TLO",     "$4002",  WREG_FMT_HEX,  8, 0x00FF, "tttttttt",         "定时器低 8 位" },
-	{ WREG_REG_P1THI,      "P1THI",     "$4003",  WREG_FMT_HEX,  8, 0x00FF, "lllllttt",         "长度/定时器高 3 位" },
-	{ WREG_REG_P2VOL,      "P2VOL",     "$4004",  WREG_FMT_HEX,  8, 0x00FF, "ddLCvvvv",         "音量/包络/占空比" },
-	{ WREG_REG_P2SWP,      "P2SWP",     "$4005",  WREG_FMT_HEX,  8, 0x00FF, "EpppNsss",         "扫频" },
-	{ WREG_REG_P2TLO,      "P2TLO",     "$4006",  WREG_FMT_HEX,  8, 0x00FF, "tttttttt",         "定时器低 8 位" },
-	{ WREG_REG_P2THI,      "P2THI",     "$4007",  WREG_FMT_HEX,  8, 0x00FF, "lllllttt",         "长度/定时器高 3 位" },
-	{ WREG_REG_TRLIN,      "TRLIN",     "$4008",  WREG_FMT_HEX,  8, 0x00FF, "Crrrrrrr",         "线性计数器" },
-	{ WREG_REG_TR_UNUSED,  "TR.UNUSED", "$4009",  WREG_FMT_HEX,  8, 0x0000, "--------",         "保留(未使用)" },
-	{ WREG_REG_TRTLO,      "TRTLO",     "$400A",  WREG_FMT_HEX,  8, 0x00FF, "tttttttt",         "定时器低 8 位" },
-	{ WREG_REG_TRTHI,      "TRTHI",     "$400B",  WREG_FMT_HEX,  8, 0x00FF, "lllllttt",         "长度/定时器高 3 位" },
-	{ WREG_REG_NSVOL,      "NSVOL",     "$400C",  WREG_FMT_HEX,  8, 0x003F, "--LCvvvv",         "音量/包络(位 7-6 未用)" },
-	{ WREG_REG_NS_UNUSED,  "NS.UNUSED", "$400D",  WREG_FMT_HEX,  8, 0x0000, "--------",         "保留(未使用)" },
-	{ WREG_REG_NSFRQ,      "NSFRQ",     "$400E",  WREG_FMT_HEX,  8, 0x00FF, "Mppppppp",         "模式/周期" },
-	{ WREG_REG_NSLEN,      "NSLEN",     "$400F",  WREG_FMT_HEX,  8, 0x00F8, "lllll---",         "长度(位 2-0 未用)" },
-	{ WREG_REG_DMFREQ,     "DMFREQ",    "$4010",  WREG_FMT_HEX,  8, 0x00FF, "ILrrrrrr",         "IRQ/循环/速率" },
-	{ WREG_REG_DMDAC,      "DMDAC",     "$4011",  WREG_FMT_HEX,  8, 0x007F, "-ddddddd",         "DAC 直写" },
-	{ WREG_REG_DMADDR,     "DMADDR",    "$4012",  WREG_FMT_HEX,  8, 0x00FF, "aaaaaaaa",         "采样起始地址" },
-	{ WREG_REG_DMLEN,      "DMLEN",     "$4013",  WREG_FMT_HEX,  8, 0x00FF, "llllllll",         "采样长度" },
-	{ WREG_REG_APUCTRL,    "APUCTRL",   "$4015",  WREG_FMT_HEX,  8, 0x001F, "---DNT21",         "声道使能(写)" },
-	{ WREG_REG_APUSTAT,    "APUSTAT",   "$4015R", WREG_FMT_HEX,  8, 0x0000, "FD-dNT21",         "状态(只读, 不清 IRQ)" },
-	{ WREG_REG_FRAMECTR,   "FRAMECTR",  "$4017",  WREG_FMT_HEX,  8, 0x00C0, "MI------",         "帧计数器模式" },
+	{ WREG_REG_P1VOL,      "P1VOL",     "$4000",  WREG_FMT_HEX,  8, 0x00FF, "ddLCvvvv",         "p1vol" },
+	{ WREG_REG_P1SWP,      "P1SWP",     "$4001",  WREG_FMT_HEX,  8, 0x00FF, "EpppNsss",         "p1swp" },
+	{ WREG_REG_P1TLO,      "P1TLO",     "$4002",  WREG_FMT_HEX,  8, 0x00FF, "tttttttt",         "p1tlo" },
+	{ WREG_REG_P1THI,      "P1THI",     "$4003",  WREG_FMT_HEX,  8, 0x00FF, "lllllttt",         "p1thi" },
+	{ WREG_REG_P2VOL,      "P2VOL",     "$4004",  WREG_FMT_HEX,  8, 0x00FF, "ddLCvvvv",         "p2vol" },
+	{ WREG_REG_P2SWP,      "P2SWP",     "$4005",  WREG_FMT_HEX,  8, 0x00FF, "EpppNsss",         "p2swp" },
+	{ WREG_REG_P2TLO,      "P2TLO",     "$4006",  WREG_FMT_HEX,  8, 0x00FF, "tttttttt",         "p2tlo" },
+	{ WREG_REG_P2THI,      "P2THI",     "$4007",  WREG_FMT_HEX,  8, 0x00FF, "lllllttt",         "p2thi" },
+	{ WREG_REG_TRLIN,      "TRLIN",     "$4008",  WREG_FMT_HEX,  8, 0x00FF, "Crrrrrrr",         "trlin" },
+	{ WREG_REG_TR_UNUSED,  "TR.UNUSED", "$4009",  WREG_FMT_HEX,  8, 0x0000, "--------",         "tr_unused" },
+	{ WREG_REG_TRTLO,      "TRTLO",     "$400A",  WREG_FMT_HEX,  8, 0x00FF, "tttttttt",         "trtlo" },
+	{ WREG_REG_TRTHI,      "TRTHI",     "$400B",  WREG_FMT_HEX,  8, 0x00FF, "lllllttt",         "trthi" },
+	{ WREG_REG_NSVOL,      "NSVOL",     "$400C",  WREG_FMT_HEX,  8, 0x003F, "--LCvvvv",         "nsvol" },
+	{ WREG_REG_NS_UNUSED,  "NS.UNUSED", "$400D",  WREG_FMT_HEX,  8, 0x0000, "--------",         "ns_unused" },
+	{ WREG_REG_NSFRQ,      "NSFRQ",     "$400E",  WREG_FMT_HEX,  8, 0x00FF, "Mppppppp",         "nsfrq" },
+	{ WREG_REG_NSLEN,      "NSLEN",     "$400F",  WREG_FMT_HEX,  8, 0x00F8, "lllll---",         "nslen" },
+	{ WREG_REG_DMFREQ,     "DMFREQ",    "$4010",  WREG_FMT_HEX,  8, 0x00FF, "ILrrrrrr",         "dmfreq" },
+	{ WREG_REG_DMDAC,      "DMDAC",     "$4011",  WREG_FMT_HEX,  8, 0x007F, "-ddddddd",         "dmdac" },
+	{ WREG_REG_DMADDR,     "DMADDR",    "$4012",  WREG_FMT_HEX,  8, 0x00FF, "aaaaaaaa",         "dmaddr" },
+	{ WREG_REG_DMLEN,      "DMLEN",     "$4013",  WREG_FMT_HEX,  8, 0x00FF, "llllllll",         "dmlen" },
+	{ WREG_REG_APUCTRL,    "APUCTRL",   "$4015",  WREG_FMT_HEX,  8, 0x001F, "---DNT21",         "apuctrl" },
+	{ WREG_REG_APUSTAT,    "APUSTAT",   "$4015R", WREG_FMT_HEX,  8, 0x0000, "FD-dNT21",         "apustat" },
+	{ WREG_REG_FRAMECTR,   "FRAMECTR",  "$4017",  WREG_FMT_HEX,  8, 0x00C0, "MI------",         "framectr" },
 
 	/* ---------------- I/O ---------------- */
-	{ WREG_REG_OAMDMA,     "OAMDMA",    "$4014",  WREG_FMT_HEX,  8, 0x00FF, "hhhhhhhh",         "写即触发 256B DMA" },
-	{ WREG_REG_JOYPAD1,    "JOYPAD1",   "$4016",  WREG_FMT_HEX,  8, 0x0001, "-------S",         "手柄 strobe(写)" },
-	{ WREG_REG_JOYPAD2,    "JOYPAD2",   "$4017R", WREG_FMT_HEX,  8, 0x0000, "RLDUSsBA",         "手柄 2 按键(读)" },
+	{ WREG_REG_OAMDMA,     "OAMDMA",    "$4014",  WREG_FMT_HEX,  8, 0x00FF, "hhhhhhhh",         "oamdma" },
+	{ WREG_REG_JOYPAD1,    "JOYPAD1",   "$4016",  WREG_FMT_HEX,  8, 0x0001, "-------S",         "joypad1" },
+	{ WREG_REG_JOYPAD2,    "JOYPAD2",   "$4017R", WREG_FMT_HEX,  8, 0x0000, "RLDUSsBA",         "joypad2" },
 };
 
 
@@ -713,9 +714,15 @@ static VOID wReg_OnScroll(HWND hWnd, int nCode)
 // ---------------------------------------------------------------------
 // 选中 / 编辑 / 写入
 // ---------------------------------------------------------------------
-static VOID wReg_ShowTips(const char* pUtf8)
+/** 显示语言文件里的提示(已经是 TCHAR, 不需要再转码)。 */
+static VOID wReg_ShowTipsLang(ines_cstr_t text)
 {
-	wReg_Utf8ToTChar(s_tips, count_of(s_tips), pUtf8);
+	if(text == NULL)
+		return;
+
+	ines_strncpy(s_tips, text, count_of(s_tips) - 1);
+	s_tips[count_of(s_tips) - 1] = 0;
+
 	s_tipsExpire = GetTickCount() + WREG_TIPS_TIME;
 }
 
@@ -852,12 +859,11 @@ static BOOL wReg_ConfirmWrite(HWND hWnd, ines_int_t regId, ines_int_t val)
 	if (GetKeyState(VK_SHIFT) < 0)
 		return TRUE;
 
-	_sntprintf(szMsg, count_of(szMsg),
-			   ISTR("将立即从 $%02X00 传送 256 字节到精灵内存, 并消耗 514 个 CPU 周期。"),
-			   (int)(val & 0xFF));
+	_sntprintf(szMsg, count_of(szMsg), L10N("debug.dma_confirm_message"), (int)(val & 0xFF));
 	szMsg[count_of(szMsg) - 1] = 0;
 
-	ret = MessageBox(hWnd, szMsg, wReg_szTitle, MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2);
+	ret = MessageBox(hWnd, szMsg, L10N("debug.dma_confirm_title"),
+					 MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2);
 
 	return (ret == IDOK);
 }
@@ -955,7 +961,7 @@ static VOID wReg_CommitValue(HWND hWnd, ines_int_t regIdx, ines_int64_t val)
 
 	if (pDef->wmask == 0)
 	{
-		wReg_ShowTips("该寄存器只读");
+		wReg_ShowTipsLang(L10N("debug.reg.tip_reg_readonly"));
 		InvalidateRect(hWnd, NULL, FALSE);
 		return;
 	}
@@ -1003,7 +1009,7 @@ static VOID wReg_ToggleBit(HWND hWnd, ines_int_t bit, ines_int_t bitVal)
 
 	if (((pDef->wmask >> bit) & 1) == 0)
 	{
-		wReg_ShowTips("该位只读");
+		wReg_ShowTipsLang(L10N("debug.reg.tip_bit_readonly"));
 		InvalidateRect(hWnd, NULL, FALSE);
 		return;
 	}
@@ -1114,8 +1120,8 @@ static VOID wReg_OnContextMenu(HWND hWnd, int x, int y)
 	if (hMenu == NULL)
 		return;
 
-	AppendMenu(hMenu, MF_STRING, 1, ISTR("复制值"));
-	AppendMenu(hMenu, MF_STRING, 2, ISTR("复制全部"));
+	AppendMenu(hMenu, MF_STRING, 1, L10N("debug.reg.copy_value"));
+	AppendMenu(hMenu, MF_STRING, 2, L10N("debug.reg.copy_all"));
 
 	pt.x = x;
 	pt.y = y;
@@ -1395,7 +1401,7 @@ static VOID wReg_OnChar(HWND hWnd, TCHAR nChar)
 		}
 		else
 		{
-			wReg_ShowTips("只能输入 0 / 1");
+			wReg_ShowTipsLang(L10N("debug.reg.tip_binary_only"));
 			InvalidateRect(hWnd, NULL, FALSE);
 		}
 		return;
@@ -1418,13 +1424,13 @@ static VOID wReg_OnChar(HWND hWnd, TCHAR nChar)
 
 		if ((width != 8) && (width != 16))
 		{
-			wReg_ShowTips("该寄存器只读");
+			wReg_ShowTipsLang(L10N("debug.reg.tip_reg_readonly"));
 			InvalidateRect(hWnd, NULL, FALSE);
 			return;
 		}
 		if (s_defs[reg].wmask == 0)
 		{
-			wReg_ShowTips("该寄存器只读");
+			wReg_ShowTipsLang(L10N("debug.reg.tip_reg_readonly"));
 			InvalidateRect(hWnd, NULL, FALSE);
 			return;
 		}
@@ -1967,7 +1973,32 @@ static ATOM wReg_RegisterClass(HINSTANCE  hInstance)
 }
 
 
-// 定义表是 UTF-8 常量, 建窗口时转成 TCHAR 一次(绘制热路径不再转换)
+/**
+ * 取某条寄存器的"说明"文案(key = "debug.reg.<note_id>.note")。
+ * 术语部分(寄存器名 / 地址 / 位缩写)不入语言文件, 只有说明文案需要翻译。
+ * 语言文件没这条则回退内置英文(comm/i18n), 再没有就回退 key 本身。
+ */
+static VOID wReg_NoteText(ines_str_t pOut, ines_size_t nLen, const char* id)
+{
+	char  key[48];
+
+	if ((pOut == NULL) || (nLen == 0) || (id == NULL))
+		return;
+
+	pOut[0] = 0;
+
+	/* key 是 char(UTF-8 窄串), 与 TCHAR 无关 */
+	snprintf(key, sizeof(key), "debug.reg.%s.note", id);
+	key[count_of(key) - 1] = 0;
+
+	ines_strncpy(pOut, L10N(key), nLen - 1);
+	pOut[nLen - 1] = 0;
+}
+
+/*
+ * 定义表是 UTF-8 常量: 寄存器名 / 地址 / 位缩写是 NES 术语, 建窗口时转成 TCHAR 一次
+ * (绘制热路径不再转换); 唯一的注释性文案"说明"走语言文件, 语言切换时整表重取。
+ */
 static VOID wReg_InitTexts(VOID)
 {
 	ines_int_t  i;
@@ -1976,13 +2007,24 @@ static VOID wReg_InitTexts(VOID)
 	{
 		wReg_Utf8ToTChar(s_nameText[i], count_of(s_nameText[i]), s_defs[i].name);
 		wReg_Utf8ToTChar(s_addrText[i], count_of(s_addrText[i]), s_defs[i].addr);
-		wReg_Utf8ToTChar(s_noteText[i], count_of(s_noteText[i]), s_defs[i].note);
+		wReg_NoteText(s_noteText[i], count_of(s_noteText[i]), s_defs[i].note_id);
 	}
 
 	for (i = 0; i < WREG_GROUP_COUNT; i++)
 		wReg_Utf8ToTChar(s_groupText[i], count_of(s_groupText[i]), s_groups[i].title);
 
-	wReg_Utf8ToTChar(s_headNote, count_of(s_headNote), "说明");
+	ines_strncpy(s_headNote, L10N("debug.reg.note"), count_of(s_headNote) - 1);
+	s_headNote[count_of(s_headNote) - 1] = 0;
+}
+
+/** 标题取自语言文件(view.register); 语言切换时重取并重绘。 */
+static VOID wReg_UpdateTitle(VOID)
+{
+	ines_strncpy(wReg_szTitle, L10N("view.register"), count_of(wReg_szTitle) - 1);
+	wReg_szTitle[count_of(wReg_szTitle) - 1] = 0;
+
+	if(wReg_hWnd != NULL)
+		SetWindowText(wReg_hWnd, wReg_szTitle);
 }
 
 
@@ -1994,10 +2036,9 @@ BOOL wReg_Create(HINSTANCE hInstance, HWND hParentWnd)
 		return TRUE;
 	}
 
-	LoadString(hInstance, IDS_WND_REG_TITLE, wReg_szTitle, count_of(wReg_szTitle));
-
 	wReg_RegisterClass(hInstance);
 
+	wReg_UpdateTitle();
 	wReg_InitTexts();
 
 	wReg_hWnd = CreateWindowEx(0 & WS_EX_TOOLWINDOW, wReg_szClassName, wReg_szTitle,
@@ -2147,6 +2188,11 @@ static LRESULT CALLBACK	wReg_WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
 			return -1;
 	case WM_CLOSE:
 		DestroyWindow(hWnd);
+		return 0;
+	case WM_APP_LANGCHANGED:      /* 语言切换: 标题与"说明"表头重取 */
+		wReg_UpdateTitle();
+		wReg_InitTexts();
+		InvalidateRect(hWnd, NULL, TRUE);
 		return 0;
 	case WM_PAINT:
 		wReg_OnPaint(hWnd);

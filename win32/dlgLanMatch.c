@@ -11,6 +11,7 @@
 // =====================================================================
 
 #include "stdafx.h"
+#include "i18n_ui.h"
 #include "../comm/lan.h"
 #include "../comm/net.h"
 #include "../comm/npsession.h"
@@ -66,6 +67,8 @@ static void  dlgLanMatch_OnJoin(HWND hDlg);
 static BOOL  dlgLanMatch_OnItemChanged(HWND hDlg, NMLISTVIEW* pnm);
 static BOOL  dlgLanMatch_OnCustomDraw(HWND hDlg, NMLVCUSTOMDRAW* pcd);
 
+static void  dlgLanMatch_UpdateLabels(HWND hDlg);
+static void  dlgLanMatch_UpdateColumns(HWND hList);
 static void  dlgLanMatch_SetInfo(HWND hDlg, ines_cstr_t text);
 static void  dlgLanMatch_SetInfoUtf8(HWND hDlg, const char* utf8);
 static void  dlgLanMatch_RefreshInfo(HWND hDlg);
@@ -111,11 +114,11 @@ BOOL dlgLanMatch_DoModal(HINSTANCE hInstance, HWND hParentWnd, ines_dword_t crc3
 	if(!dlgLanMatch_StartHosting())
 	{
 		if(s_fail_msg[0] == 0)
-			ines_strncpy(s_fail_msg, ISTR("无法开启局域网发现。"), count_of(s_fail_msg) - 1);
+			ines_strncpy(s_fail_msg, L10N("dialog.lan.err_generic"), count_of(s_fail_msg) - 1);
 
 		s_fail_msg[count_of(s_fail_msg) - 1] = 0;
 
-		MessageBox(hParentWnd, s_fail_msg, ISTR("局域网快速对战"), MB_OK|MB_ICONSTOP);
+		MessageBox(hParentWnd, s_fail_msg, L10N("dialog.lan.title"), MB_OK|MB_ICONSTOP);
 
 		dlgLanMatch_StopAll();
 
@@ -174,7 +177,7 @@ static int dlgLanMatch_StartHosting(void)
 {
 	if(0 != lan_open(s_peer_id))
 	{
-		ines_strncpy(s_fail_msg, ISTR("无法开启局域网发现（UDP 8892 不可用）。"), count_of(s_fail_msg) - 1);
+		ines_strncpy(s_fail_msg, L10N("dialog.lan.err_open_failed"), count_of(s_fail_msg) - 1);
 		s_fail_msg[count_of(s_fail_msg) - 1] = 0;
 		return 0;
 	}
@@ -222,7 +225,7 @@ static void dlgLanMatch_ResumeHosting(HWND hDlg)
 	if(!dlgLanMatch_StartHosting())
 	{
 		KillTimer(hDlg, LANMATCH_TIMER_ID);
-		dlgLanMatch_SetInfo(hDlg, (s_fail_msg[0] != 0) ? s_fail_msg : ISTR("无法继续发布"));
+		dlgLanMatch_SetInfo(hDlg, (s_fail_msg[0] != 0) ? s_fail_msg : L10N("dialog.lan.err_resume_failed"));
 		return;
 	}
 
@@ -233,6 +236,94 @@ static void dlgLanMatch_ResumeHosting(HWND hDlg)
 // ---------------------------------------------------------------------
 // 界面
 // ---------------------------------------------------------------------
+
+/**
+ * IDD_LANMATCH 的静态文本(key 全部在 lang/*.ini 的 [dialog] 段)。
+ * IDC_LANMATCH_EDT_NICK 是"值"、IDC_LANMATCH_CMB_CACHE 是只读显示, 都不翻译。
+ */
+static const APP_DLG_ITEM  s_lanmatch_items[] =
+{
+	{ IDC_LANMATCH_LAB_NICK,   "dialog.lan.nickname",     APP_FIT_NONE },
+	{ IDC_LANMATCH_LAB_CACHE,  "dialog.cache_frames",     APP_FIT_NONE },
+	{ IDC_LANMATCH_LAB_HINT,   "dialog.lan.hint_format",  APP_FIT_WRAP },
+	{ IDOK,                    "dialog.lan.join",         APP_FIT_ANCHOR_RIGHT },
+	{ IDCANCEL,                "dialog.lan.close",        APP_FIT_ANCHOR_RIGHT },
+};
+
+/** 房间列表的列: 文本走译文, 列宽与 mac 端一致(110/176/68/56)。 */
+static const struct
+{
+	const char*  key;
+	int          width;
+} s_lanmatch_cols[] =
+{
+	{ "dialog.lan.col_nick",  110 },
+	{ "dialog.lan.col_rom",   176 },
+	{ "dialog.lan.col_ver",    68 },
+	{ "dialog.lan.col_cache",  56 },
+};
+
+/**
+ * 贴标题与所有 dialog.lan.* 静态文本。
+ * IDC_LANMATCH_LAB_HINT 是格式串(带缓冲帧数), 这里先给足%d 的译文, 
+ * 帧数本身不入语言文件(与 mac 一致: 数字是数据, 不是文本)。
+ */
+static void dlgLanMatch_ApplyLanguage(HWND hDlg)
+{
+	SetWindowText(hDlg, L10N("dialog.lan.title"));
+	i18n_ui_apply_dialog(hDlg, s_lanmatch_items, count_of(s_lanmatch_items));
+}
+
+/** 写列表表头: 列已存在则只改文本(语言切换时用), 否则插入新列。 */
+static void dlgLanMatch_UpdateColumns(HWND hList)
+{
+	HWND      hHeader;
+	LVCOLUMN  col;
+	int       nExist;
+	int       i;
+
+	if(hList == NULL)
+		return;
+
+	hHeader = ListView_GetHeader(hList);
+	nExist  = (hHeader != NULL) ? Header_GetItemCount(hHeader) : 0;
+
+	memset(&col, 0, sizeof(col));
+	col.mask = LVCF_TEXT|LVCF_WIDTH|LVCF_SUBITEM;
+
+	for(i = 0; i < (int)count_of(s_lanmatch_cols); i++)
+	{
+		col.pszText  = (ines_str_t)L10N(s_lanmatch_cols[i].key);
+		col.cx       = s_lanmatch_cols[i].width;
+		col.iSubItem = i;
+
+		if(i < nExist)
+			ListView_SetColumn(hList, i, &col);
+		else
+			ListView_InsertColumn(hList, i, &col);
+	}
+
+	i18n_ui_fit_columns(hList);
+}
+
+/** 随当次会话变化的三个文本: 本机 ROM / 说明(含缓冲帧数) / 缓冲帧数值。 */
+static void dlgLanMatch_UpdateLabels(HWND hDlg)
+{
+	ines_char_t  text[512];
+
+	ines_snprintf(text, count_of(text), L10N("dialog.lan.rom_prefix_format"), szROMTitle);
+	text[count_of(text) - 1] = 0;
+	SetDlgItemText(hDlg, IDC_LANMATCH_LAB_ROM, text);
+
+	ines_snprintf(text, count_of(text), L10N("dialog.lan.hint_format"), s_cache_num);
+	text[count_of(text) - 1] = 0;
+	SetDlgItemText(hDlg, IDC_LANMATCH_LAB_HINT, text);
+
+	/* "%d frames" —— 配置来源写在 hint 里, 这里只显示数值 */
+	ines_strncpy(text, L10NF("dialog.lan.cache_frames_format", s_cache_num), count_of(text) - 1);
+	text[count_of(text) - 1] = 0;
+	SetDlgItemText(hDlg, IDC_LANMATCH_CMB_CACHE, text);
+}
 
 static void dlgLanMatch_SetInfo(HWND hDlg, ines_cstr_t text)
 {
@@ -248,12 +339,23 @@ static void dlgLanMatch_SetInfoUtf8(HWND hDlg, const char* utf8)
 	dlgLanMatch_SetInfo(hDlg, text);
 }
 
-/** 空闲状态下的提示文本。 */
+/**
+ * 空闲状态下的提示文本(房间数不入语言文件, 由 dialog.lan.*_format 组合)。
+ * 0 个房间时用 dialog.lan.no_rooms(把"需同一局域网 / 防火墙"的原因一起说了)。
+ */
 static void dlgLanMatch_RefreshInfo(HWND hDlg)
 {
 	ines_char_t  text[256];
 
-	ines_snprintf(text, count_of(text), ISTR("已发布，等待其他玩家加入（发现 %d 个房间）"), s_room_count);
+	if(s_room_count <= 0)
+	{
+		ines_strncpy(text, L10N("dialog.lan.no_rooms"), count_of(text) - 1);
+		text[count_of(text) - 1] = 0;
+	}
+	else
+		ines_snprintf(text, count_of(text), L10N("dialog.lan.rooms_format"), s_room_count);
+
+	text[count_of(text) - 1] = 0;
 
 	dlgLanMatch_SetInfo(hDlg, text);
 }
@@ -331,7 +433,7 @@ static void dlgLanMatch_RefreshList(HWND hDlg)
 		ListView_InsertItem(hwndList, &item);
 
 		if(s_rooms[i].crc32 != s_crc32)
-			ines_snprintf(text, count_of(text), ISTR("%s（ROM 不同）"), s_rooms[i].rom);
+			ines_snprintf(text, count_of(text), ISTR("%s%s"), s_rooms[i].rom, L10N("dialog.lan.rom_diff_suffix"));
 		else
 		{
 			ines_strncpy(text, s_rooms[i].rom, count_of(text) - 1);
@@ -343,10 +445,10 @@ static void dlgLanMatch_RefreshList(HWND hDlg)
 		// 协议版本: 与本机不同 -> 标注出来(选中被 OnItemChanged 拦掉, 不可加入)
 		if(s_rooms[i].net_ver == (ines_dword_t)NET_VER)
 			ines_snprintf(text, count_of(text), ISTR("%u"), (unsigned)NET_VER);
-		else if(s_rooms[i].net_ver != 0)
-			ines_snprintf(text, count_of(text), ISTR("%u（需升级）"), (unsigned)s_rooms[i].net_ver);
 		else
-			ines_strncpy(text, ISTR("旧版（需升级）"), count_of(text) - 1);   // beacon 未携带该字段
+			// beacon 未携带该字段(旧版)时版本号为 0, 同样按"需升级"显示
+			ines_snprintf(text, count_of(text), L10N("dialog.lan.ver_upgrade_format"),
+						  (unsigned)s_rooms[i].net_ver);
 
 		text[count_of(text) - 1] = 0;
 
@@ -354,9 +456,10 @@ static void dlgLanMatch_RefreshList(HWND hDlg)
 
 		// 缓冲帧数: 对端未携带该字段(旧版本)时显示 --
 		if((s_rooms[i].cache_num >= NP_CACHE_MIN) && (s_rooms[i].cache_num <= NP_CACHE_MAX))
-			ines_snprintf(text, count_of(text), ISTR("%d 帧"), (int)s_rooms[i].cache_num);
+			ines_strncpy(text, L10NF("dialog.lan.cache_frames_format", (int)s_rooms[i].cache_num),
+						 count_of(text) - 1);
 		else
-			ines_strncpy(text, ISTR("--"), count_of(text) - 1);
+			ines_strncpy(text, ISTR("--"), count_of(text) - 1);   // 未知: 就是个符号, 不用翻译
 
 		text[count_of(text) - 1] = 0;
 
@@ -411,33 +514,33 @@ static void dlgLanMatch_OnJoin(HWND hDlg)
 
 	if((row < 0) || (row >= s_room_count))
 	{
-		dlgLanMatch_SetInfo(hDlg, ISTR("请先选择一个房间。"));
+		dlgLanMatch_SetInfo(hDlg, L10N("dialog.lan.select_room_first"));
 		return;
 	}
 
 	if(s_rooms[row].crc32 != s_crc32)
 	{
-		dlgLanMatch_SetInfo(hDlg, ISTR("ROM 不同，无法加入。"));
+		dlgLanMatch_SetInfo(hDlg, L10N("dialog.lan.err_rom_diff"));
 		return;
 	}
 
 	// 协议版本必须相同(不同版本连上也会被握手拒绝, 这里直接拦住并提示升级)
 	if(s_rooms[row].net_ver != (ines_dword_t)NET_VER)
 	{
-		dlgLanMatch_SetInfo(hDlg, ISTR("协议版本不一致，请升级到相同版本后再联机。"));
+		dlgLanMatch_SetInfo(hDlg, L10N("dialog.lan.err_ver_diff"));
 		return;
 	}
 
 	// 取最新的房间信息(可能刚好超时消失)
 	if(0 != lan_find(s_rooms[row].peer_id, &room))
 	{
-		dlgLanMatch_SetInfo(hDlg, ISTR("该房间已消失，请稍候重试。"));
+		dlgLanMatch_SetInfo(hDlg, L10N("dialog.lan.err_room_gone"));
 		return;
 	}
 
 	if(0 != lan_addr_str(room.addr, ip, (int)count_of(ip)))
 	{
-		dlgLanMatch_SetInfo(hDlg, ISTR("该房间地址无效。"));
+		dlgLanMatch_SetInfo(hDlg, L10N("dialog.lan.err_addr_invalid"));
 		return;
 	}
 
@@ -464,7 +567,7 @@ static void dlgLanMatch_OnJoin(HWND hDlg)
 
 	EnableWindow(GetDlgItem(hDlg, IDOK), FALSE);
 
-	ines_snprintf(text, count_of(text), ISTR("正在加入 %s 的房间…"), room.nick);
+	ines_snprintf(text, count_of(text), L10N("dialog.lan.joining_format"), room.nick);
 
 	dlgLanMatch_SetInfo(hDlg, text);
 }
@@ -535,7 +638,14 @@ static void dlgLanMatch_OnTimer(HWND hDlg)
 	{
 		ines_char_t  text[LANMATCH_MSG_MAX];
 
-		lanmatch_utf8_to_tchar(text, (int)count_of(text), (msg[0] != 0) ? msg : "连接失败");
+		// 失败原因来自会话层(UTF-8); 没有则用 dialog.lan.connect_failed
+		if(msg[0] != 0)
+			lanmatch_utf8_to_tchar(text, (int)count_of(text), msg);
+		else
+		{
+			ines_strncpy(text, L10N("dialog.lan.connect_failed"), count_of(text) - 1);
+			text[count_of(text) - 1] = 0;
+		}
 
 		ines_strncpy(s_fail_msg, text, count_of(s_fail_msg) - 1);
 		s_fail_msg[count_of(s_fail_msg) - 1] = 0;
@@ -543,7 +653,7 @@ static void dlgLanMatch_OnTimer(HWND hDlg)
 		// 服务端继续等待其他人; 客户端退回发布状态
 		dlgLanMatch_ResumeHosting(hDlg);
 
-		ines_snprintf(text, count_of(text), ISTR("%s（已恢复发布）"), s_fail_msg);
+		ines_snprintf(text, count_of(text), L10N("dialog.lan.restore_format"), s_fail_msg);
 
 		dlgLanMatch_SetInfo(hDlg, text);
 		return;
@@ -553,9 +663,14 @@ static void dlgLanMatch_OnTimer(HWND hDlg)
 	{
 		ines_char_t  text[LANMATCH_MSG_MAX];
 
-		lanmatch_utf8_to_tchar(text, (int)count_of(text), (msg[0] != 0) ? msg : "正在连接...");
-
-		dlgLanMatch_SetInfo(hDlg, (text[0] != 0) ? text : ISTR("正在连接..."));
+		// 握手进度来自会话层(UTF-8); 没有则用 dialog.lan.connecting
+		if(msg[0] != 0)
+		{
+			lanmatch_utf8_to_tchar(text, (int)count_of(text), msg);
+			dlgLanMatch_SetInfo(hDlg, (text[0] != 0) ? text : L10N("dialog.lan.connecting"));
+		}
+		else
+			dlgLanMatch_SetInfo(hDlg, L10N("dialog.lan.connecting"));
 		return;
 	}
 
@@ -571,7 +686,6 @@ static BOOL dlgLanMatch_OnInitDialog(HWND hDlg)
 {
 	INITCOMMONCONTROLSEX  icex;
 	HWND         hwndList;
-	LVCOLUMN     col;
 	ines_char_t  text[256];
 
 	icex.dwSize = sizeof(icex);
@@ -590,53 +704,17 @@ static BOOL dlgLanMatch_OnInitDialog(HWND hDlg)
 
 	SetDlgItemText(hDlg, IDC_LANMATCH_EDT_NICK, text);
 
-	// ---- 本机 ROM ----
-	ines_snprintf(text, count_of(text), ISTR("ROM：%s"), szROMTitle);
-	SetDlgItemText(hDlg, IDC_LANMATCH_LAB_ROM, text);
-
-	// ---- 说明(与 mac/iNESLanLobby.m 文案对齐, 带上实际缓冲帧数) ----
-	ines_snprintf(text, count_of(text),
-				  ISTR("已发布到局域网（缓冲 %d 帧，发布后固定；可在 config.ini 的 [netplay] cache_num 调整）。加入他人房间后，本机作为副手柄（客户机）。"),
-				  s_cache_num);
-
-	SetDlgItemText(hDlg, IDC_LANMATCH_LAB_HINT, text);
-
-	// ---- 缓冲帧数(只读) ----
-	// 不提供下拉框: 值来自 config.ini 的 [netplay] cache_num, 发布后固定,
-	// 与 mac 端一致。改配置后需重新打开本面板才会生效。
-	ines_snprintf(text, count_of(text), ISTR("缓冲 %d 帧（config.ini [netplay] cache_num）"), s_cache_num);
-
-	SetDlgItemText(hDlg, IDC_LANMATCH_CMB_CACHE, text);
+	// ---- 昵称 / 加入 / 关闭 / 标题 ----
+	dlgLanMatch_ApplyLanguage(hDlg);
 
 	// ---- 房间列表 ----
 	hwndList = GetDlgItem(hDlg, IDC_LANMATCH_LIST);
 
 	ListView_SetExtendedListViewStyle(hwndList, LVS_EX_FULLROWSELECT|LVS_EX_DOUBLEBUFFER);
 
-	memset(&col, 0, sizeof(col));
-	col.mask     = LVCF_TEXT|LVCF_WIDTH|LVCF_SUBITEM;
-	// 列宽与 mac 端一致(110/176/68/56 = 410 < 列表宽度), 避免总宽超出后出现横向滚动条
-	col.pszText  = ISTR("昵称");
-	col.cx       = 110;
-	col.iSubItem = 0;
-	ListView_InsertColumn(hwndList, 0, &col);
+	dlgLanMatch_UpdateColumns(hwndList);
 
-	col.pszText  = ISTR("ROM");
-	col.cx       = 176;
-	col.iSubItem = 1;
-	ListView_InsertColumn(hwndList, 1, &col);
-
-	// 协议版本(与本机不同的房间不可加入)
-	col.pszText  = ISTR("版本");
-	col.cx       = 68;
-	col.iSubItem = 2;
-	ListView_InsertColumn(hwndList, 2, &col);
-
-	// 缓冲帧数(房主发布时确定, 不可协商)
-	col.pszText  = ISTR("缓冲");
-	col.cx       = 56;
-	col.iSubItem = 3;
-	ListView_InsertColumn(hwndList, 3, &col);
+	dlgLanMatch_UpdateLabels(hDlg);
 
 	EnableWindow(GetDlgItem(hDlg, IDOK), FALSE);
 
@@ -679,14 +757,14 @@ static BOOL dlgLanMatch_OnItemChanged(HWND hDlg, NMLISTVIEW* pnm)
 	if(s_rooms[row].crc32 != s_crc32)
 	{
 		EnableWindow(GetDlgItem(hDlg, IDOK), FALSE);
-		dlgLanMatch_SetInfo(hDlg, ISTR("ROM 不同，无法加入。"));
+		dlgLanMatch_SetInfo(hDlg, L10N("dialog.lan.err_rom_diff"));
 		return FALSE;
 	}
 
 	if(s_rooms[row].net_ver != (ines_dword_t)NET_VER)
 	{
 		EnableWindow(GetDlgItem(hDlg, IDOK), FALSE);
-		dlgLanMatch_SetInfo(hDlg, ISTR("协议版本不一致，请升级到相同版本后再联机。"));
+		dlgLanMatch_SetInfo(hDlg, L10N("dialog.lan.err_ver_diff"));
 		return FALSE;
 	}
 
@@ -733,6 +811,14 @@ static INT_PTR CALLBACK dlgLanMatch_DlgProc(HWND hDlg, UINT message, WPARAM wPar
 
 	case WM_TIMER:
 		dlgLanMatch_OnTimer(hDlg);
+		return (INT_PTR)TRUE;
+
+	case WM_APP_LANGCHANGED:      /* 语言切换: 标题 / 静态文本 / 表头 / ROM 说明都重来 */
+		dlgLanMatch_ApplyLanguage(hDlg);
+		dlgLanMatch_UpdateColumns(GetDlgItem(hDlg, IDC_LANMATCH_LIST));
+		dlgLanMatch_UpdateLabels(hDlg);
+		dlgLanMatch_RefreshList(hDlg);      /* 行内的"ROM 不同"/版本后缀 */
+		dlgLanMatch_RefreshInfo(hDlg);
 		return (INT_PTR)TRUE;
 
 	case WM_COMMAND:

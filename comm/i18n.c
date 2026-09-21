@@ -26,13 +26,28 @@
 #include "log.h"
 
 
-/* win32 下 ines_char_t 为 wchar_t, 日志格式串里 char* 要用 %S */
-#ifdef WIN32
-#define I18N_FMT_S   ISTR("%S")
-#define I18N_FMT_KEY ISTR("%S.%S")     /* key 是 char*, UNICODE 下要用 %S */
+/*
+ * 本文件被分别编译进 inescore(MBCS) 与 iNES(UNICODE) 两个目标: ines_char_t 在
+ * 前者是 char、后者是 wchar_t, 不能拿 WIN32 当宽窄判据 —— 一律按 _UNICODE 分支。
+ * 语言文件的字节流与 key 则永远是窄 char(UTF-8), 所以 UNICODE 下日志格式串要用 %S。
+ */
+#ifdef _UNICODE
+#define I18N_FMT_S      ISTR("%S")
+#define I18N_FMT_KEY    ISTR("%S.%S")
+#define I18N_WIDE_TEXT  1
 #else
-#define I18N_FMT_S   ISTR("%s")
-#define I18N_FMT_KEY ISTR("%s.%s")
+#define I18N_FMT_S      ISTR("%s")
+#define I18N_FMT_KEY    ISTR("%s.%s")
+#endif
+
+/*
+ * 语言文件的解析全程用 char(UTF-8), 与 TCHAR 无关: POSIX 的 strcasecmp 在
+ * Windows 的 <string.h> 里不存在(<strings.h> 也没有), 这里统一映射到 Win32 写法。
+ */
+#ifdef WIN32
+#define I18N_STRCASECMP   _stricmp
+#else
+#define I18N_STRCASECMP   strcasecmp
 #endif
 
 
@@ -75,7 +90,7 @@ static ines_char_t* i18n_dup_utf8(const char* utf8)
 		return NULL;
 	}
 
-#ifdef WIN32
+#ifdef I18N_WIDE_TEXT
 	{
 		int need = MultiByteToWideChar(CP_UTF8, 0, utf8, -1, NULL, 0);
 
@@ -114,7 +129,7 @@ static char* i18n_read_all(ines_cstr_t path, ines_size_t* out_len)
 	ines_size_t  len = 0;
 	ines_size_t  got;
 
-#ifdef WIN32
+#ifdef I18N_WIDE_TEXT
 	fp = _wfopen(path, L"rb");
 #else
 	fp = fopen(path, "rb");
@@ -361,7 +376,7 @@ static int i18n_parse_meta(const char* data, char* id, char* name)
 			if (close != NULL)
 			{
 				*close = '\0';
-				in_meta = (strcasecmp(cur + 1, "meta") == 0);
+				in_meta = (I18N_STRCASECMP(cur + 1, "meta") == 0);
 				if (!in_meta && has_id)
 				{
 					break;      /* meta 段已结束 */
@@ -384,7 +399,7 @@ static int i18n_parse_meta(const char* data, char* id, char* name)
 				k = i18n_trim(cur);
 				v = i18n_trim(eq + 1);
 
-				if (strcasecmp(k, "id") == 0)
+				if (I18N_STRCASECMP(k, "id") == 0)
 				{
 					size_t  vlen = strlen(v);
 
@@ -401,7 +416,7 @@ static int i18n_parse_meta(const char* data, char* id, char* name)
 						has_id = 1;
 					}
 				}
-				else if (strcasecmp(k, "name") == 0)
+				else if (I18N_STRCASECMP(k, "name") == 0)
 				{
 					size_t vlen = strlen(v);
 
@@ -523,7 +538,7 @@ static int i18n_apply_file(ines_cstr_t path)
 				}
 				i18n_unescape(v);
 
-				if (strcasecmp(section, "meta") == 0)
+				if (I18N_STRCASECMP(section, "meta") == 0)
 				{
 					line = (eol == NULL) ? NULL : (eol + 1);
 					continue;
@@ -535,7 +550,8 @@ static int i18n_apply_file(ines_cstr_t path)
 				}
 				else
 				{
-					ines_snprintf(full, sizeof(full), I18N_FMT_KEY, section, k);
+					/* key 是 char(UTF-8) 窄串: 刻意用窄版 snprintf, 不走 UNICODE 的 ines_snprintf */
+					snprintf(full, sizeof(full), "%s.%s", section, k);
 				}
 				full[sizeof(full) - 1] = '\0';
 
@@ -679,7 +695,7 @@ static void i18n_scan_dir(ines_cstr_t dir)
 			ines_char_t path[INES_MAX_PATH];
 			size_t      len = strlen(e->d_name);
 
-			if (len < 5 || strcasecmp(e->d_name + len - 4, ".ini") != 0)
+			if (len < 5 || I18N_STRCASECMP(e->d_name + len - 4, ".ini") != 0)
 			{
 				continue;
 			}

@@ -19,6 +19,7 @@
 #include "dlgOpenRom.h"
 #include "../comm/net.h"
 #include "../comm/npsession.h"
+#include "i18n_ui.h"
 
 // 模拟器全局变量
 ines_host_t   host;
@@ -333,12 +334,15 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
 
 	ines_set_log_stamp_func(GetNESCPUCycles);
 
-	// 初始化全局字符串
-	LoadString(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
-	LoadString(hInstance, IDC_INES, szWindowClass, MAX_LOADSTRING);
-
-
 	getRelativeFilePath(szPrivateProfilePath, count_of(szPrivateProfilePath), ISTR("config.ini"));
+
+	// i18n: 必须在载入任何界面文本之前(标题栏就是第 1 个), 且依赖上面的 config.ini 路径
+	i18n_ui_init();
+
+	// 初始化全局字符串(应用名来自 app.title, 窗口类名不能翻译 —— 它是 Registry 键的一部分)
+	ines_strncpy(szTitle, L10N("app.title"), count_of(szTitle) - 1);
+	szTitle[count_of(szTitle) - 1] = '\0';
+	LoadString(hInstance, IDC_INES, szWindowClass, MAX_LOADSTRING);
 
 	// 加载配置
 	audio_volume = GetConfigInt(ISTR("audio"), ISTR("volume"), 80);
@@ -407,6 +411,8 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
 
 	Cleanup();
 
+	i18n_ui_fini();
+
 	INES_LOG(LOG_NTY, MOD_SYS, ISTR("iNES Shutdown OK.\n"));
 
 
@@ -459,6 +465,43 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 //        在此函数中，我们在全局变量中保存实例句柄并0
 //        创建和显示主程序窗口。
 //
+/**
+ * 把当前语言的文本贴到主窗口上(启动时与语言切换时共用)。
+ *
+ * 菜单由 i18n_ui.c 的表驱动整份重刷; 标题栏 / 应用名走 UpdateTitle()。
+ * 已打开的调试窗口与对话框由 WM_APP_LANGCHANGED 各自处理。
+ */
+VOID AppApplyLanguage()
+{
+	HMENU  hMenu;
+
+	if(hMainWnd == NULL)
+		return;
+
+	hMenu = GetMenu(hMainWnd);
+	if(hMenu == NULL)
+		return;
+
+	ines_strncpy(szTitle, L10N("app.title"), count_of(szTitle) - 1);
+	szTitle[count_of(szTitle) - 1] = '\0';
+
+	i18n_ui_build_language_menu(hMenu);
+	i18n_ui_apply_menu(hMenu);
+	DrawMenuBar(hMainWnd);
+
+	UpdateTitle();
+}
+
+/** "工具 -> 语言"的第 index 项: 切语言 -> 刷新本窗口 -> 通知其它窗口 */
+VOID OnMenuLanguage(int index)
+{
+	if(!i18n_ui_select_language(index))
+		return;
+
+	AppApplyLanguage();
+	i18n_ui_notify_language_change();
+}
+
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 {
    HWND hWnd;
@@ -554,6 +597,9 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 
    hMainWnd = hWnd;
 
+   // i18n: 菜单文本(含按 lang/*.ini 生成的"语言"子菜单)
+   AppApplyLanguage();
+
    screen_scale = GetConfigInt(ISTR("display"), ISTR("scale"), 200);
 
    //AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, TRUE);
@@ -630,6 +676,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_COMMAND:
 		wmId    = LOWORD(wParam);
 		wmEvent = HIWORD(wParam);
+
+		// "工具 -> 语言"的 ID 是运行时按 lang/*.ini 生成的, 这里按区间一次性收掉
+		if((wmId >= IDM_LANGUAGE_BASE) && (wmId < IDM_LANGUAGE_BASE + APP_LANG_ITEM_MAX))
+		{
+			OnMenuLanguage((int)(wmId - IDM_LANGUAGE_BASE));
+			break;
+		}
+
 		// 分析菜单选择:
 		switch (wmId)
 		{
@@ -670,7 +724,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			}
 			else
 			{
-				MessageBox(hWnd, ISTR("请先载入一个ROM。"), szTitle, MB_OK|MB_ICONWARNING);
+				MessageBox(hWnd, L10N("msg.load_rom_first"), szTitle, MB_OK|MB_ICONWARNING);
 			}
 			break;
 		case IDM_LAN_MATCH:
@@ -693,7 +747,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			}
 			else
 			{
-				MessageBox(hWnd, ISTR("请先载入一个ROM。"), szTitle, MB_OK|MB_ICONWARNING);
+				MessageBox(hWnd, L10N("msg.load_rom_first"), szTitle, MB_OK|MB_ICONWARNING);
 			}
 			break;
 		case IDM_RECENT_FILES+0:
@@ -714,7 +768,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			{
 				if(!np_is_server())
 				{
-					MessageBox(hWnd, ISTR("联网对战中只有主机可以复位。"), szTitle, MB_OK|MB_ICONINFORMATION);
+					MessageBox(hWnd, L10N("msg.netplay_host_reset_only"), szTitle, MB_OK|MB_ICONINFORMATION);
 					break;
 				}
 
@@ -731,7 +785,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			{
 				if(!np_is_server())
 				{
-					MessageBox(hWnd, ISTR("联网对战中只有主机可以复位。"), szTitle, MB_OK|MB_ICONINFORMATION);
+					MessageBox(hWnd, L10N("msg.netplay_host_reset_only"), szTitle, MB_OK|MB_ICONINFORMATION);
 					break;
 				}
 
@@ -746,7 +800,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			// 暂停会让对端收不到输入包而一直空转, 联网中禁止
 			if(is_net_play)
 			{
-				MessageBox(hWnd, ISTR("联网对战中不能暂停。"), szTitle, MB_OK|MB_ICONINFORMATION);
+				MessageBox(hWnd, L10N("msg.netplay_no_pause"), szTitle, MB_OK|MB_ICONINFORMATION);
 				break;
 			}
 
@@ -756,7 +810,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			// 与暂停同理(单帧执行同样停帧)
 			if(is_net_play)
 			{
-				MessageBox(hWnd, ISTR("联网对战中不能单帧执行。"), szTitle, MB_OK|MB_ICONINFORMATION);
+				MessageBox(hWnd, L10N("msg.netplay_no_frame_step"), szTitle, MB_OK|MB_ICONINFORMATION);
 				break;
 			}
 
@@ -983,6 +1037,37 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	return 0;
 }
 
+/*
+ * "关于"框: 标题、两行说明、"确定"按钮全部走语言文件(msg.about_title / msg.about / msg.ok)。
+ * msg.about 是多行文本(与 mac 的 NSAlert 一致用 '\n' 分行), 这里拆给两个静态文本。
+ */
+static const APP_DLG_ITEM  s_about_items[] =
+{
+	{ IDOK, "msg.ok", APP_FIT_NONE },
+};
+
+BOOL OnInitAboutDialog(HWND hDlg)
+{
+	TCHAR   text[256];
+	LPTSTR  nl;
+
+	SetWindowText(hDlg, L10N("msg.about_title"));
+
+	ines_strncpy(text, L10N("msg.about"), count_of(text) - 1);
+	text[count_of(text) - 1] = '\0';
+
+	nl = _tcschr(text, '\n');
+	if(nl != NULL)
+		*nl = '\0';
+
+	SetDlgItemText(hDlg, IDC_ABOUT_LAB_VERSION, text);
+	SetDlgItemText(hDlg, IDC_ABOUT_LAB_COPYRIGHT, (nl != NULL) ? (nl + 1) : ISTR(""));
+
+	i18n_ui_apply_dialog(hDlg, s_about_items, count_of(s_about_items));
+
+	return TRUE;
+}
+
 // “关于”框的消息处理程序。
 INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -990,7 +1075,7 @@ INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 	switch (message)
 	{
 	case WM_INITDIALOG:
-		return (INT_PTR)TRUE;
+		return OnInitAboutDialog(hDlg);
 
 	case WM_COMMAND:
 		if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL)
@@ -1144,7 +1229,7 @@ VOID OnIdle()
 
 			INES_LOG(LOG_NTY, MOD_NET, ISTR("netplay: peer quitted, back to offline\n"));
 
-			MessageBox(hMainWnd, ISTR("对方已退出游戏，继续以单机模式运行。"), szTitle, MB_OK|MB_ICONINFORMATION);
+			MessageBox(hMainWnd, L10N("msg.peer_left"), szTitle, MB_OK|MB_ICONINFORMATION);
 		}
 	}
 
@@ -1554,34 +1639,44 @@ VOID OnPaint(HWND hWnd, HDC  hDC)
 }
 
 
+/*
+ * 标题栏: 与 mac 端格式串一致(app.title_*_format), 状态文本取 status.*。
+ * 组合规则: 未运行 -> app.title_off_format(应用名, 状态);
+ *           联网   -> app.title_net_format(应用名, ROM 名, "联网对战中", 状态);
+ *           其它   -> app.title_rom_format(应用名, ROM 名, 状态)。
+ */
 VOID UpdateTitle()
 {
 	TCHAR  szBuffer[INES_MAX_PATH] = {0};
-	TCHAR  szStatus[MAX_LOADSTRING] = {0};
+	ines_cstr_t  szStatus;
 
 	if(host.status == NES_STATUS_OFF)
 	{
-		LoadString(hInst, IDS_STATUS_OFF, szStatus, count_of(szStatus));
-		ines_snprintf(szBuffer, count_of(szBuffer), ISTR("%s (%s)"), szTitle,  szStatus);
+		szStatus = L10N("status.not_running");
+		ines_snprintf(szBuffer, count_of(szBuffer), L10N("app.title_off_format"), szTitle, szStatus);
 	}
 	else
 	{
 		switch(pause_flag)
 		{
-		case NES_STATUS_PAUSE:      LoadString(hInst, IDS_STATUS_PAUSE, szStatus, count_of(szStatus)); break;	
-		case NES_STATUS_FRAME_STEP: LoadString(hInst, IDS_STATUS_FRAME_STEP, szStatus, count_of(szStatus)); break;	
-		default:                    LoadString(hInst, IDS_STATUS_RUNNING, szStatus, count_of(szStatus)); break;	
+		case NES_STATUS_PAUSE:      szStatus = L10N("status.paused");      break;
+		case NES_STATUS_FRAME_STEP: szStatus = L10N("status.frame_step");  break;
+		default:                    szStatus = L10N("status.running");     break;
 		}
 
-		// 联网对战中在状态前加标识, 与 mac 端标题栏的"联网对战中"一致
 		if(is_net_play)
-			ines_snprintf(szBuffer, count_of(szBuffer), ISTR("%s - %s (联网对战中 - %s)"), szTitle, szROMTitle, szStatus);
+		{
+			ines_snprintf(szBuffer, count_of(szBuffer), L10N("app.title_net_format"),
+						  szTitle, szROMTitle, L10N("status.net_play_tag"), szStatus);
+		}
 		else
-			ines_snprintf(szBuffer, count_of(szBuffer), ISTR("%s - %s (%s)"), szTitle, szROMTitle, szStatus);
+		{
+			ines_snprintf(szBuffer, count_of(szBuffer), L10N("app.title_rom_format"),
+						  szTitle, szROMTitle, szStatus);
+		}
 	}
-	
-	SetWindowText(hMainWnd, szBuffer);
 
+	SetWindowText(hMainWnd, szBuffer);
 }
 
 
@@ -1840,7 +1935,9 @@ BOOL NesOpenFile(LPCTSTR lpszFileName)
 	{
 		UpdateTitle();
 		InvalidateRect(hMainWnd, NULL, TRUE);
-		MessageBox(hMainWnd, ISTR("Load ROM File Failed!"), szTitle, MB_OK|MB_ICONINFORMATION );
+		// 与 mac 一致: 失败原因用 msg.load_rom_failed_format(带 ROM 路径)
+		MessageBox(hMainWnd, L10NF("msg.load_rom_failed_format", lpszFileName),
+				   L10N("msg.load_rom_failed_title"), MB_OK|MB_ICONINFORMATION);
 		bRet = FALSE;
 	}
 	else
@@ -1884,8 +1981,8 @@ BOOL ConfirmStopNetPlay(HWND hWnd)
 	if(!is_net_play)
 		return TRUE;
 
-	return (IDOK == MessageBox(hWnd, ISTR("正在联网游戏中，是否确认结束当前游戏？"),
-							   szTitle, MB_OKCANCEL|MB_ICONQUESTION|MB_DEFBUTTON2));
+	return (IDOK == MessageBox(hWnd, L10N("msg.netplay_quit_message"),
+							   L10N("msg.netplay_quit_title"), MB_OKCANCEL|MB_ICONQUESTION|MB_DEFBUTTON2));
 }
 
 /**
@@ -2129,7 +2226,8 @@ VOID OnMenuSnapshot()
 	fbmp = _tfopen(file_name, ISTR("wb"));
 	if(fbmp == NULL)
 	{
-		MessageBox(hMainWnd, ISTR("open file for write Failed!"), szTitle, MB_ICONSTOP|MB_OK);
+		MessageBox(hMainWnd, L10NF("msg.snapshot_write_failed_format", file_name),
+				   L10N("msg.snapshot_failed_title"), MB_ICONSTOP|MB_OK);
 		return;
 	}
 
@@ -2290,7 +2388,9 @@ VOID OnMenuSaveState(int index)
 	getStatePath(index, szPath, count_of(szPath));
 
 	// 覆盖提醒 
-	if(GetSaveStateTime(index) != 0 && IDOK != MessageBox(hMainWnd, ISTR("该存档已经存在，是否覆盖？"), szTitle, MB_OKCANCEL|MB_ICONWARNING))
+	if(GetSaveStateTime(index) != 0
+		&& IDOK != MessageBox(hMainWnd, L10NF("msg.overwrite_state_format", index),
+							  L10N("msg.overwrite_state_title"), MB_OKCANCEL|MB_ICONWARNING))
 	{
 		return; // 终止
 	}
@@ -2492,20 +2592,20 @@ VOID OnMenuSyncState(int index)
 
 	if(!np_is_server())
 	{
-		MessageBox(hMainWnd, ISTR("联网对战中只有主机可以载入存档。"), szTitle, MB_OK|MB_ICONINFORMATION);
+		MessageBox(hMainWnd, L10N("msg.state_host_only"), szTitle, MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 
 	if(np_sync_state() != NP_SYNC_NONE)
 	{
-		MessageBox(hMainWnd, ISTR("正在同步存档，请稍候。"), szTitle, MB_OK|MB_ICONINFORMATION);
+		MessageBox(hMainWnd, L10N("msg.state_syncing"), szTitle, MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 
 	// 本地校验: 该槽位没有可用存档
 	if(0 == GetSaveStateTime(index))
 	{
-		MessageBox(hMainWnd, ISTR("该槽位没有可用存档。"), szTitle, MB_OK|MB_ICONINFORMATION);
+		MessageBox(hMainWnd, L10NF("msg.state_not_found_format", index), szTitle, MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 
@@ -2515,14 +2615,14 @@ VOID OnMenuSyncState(int index)
 
 	if(fSave == NULL)
 	{
-		MessageBox(hMainWnd, ISTR("存档读取失败。"), szTitle, MB_OK|MB_ICONWARNING);
+		MessageBox(hMainWnd, L10N("msg.state_load_failed"), szTitle, MB_OK|MB_ICONWARNING);
 		return;
 	}
 
 	if((fseek(fSave, 0, SEEK_END) != 0) || ((size = ftell(fSave)) <= 0))
 	{
 		fclose(fSave);
-		MessageBox(hMainWnd, ISTR("存档读取失败。"), szTitle, MB_OK|MB_ICONWARNING);
+		MessageBox(hMainWnd, L10N("msg.state_load_failed"), szTitle, MB_OK|MB_ICONWARNING);
 		return;
 	}
 
@@ -2531,14 +2631,14 @@ VOID OnMenuSyncState(int index)
 	if((size <= 0) || (size > NP_SYNC_MAX_SIZE))
 	{
 		fclose(fSave);
-		MessageBox(hMainWnd, ISTR("存档过大，无法同步。"), szTitle, MB_OK|MB_ICONWARNING);
+		MessageBox(hMainWnd, L10N("msg.state_too_large"), szTitle, MB_OK|MB_ICONWARNING);
 		return;
 	}
 
 	if(fread(s_sync_buf, 1, (size_t)size, fSave) != (size_t)size)
 	{
 		fclose(fSave);
-		MessageBox(hMainWnd, ISTR("存档读取失败。"), szTitle, MB_OK|MB_ICONWARNING);
+		MessageBox(hMainWnd, L10N("msg.state_load_failed"), szTitle, MB_OK|MB_ICONWARNING);
 		return;
 	}
 
@@ -2547,7 +2647,7 @@ VOID OnMenuSyncState(int index)
 	// np_sync_begin() 内部会拷一份, s_sync_buf 可立即复用
 	if(0 != np_sync_begin(s_sync_buf, (int)size))
 	{
-		MessageBox(hMainWnd, ISTR("存档同步发起失败。"), szTitle, MB_OK|MB_ICONWARNING);
+		MessageBox(hMainWnd, L10N("msg.state_sync_begin_failed"), szTitle, MB_OK|MB_ICONWARNING);
 		return;
 	}
 
@@ -2591,7 +2691,7 @@ int OnIdleSyncState(void)
 		if(np_is_server())
 			sync_ctrl_req = NET_CTRL_CODE_HARDRESET;
 
-		MessageBox(hMainWnd, ISTR("存档载入失败，已复位重开。"), szTitle, MB_OK|MB_ICONINFORMATION);
+		MessageBox(hMainWnd, L10N("msg.state_sync_reset"), szTitle, MB_OK|MB_ICONINFORMATION);
 		return 0;
 	}
 
@@ -2601,7 +2701,7 @@ int OnIdleSyncState(void)
 
 	UpdateTitle();
 
-	MessageBox(hMainWnd, ISTR("存档同步失败，已结束联网。"), szTitle, MB_OK|MB_ICONWARNING);
+	MessageBox(hMainWnd, L10N("msg.state_sync_failed_end"), szTitle, MB_OK|MB_ICONWARNING);
 
 	return 1;
 }
@@ -2609,46 +2709,60 @@ int OnIdleSyncState(void)
 
 
 
+/*
+ * 存档 / 读档菜单的文本随存档是否存在变化, 组合方式照搬 mac 的 updateStateMenu:
+ *   有存档 -> "<Save State|Load State> <index> - YYYY/MM/DD hh:mm:ss"
+ *   没存档 -> menu.state.empty_format ("<Save State> <index> (Empty)")
+ * 时间戳与槽号不入语言文件; 快捷键文本由 i18n_ui_menu_accel() 追加。
+ */
 VOID UpdateMenuSaveState(HMENU hMenu, UINT nPos, int index)
 {
-	TCHAR  szMenuText[256];
-	TCHAR  szNewMenuText[256];
-	MENUITEMINFO  info;
-	LPTSTR pszAccel;
-	BOOL   bEnable = TRUE;
-	GetMenuString(hMenu, nPos, szMenuText, count_of(szMenuText), MF_BYPOSITION);
-	pszAccel = _tcsrchr(szMenuText, '\t');
-	if(pszAccel == NULL)
-	{
-		pszAccel = szMenuText + _tcslen(szMenuText);
-	}
-	
+	TCHAR          szLabel[256];
+	TCHAR          szTimeText[256];
+	TCHAR          szNewMenuText[256];
+	MENUITEMINFO   info;
+	ines_cstr_t    accel;
+	BOOL           bEnable = TRUE;
+	time_t         t;
+
+	ines_strncpy(szLabel, L10N("menu.control.save_state"), count_of(szLabel) - 1);
+	szLabel[count_of(szLabel) - 1] = '\0';
+
 	if(host.status == NES_STATUS_OFF)
 	{
 		bEnable = FALSE;
-		ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d 存档 (空) %s"), index, pszAccel);
-	}else{
-		time_t t = GetSaveStateTime(index);
-		if(t == 0)
-		{
-			ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d 存档 (空) %s"), index, pszAccel);
-			bEnable = TRUE;
-		}
+		t = 0;
+	}
+	else
+	{
+		t = GetSaveStateTime(index);
+	}
+
+	if(t == 0)
+	{
+		ines_snprintf(szTimeText, count_of(szTimeText), L10N("menu.state.empty_format"), szLabel, index);
+	}
+	else
+	{
+		time_t     tt = t;
+		struct tm* lt = localtime(&tt);
+
+		if(lt == NULL)
+			ines_snprintf(szTimeText, count_of(szTimeText), ISTR("%s %d"), szLabel, index);
 		else
-		{
-			time_t  tt = t;
-			struct  tm* lt = localtime(&tt);
-			if(lt == NULL)
-			{
-				ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d 存档 (\?\?) %s"), index, pszAccel);				
-			}
-			else
-			{
-				ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d 存档 (%04d/%02d/%02d %02d:%02d:%02d) %s"),
-					index, lt->tm_year+1900, lt->tm_mon+1, lt->tm_mday, lt->tm_hour, lt->tm_min, lt->tm_sec, pszAccel);				
-			}
-			bEnable = TRUE;
-		}
+			ines_snprintf(szTimeText, count_of(szTimeText), ISTR("%s %d - %04d/%02d/%02d %02d:%02d:%02d"),
+				szLabel, index, lt->tm_year+1900, lt->tm_mon+1, lt->tm_mday, lt->tm_hour, lt->tm_min, lt->tm_sec);
+	}
+
+	szTimeText[count_of(szTimeText) - 1] = '\0';
+	ines_strncpy(szNewMenuText, szTimeText, count_of(szNewMenuText) - 1);
+	szNewMenuText[count_of(szNewMenuText) - 1] = '\0';
+
+	accel = i18n_ui_menu_accel(IDM_SAVE_STATE_0 + index);
+	if(accel != NULL)
+	{
+		_tcsncat(szNewMenuText, accel, count_of(szNewMenuText) - _tcslen(szNewMenuText) - 1);
+		szNewMenuText[count_of(szNewMenuText) - 1] = '\0';
 	}
 
 	info.cbSize = sizeof(info);
@@ -2662,44 +2776,53 @@ VOID UpdateMenuSaveState(HMENU hMenu, UINT nPos, int index)
 
 VOID UpdateMenuLoadState(HMENU hMenu, UINT nPos, int index)
 {
-	TCHAR  szMenuText[256];
-	TCHAR  szNewMenuText[256];
-	MENUITEMINFO  info;
-	LPTSTR pszAccel;
-	BOOL   bEnable = TRUE;
-	GetMenuString(hMenu, nPos, szMenuText, count_of(szMenuText), MF_BYPOSITION);
-	pszAccel = _tcsrchr(szMenuText, '\t');
-	if(pszAccel == NULL)
-	{
-		pszAccel = szMenuText + _tcslen(szMenuText);
-	}
+	TCHAR          szLabel[256];
+	TCHAR          szTimeText[256];
+	TCHAR          szNewMenuText[256];
+	MENUITEMINFO   info;
+	ines_cstr_t    accel;
+	BOOL           bEnable = TRUE;
+	time_t         t;
+
+	ines_strncpy(szLabel, L10N("menu.control.load_state"), count_of(szLabel) - 1);
+	szLabel[count_of(szLabel) - 1] = '\0';
 
 	if(host.status == NES_STATUS_OFF)
 	{
 		bEnable = FALSE;
-		ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d 读档 (空) %s"), index, pszAccel);
-	}else{
-		time_t t = GetSaveStateTime(index);
-		if(t == 0)
-		{
-			ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d 读档 (空) %s"), index, pszAccel);
-			bEnable = FALSE;
-		}
+		t = 0;
+	}
+	else
+	{
+		t = GetSaveStateTime(index);
+	}
+
+	if(t == 0)
+	{
+		ines_snprintf(szTimeText, count_of(szTimeText), L10N("menu.state.empty_format"), szLabel, index);
+		bEnable = FALSE;
+	}
+	else
+	{
+		time_t     tt = t;
+		struct tm* lt = localtime(&tt);
+
+		if(lt == NULL)
+			ines_snprintf(szTimeText, count_of(szTimeText), ISTR("%s %d"), szLabel, index);
 		else
-		{
-			time_t  tt = t;
-			struct  tm* lt = localtime(&tt);
-			if(lt == NULL)
-			{
-				ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d 读档 (\?\?) %s"), index, pszAccel);				
-			}
-			else
-			{
-				ines_snprintf(szNewMenuText, count_of(szNewMenuText), ISTR("&%d 读档 (%04d/%02d/%02d %02d:%02d:%02d) %s"),
-					index, lt->tm_year+1900, lt->tm_mon+1, lt->tm_mday, lt->tm_hour, lt->tm_min, lt->tm_sec, pszAccel);				
-			}
-			bEnable = TRUE;
-		}
+			ines_snprintf(szTimeText, count_of(szTimeText), ISTR("%s %d - %04d/%02d/%02d %02d:%02d:%02d"),
+				szLabel, index, lt->tm_year+1900, lt->tm_mon+1, lt->tm_mday, lt->tm_hour, lt->tm_min, lt->tm_sec);
+	}
+
+	szTimeText[count_of(szTimeText) - 1] = '\0';
+	ines_strncpy(szNewMenuText, szTimeText, count_of(szNewMenuText) - 1);
+	szNewMenuText[count_of(szNewMenuText) - 1] = '\0';
+
+	accel = i18n_ui_menu_accel(IDM_LOAD_STATE_0 + index);
+	if(accel != NULL)
+	{
+		_tcsncat(szNewMenuText, accel, count_of(szNewMenuText) - _tcslen(szNewMenuText) - 1);
+		szNewMenuText[count_of(szNewMenuText) - 1] = '\0';
 	}
 
 	// 联网对战: 只有**主机**能发起读档(会把存档同步给对端); 从机灰显,

@@ -563,6 +563,8 @@ static NSSize app_fit(id control, NSString* text)
 
 > mac 侧（M1+M2+M3 精简）已全部完成并通过冒烟测试。win32 侧按本章实施，key 表与行为必须与 mac 完全一致。
 > 前置：本机（mac）**无 MSVC / `rc.exe`，win32 改动无法编译验证**，只能靠"同构改写 + 逐条比对 key"来降低返工。
+>
+> **2026-09-21：win32 侧已按本章实施完成，实施记录见 §18。**
 
 ### 16.1 已完成、win32 可直接复用的部分
 
@@ -570,7 +572,7 @@ static NSSize app_fit(id control, NSString* text)
 | --- | --- | --- |
 | 公共 i18n 层 | `comm/i18n.{c,h}`、`comm/i18n_en.c` | 纯 C，已在 `CMakeLists.txt` 登记（`inescore` 目标也用得到）；win32 下 `ines_cstr_t` = UTF-16 |
 | 语言文件 | `lang/{en,zh-CN,ja,fr}.ini` | 已随 CMake 拷贝到程序目录 `lang/`（win32 见 CMake 的 `lang` 拷贝段，新加语言文件无需改脚本） |
-| key 真源 | `comm/i18n_en.c` | 约 168 条；**改英文只改这里**，再跑 `gen_i18n_template` 覆盖 `lang/en.ini` |
+| key 真源 | `comm/i18n_en.c` | 218 条；**改英文只改这里**，再跑 `gen_i18n_template` 覆盖 `lang/en.ini` |
 | 校验工具 | `tools/gen_i18n_template.c`、`tools/i18n_check.c` | 构建方式见 `docs/build.md` §7；提交前必跑 |
 | 系统语言探测 | 未做 | win32 需自行取（`GetUserDefaultUILanguage` / `GetLocaleInfoEx` → BCP-47 标签），再交给 `ines_i18n_init()` |
 
@@ -618,3 +620,38 @@ static NSSize app_fit(id control, NSString* text)
 2. **mac 的 `L10NF` 不能用 `[NSString initWithFormat:arguments:]`**：NSString 的 `%s` 按"系统编码"解释字节，UTF-8 的中日文参数会变空串（实测标题变成 `iNES - 90tank - `）。改为先在 C 层 `ines_vsnprintf` 拼好再转 NSString（`mac/iNESi18n.m`）。win32 不受影响（本就走 C 层），但若在哪用了 `StringCchPrintf` 之外的托管格式化，需同样注意。
 
 冒烟结果（mac，系统语言 zh-CN）：四语切换即时生效（标题 `iNES - 90tank - {En cours / 動作中 / 运行中}`、已打开的"寄存器查看器"标题同步刷新）；法语「载入 ROM」对话框 720×552、按钮 `Charger(95)`/`Annuler(93)` 无截断；日语「网络对战」按钮 `開始(76)`/`キャンセル(108)` 无截断；无新增编译警告。
+
+---
+
+## 18. win32 实施记录（2026-09-21）
+
+§16.2 的第 1~5 项已完成，行为与 key 表和 mac 侧一致。
+
+- `win32/i18n_ui.{c,h}`：与 `mac/iNESi18n.{h,m}` 一一对应 —— `L10N` / `L10NF` 宏、系统语言探测
+  （`GetUserDefaultUILanguage` → BCP-47）、`config.ini` 的 `[ui] language` 读写、「工具」菜单第 2 项的
+  「语言」子菜单（`IDM_LANGUAGE_BASE + i`，运行时按 `ines_i18n_enum()` 插入）、切语言后向本进程所有
+  顶层窗口广播 `WM_APP_LANGCHANGED`。已登记进 `CMakeLists.txt` 的 `INES_WIN32_SOURCES`。
+- 自适应尺寸（§8.1）：`i18n_ui_apply_dialog()`（测量—定位两趟，三个标志 `APP_FIT_GROW_W` /
+  `APP_FIT_ANCHOR_RIGHT` / `APP_FIT_WRAP`）、`i18n_ui_fit_columns()`（ListView 表头按译文加宽）、
+  `i18n_ui_menu_text()`（译文 + `&` 助记符 + `\t` 快捷键，两个都不入语言文件）。
+- `win32/iNES.rc` 的菜单 / 对话框 / 字符串改为英文原文；原来写 `IDC_STATIC` 的静态标签补了独立控件 ID
+  （`Resource.h` 1017~1024），ID 重复的控件 `GetDlgItem` 取不到，运行时换不了文本。
+  `IDM_LANGUAGE_BASE` 起 32905~32920 为本菜单保留。
+- 已接入：主窗口标题 / 主菜单、载入 ROM / 网络对战 / 局域网 / 关于四个对话框、7 个调试窗口的纯 UI 元素、
+  寄存器查看器。key 总数 168 → **218**。
+- `comm/i18n.c` 修掉两处字符集耦合：原来用 `#ifdef WIN32` 判断宽窄，但 `inescore`(MBCS) 与 `iNES`(UNICODE)
+  是两个目标，改判 `#ifdef I18N_WIDE_TEXT`；MSVC 无 `strcasecmp`，统一换成 `I18N_STRCASECMP`。
+
+实施中修掉的问题（§16.3 未列出）：
+
+1. **寄存器查看器「说明」列写死中文**：`wRegister.c` 的定义表原本把中文说明当"术语"硬编码，只做了一次
+   UTF-8 → TCHAR 转换。`wreg_def_t.note` 改为 `note_id`，运行时拼 `debug.reg.<id>.note` 取译文；
+   术语（寄存器名 / 地址 / 位缩写 / 组标题 CPU·PPU·APU·I/O）仍是常量，不翻译。
+2. **`en.ini` 与内置英文表漂移**：英文唯一真源是 `comm/i18n_en.c`，改动后跑 `tools/gen_i18n_template`
+   覆盖 `lang/en.ini`，再跑 `tools/i18n_check` 确认四份语言文件与内置表一致。
+
+冒烟结果（win32 Release，MSVC `/W3` 零警告）：四份语言文件与内置表的 key 集合三方一致（218 / 218，
+且定义表 46 个 `note_id` 与语言文件逐条对应）；主窗口标题随语言即时刷新（实测法语 `iNES - Arrêté`、
+中文 `iNES - 未运行`）；语言文件保持 UTF-8 无 BOM + LF。
+
+> 待补：§16.2 第 6 项的完整验收（四语下逐个对话框目检），需要有实体机逐个过目。
