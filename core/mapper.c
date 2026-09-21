@@ -1,4 +1,3 @@
-
 #include "nes.h"
 #include "cpu.h"
 #include "../comm/log.h"

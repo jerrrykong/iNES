@@ -64,6 +64,11 @@ ines_int_t  ines_save_state(ines_host_t* p_host, FILE* fSave);
 ines_int_t  ines_load_state(ines_host_t* p_host, FILE* fSave);
 ```
 
+`ines_host_reset()` 的顺序是 `ines_mapper_reset()` → `ines_cpu_reset()`（取 ROM 复位向量）→ APU。
+带 trainer 的卡带（如 mapper 17）需要"硬复位跳 trainer 入口"：mapper 在自己的 `reset` 里把
+`host.reset_entry` 置成入口地址，宿主在 `ines_cpu_reset()` 之后用它覆盖 `cpu.reg_PC`；
+宿主每次复位前会把该字段清零，mapper 不设置就照旧走 ROM 复位向量。即时存档不保存该字段（只在复位瞬间有效）。
+
 ### bank 切换（主要给 Mapper 用）
 
 ```c
@@ -76,10 +81,14 @@ ines_set_vrom_bank_n(host, n, bn);               // n=0~7
 ines_set_vram_bank_n(host, n, bn);               // CHR-RAM 情形
 ines_set_ciram_pattern_bank_n(host, n, page);    // 内部 NT RAM 当作 CHR 页(n=0~7，page=0~1)
 ines_set_nt_chr_bank_n(host, n, bn);             // nametable 窗口指向 CHR 页(n=0~3 即 PPU 窗口 8~11)
+ines_set_nt_pattern_bank_n(host, n, bn);         // nametable 窗口指向 pattern RAM 页(n=0~3，bn=0~31)
 ```
 
 `ines_set_nt_chr_bank_n()` 供 Namco 163 的 ROM nametable 特性使用：有 CHR-ROM 时窗口指向
 CHR-ROM 1KB 页（只读，`$2007` 写入被忽略），纯 CHR-RAM 卡带则指向 pattern RAM（可写）。
+`ines_set_nt_pattern_bank_n()` 供 CHR 是 RAM、但镜像里自带 CHR 数据的卡带使用（mapper 17 Super Magic Card）：
+这类 mapper 会把镜像的 CHR 数据拷进 pattern RAM 并用 `ines_set_vram_bank_n()` 切页，
+nametable 也必须指向同一片 RAM（否则会指回只读的 CHR-ROM），页号按 32KB 回卷。
 窗口要回到内部 CIRAM 时调用 `ines_ppu_set_mirror()`（它会把 4 个 nametable 窗口的类型全部复位）。
 
 ### 反查宿主

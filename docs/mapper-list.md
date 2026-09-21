@@ -7,9 +7,9 @@
 | 项目 | 数量 |
 |---|---|
 | Mapper 文件总数 | 256（`0.c` ~ `255.c`） |
-| 注册表标注 `implemented` | 26 |
+| 注册表标注 `implemented` | 27 |
 | 另有实质代码但未标注 | 1（Mapper **163**） |
-| 占位桩（未实现） | 229 |
+| 占位桩（未实现） | 228 |
 
 > 判定依据：桩文件统一为 **39 行**，只有 `reset` / `writehigh` 两个空函数且 `create` 返回 `ines_false`；真实实现则行数显著更多、带私有数据或 IRQ，且返回 `ines_true`。
 
@@ -33,6 +33,7 @@
 | 13 | 41 | — | | | ✅ | CPROM：CHR-RAM bank 切换 |
 | 15 | 103 | — | | | ✅ | 100-in-1 类多卡带 |
 | 16 | 240 | `Mapper16` | ✅ | ✅ | ✅ | Bandai FCG，**注册表注明 "no EEPROM"**（串行 EEPROM 未实现） |
+| 17 | 594 | `Mapper17_data_t` | ✅ | ✅ | ✅ | **Front Fareast Super Magic Card**（iNES Mapper 017 专用）：4M/2M/锁存三种 PRG 模式、1KB CHR-RAM（镜像 CHR 数据拷进 pattern RAM）、32KB WRAM 切页、16 位 IRQ 计数器（M2/PA12 可选）、`$5000-$5FFF` scratch RAM、trainer 装载与硬复位入口（`$7000`） |
 | 18 | 227 | `MMC18` | ✅ | ✅ | ✅ | Jaleco SS88006 |
 | 19 | 662 | `Namco163_data_t` | ✅ | ✅ | ✅ | **Namco 163（Namcot 106）**：12 窗口 CHR/NT、CIRAM 当 CHR、ROM nametable、8KB WRAM + 2KB×4 写保护、15 位 CPU 周期 IRQ、8 通道波表扩展音（经 APU 扩展槽）；[方案与增益标定](mapper-19-plan.md) |
 | 21 | 31 | `VRC24_data_t` | ✅ | ✅ | ✅ | Konami **VRC4a/c**（VRC 系，逻辑在 `vrc.h` 共享） |
@@ -45,8 +46,8 @@
 | 163 | 178 | `MMC163` | | ✅ | ❌ | 有完整实现（含 `reset/writehigh/readlow/writelow/hsync/fini`），但注册表未标注 `implemented` |
 | 210 | 142 | —（无私有状态） | | | ✅ | **Namco 175 / Namco 340**（Namco 163 的降本版，同一个 iNES 号）：8 窗口 1KB CHR、3 槽 8KB PRG、340 可选 H/V/单屏镜像；175/340 变体不区分（详见 `core/mapper/210.c` 文件头） |
 
-> **实机验证状态（2026-09-12）**：**19**（Namco 163）已由用户实机验证，游戏运行无问题；
-> **210**（Namco 175/340）暂无可用 ROM，尚未实机验证（仅通过编译与静态检查）。
+> **实机验证状态（2026-09-20）**：**19**（Namco 163）已由用户实机验证，游戏运行无问题；
+> **17**（Super Magic Card）与 **210**（Namco 175/340）暂无可用 ROM，尚未实机验证（仅通过编译与静态检查）。
 > 详细验证项见 [mapper-19-plan.md](mapper-19-plan.md) §5。
 
 > **VRC 家族共享实现**：21/22/23/25（VRC2/VRC4）、24/26（VRC6）、85（VRC7）的核心逻辑
@@ -60,33 +61,35 @@
 >   `ines_apu_flush_run` 对齐（时钟模型：YM2413 主频 = 2×CPU，FM 更新每 36 CPU 周期一次）
 > - 两芯片混音幅值均为经验标定（`VRC6_EXP_GAIN` / `VRC7_EXP_GAIN`），待与实录 A/B
 
-未实现但值得注意的是 **14**、**17**：它们的桩里已有基本的 bank 设置骨架，可以直接作为新实现的起点。
+未实现但值得注意的是 **14**：它的桩里已有基本的 bank 设置骨架，可以直接作为新实现的起点。
 
 ## 3. 特性矩阵（已实现部分）
 
 | 特性 | 使用的 Mapper |
 |---|---|
-| 扫描线 IRQ（`hsync` + `ines_cpu_IRQ`） | 4, 5, 6, 12, 16, 18, 19 |
+| 扫描线 IRQ（`hsync` + `ines_cpu_IRQ`） | 4, 5, 6, 12, 16, 17, 18, 19 |
 | `hsync`（无 IRQ，用于 CHR 切换特效） | 163 |
-| PRG + CHR 全切换 | 1, 4, 5, 6, 12, 16, 18, 19, 163, 210 |
+| PRG + CHR 全切换 | 1, 4, 5, 6, 12, 16, 17, 18, 19, 163, 210 |
 | 仅 PRG 切换 | 2, 7, 11, 15 |
 | 仅 CHR 切换 | 3, 13 |
 | 无切换 | 0 |
 | `PPU_latch`（MMC5 图形扩展） | 5 |
-| `PPU_latch_FDFE`（`$FD/$FE` 锁存） | 9, 10 |
+| `PPU_latch_FDFE`（`$FD/$FE` 锁存） | 9, 10, 17 |
 | 内部 NT RAM 当作 CHR（`pattern_type = 2`） | 19 |
 | nametable 窗口指向 CHR 页（ROM nametable，`ines_set_nt_chr_bank_n`） | 19 |
-| 自定义 SRAM（`custom_sram = 1`，含写保护） | 19 |
-| 自由镜像排布（`ines_ppu_set_mirror`，含单屏选择） | 1, 6, 7, 16, 18, 19, 21-26, 210 |
+| nametable 窗口指向 pattern RAM 页（CHR-RAM nametable，`ines_set_nt_pattern_bank_n`） | 17 |
+| 自定义 SRAM（`custom_sram = 1`，含写保护） | 17, 19 |
+| 自由镜像排布（`ines_ppu_set_mirror`，含单屏选择） | 1, 6, 7, 16, 17, 18, 19, 21-26, 210 |
 | 扩展音（APU 扩展输入槽） | 19, 24, 26, 85 |
-| 私有数据 + `fini` | 1, 4, 5, 6, 9, 10, 12, 16, 18, 19, 163 |
+| 私有数据 + `fini` | 1, 4, 5, 6, 9, 10, 12, 16, 17, 18, 19, 163 |
+| 镜像自带 trainer（复位入口覆盖，`host.reset_entry`） | 17 |
 
 ## 4. 桩文件（占位实现）
 
-桩的统一形态（`core/mapper/17.c` 为例）：
+桩的统一形态（`core/mapper/14.c` 为例）：
 
 ```c
-static void mapper17_reset(ines_mapper_t* p_mapper)
+static void mapper14_reset(ines_mapper_t* p_mapper)
 {
     ines_host_t*  p_host = mapper2host(p_mapper);
     if(p_host->prom_8k_num >= 4)
@@ -97,16 +100,16 @@ static void mapper17_reset(ines_mapper_t* p_mapper)
         ines_set_vrom_bank_8(p_host, 0, 1, 2, 3, 4, 5, 6, 7);
 }
 
-static void mapper17_writehigh(ines_mapper_t* p_mapper, ines_word_t addr, ines_byte_t val)
+static void mapper14_writehigh(ines_mapper_t* p_mapper, ines_word_t addr, ines_byte_t val)
 {
     ines_host_t*  p_host = mapper2host(p_mapper);
     (void)p_host;
 }
 
-ines_bool_t  mapper17_create(ines_mapper_t* p_mapper)
+ines_bool_t  mapper14_create(ines_mapper_t* p_mapper)
 {
-    p_mapper->reset     = mapper17_reset;
-    p_mapper->writehigh = mapper17_writehigh;
+    p_mapper->reset     = mapper14_reset;
+    p_mapper->writehigh = mapper14_writehigh;
     return ines_false;          // <- 未实现
 }
 ```

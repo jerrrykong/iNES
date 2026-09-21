@@ -284,7 +284,7 @@ static ines_bool_t (*mapper_creator_func[MAX_MAPPER_CREATOR] )(ines_mapper_t* ) 
 	/* 014 */  mapper14_create,
 	/* 015 */  mapper15_create, /* implemented */
 	/* 016 */  mapper16_create, /* implemented -- FCG, no EEPROM */
-	/* 017 */  mapper17_create,
+	/* 017 */  mapper17_create, /* implemented -- Front Fareast Super Magic Card (4M PRG / 1KB CHR-RAM / WRAM 切页 / IRQ 计数器 / trainer) */
 	/* 018 */  mapper18_create, /* implemented */
 	/* 019 */  mapper19_create, /* implemented -- Namco 163 (映射/IRQ/WRAM 写保护/12 窗口 CHR 与 CIRAM 当 CHR/扩展音) */
 	/* 020 */  mapper20_create,

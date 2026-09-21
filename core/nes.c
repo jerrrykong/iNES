@@ -124,10 +124,21 @@ void ines_host_reset(ines_host_t* p_host)
 	// p_host->ppu.used_vrom = p_host->rom.VROM_block_num > 0 ? 1: 0;
 	ines_joypad_reset(&p_host->joypad);
 
+	// 复位入口先清零：mapper 如需指定(如 mapper 17 的 trainer)会在自己的 reset 里重设
+	p_host->reset_entry = 0;
+
 	ines_mapper_reset(&p_host->mapper);
 
 	ines_cpu_reset(&p_host->cpu);
 	ines_apu_reset(&p_host->apu);
+
+	// mapper 指定了复位入口时覆盖 PC(ines_cpu_reset() 取的是 ROM 复位向量)
+	if(p_host->reset_entry != 0)
+	{
+		INES_LOG(LOG_INF, MOD_SYS, ISTR("hard reset entry = $%04X (mapper %d).\n"),
+			(ines_int_t)p_host->reset_entry, (ines_int_t)p_host->rom.mapper_num);
+		p_host->cpu.reg_PC = p_host->reset_entry;
+	}
 	
 
 	if(p_host->ppu.mem_bank[0] == NULL) ines_set_vram_bank_n(p_host, 0, 0);
@@ -769,6 +780,31 @@ void ines_set_nt_chr_bank_n(ines_host_t* p_host, ines_word_t n, ines_word_t bn)
 		p_host->ppu.pattern_table_used[bn] = 1;
 		p_host->ppu.nt_type[n] = 2;
 	}
+}
+
+/**
+ * 把一个 nametable 窗口($2000/$2400/$2800/$2C00)指向 PPU pattern RAM(CHR-RAM)的 1KB 页。
+ * @param p_host 宿主
+ * @param n      nametable 窗口号(0-3，对应 PPU 窗口 8-11，即 $2000-$2FFF 的四个 1KB 段)
+ * @param bn     pattern RAM 的 1KB 页号(0-31，按 32KB 回卷)
+ * @note 供 CHR 为 RAM 但镜像里带 CHR 数据的卡带使用(如 mapper 17 Super Magic Card)：
+ *       此时卡带把镜像的 CHR 数据拷进 pattern RAM，nametable 也必须指向这片 RAM(nt_type = 2，可写)，
+ *       而 ines_set_nt_chr_bank_n() 在有 CHR-ROM 时会固定指向 CHR-ROM(nt_type = 1，只读)。
+ *       需要窗口回到内部 CIRAM 时调用 ines_ppu_set_mirror()，它会把 4 个窗口的 nt_type 复位为 0。
+ */
+void ines_set_nt_pattern_bank_n(ines_host_t* p_host, ines_word_t n, ines_word_t bn)
+{
+	if(p_host->ppu.in_vblank)
+		INES_LOG(LOG_DBG, MOD_SYS, ISTR("SET_NT_PATTERN_BANK(%d)=(%d), VBLANK\n"), n, bn);
+	else
+		INES_LOG(LOG_DBG, MOD_SYS, ISTR("SET_NT_PATTERN_BANK(%d)=(%d), SCANLINE=%d\n"), n, bn, p_host->ppu.current_line);
+
+	ines_assert(n < NES_MAX_NTRAM_BANKS);
+
+	bn &= NES_VRAM_1K_MASK;
+	p_host->ppu.mem_bank[0x08 + n] = p_host->ppu.pattern_table + ((ines_dword_t)bn << 10);
+	p_host->ppu.pattern_table_used[bn] = 1;
+	p_host->ppu.nt_type[n] = 2;
 }
 
 

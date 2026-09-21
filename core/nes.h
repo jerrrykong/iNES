@@ -81,6 +81,8 @@ struct _ines_host_
 	//ines_char_t     title[INES_MAX_TITLE]; // ROM title
 	ines_byte_t     status; // 0 - not install ROM. 1 - running. 2 - pause 3 - frame step
 	ines_int64_t    frame_count;
+	ines_word_t     reset_entry; // 非 0：硬复位入口地址，由 mapper 在自己的 reset 里指定(如 mapper 17 的 trainer)，
+								 // 宿主在 ines_cpu_reset() 之后用它覆盖 PC；每次复位前清零。
 
 	ines_word_t     prom_8k_num;
 	ines_word_t     vrom_1k_num;
@@ -159,6 +161,7 @@ void ines_set_vrom_bank_n(ines_host_t* p_host, ines_word_t n, ines_word_t bn); /
 void ines_set_vram_bank_n(ines_host_t* p_host, ines_word_t n, ines_word_t bn);  // sram bank point
 void ines_set_ciram_pattern_bank_n(ines_host_t* p_host, ines_word_t n, ines_word_t page); // 内部 NT RAM 当作 CHR 页(mapper 19)
 void ines_set_nt_chr_bank_n(ines_host_t* p_host, ines_word_t n, ines_word_t bn); // nametable 窗口指向 CHR 页(n=0-3，mapper 19 ROM nametable)
+void ines_set_nt_pattern_bank_n(ines_host_t* p_host, ines_word_t n, ines_word_t bn); // nametable 窗口指向 pattern RAM 页(n=0-3，mapper 17 CHR-RAM)
 
 ines_int_t ines_host_save_state(ines_host_t* p_host, FILE* fSave);
 ines_int_t ines_host_load_state(ines_host_t* p_host, FILE* fSave);
