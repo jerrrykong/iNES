@@ -85,13 +85,15 @@
 
 ### 3.3 语言 ID 与匹配规则
 
-- 使用 **BCP-47 短标签**：`en` / `zh-CN` / `ja` / `fr` / `zh-TW` / `de` …
-- 文件名即语言 ID（大小写不敏感）：`en.ini`、`zh-CN.ini`、`ja.ini`、`fr.ini`。
+- 使用 **BCP-47 短标签**：`en` / `zh-CN` / `zh-TW` / `ja` / `fr` / `de` …
+- 文件名即语言 ID（大小写不敏感）：`en.ini`、`zh-CN.ini`、`zh-TW.ini`、`ja.ini`、`fr.ini`。
 - 匹配顺序（对系统语言 `zh-Hans-CN`）：
   1. 完整匹配 `zh-Hans-CN`
   2. 去掉脚本子标签 `zh-CN`
   3. 只留主语言 `zh`
   4. 都无 → `en`
+- 繁体同理：系统语言 `zh-Hant-TW` → `zh-Hant-TW` → **`zh-TW`** → `zh-Hant` → `zh` → `en`；`zh-TW` 直接命中。
+  （`zh-Hant-HK` 之类未提供的地区变体会回落到 `en`，需要时按 `zh-TW.ini` 复制一份 `zh-HK.ini` 即可，无需改代码。）
 - 内置语言 `en` 恒存在（编译期表），不依赖文件。
 
 ### 3.4 语言文件搜索顺序（先命中先用，逐文件覆盖）
@@ -461,9 +463,16 @@ static NSSize app_fit(id control, NSString* text)
 
 → 这些条目在 `lang/*.ini` 里**不出现**（不是"值等于英文"的冗余条目），避免翻译人员误翻；程序侧直接写字面量。模板导出时同样跳过。
 
+**例外：寄存器查看器的"说明"列**（46 条，如 `累加器` / `音量/包络/占空比`）。它不是术语本身而是**功能说明短语**，因此做成**代码内多语字面量**：`s_defs[].note_zh`（简）+ `note_zh_tw`（繁）+ `note_en`（英），按当前语言选一套（`zh-TW/HK/Hant` → 繁体；其它 `zh*` → 简体；其余 → 英文），**不进 `lang/*.ini`**。
+
+- 理由：若进语言文件就要给 ja/fr 各翻 46 条，而说明列是**固定 26 字符列**的等宽网格（`IDBG_RV_NOTE_COLS`，两端一致），法语译文普遍超出会被裁切；按 §10.1 的"硬件/术语保持英文"原则，非中文语言统一用英文说明即可。
+- 英文说明**控制在 ≤26 字符**，不得超出说明列宽度。
+- 实现两端同构（参考 win32 `wReg_InitTexts()`）：定义表是 UTF-8 常量，**建窗口/切语言时各转换一次**并缓存（`mac` 的 `s_noteText[]` / win32 的 `s_noteText[]`），绘制热路径不再做编码转换。
+- win32 侧待办见 §16.2 第 6 项。
+
 ---
 
-## 11. 语言文件产出（zh-CN / ja / fr）
+## 11. 语言文件产出（zh-CN / zh-TW / ja / fr）
 
 ### 11.1 简体中文：沿用现有界面文案（决策 ⑥）
 
@@ -474,6 +483,21 @@ static NSSize app_fit(id control, NSString* text)
   - 卷轴查看 / 图形查看 / 图案内存查看 / 精灵内存查看（沿用现名）
 - 顺手修掉现有文案里的笔误（如 win32 RC 的 `卷轴查看(&N),,,` → `...`）。
 - 之后要改中文措辞只动 `lang/zh-CN.ini`，无需改代码。
+
+### 11.1b 繁体中文（台湾）：`lang/zh-TW.ini`
+
+- 语言 ID **`zh-TW`**，`[meta] name = 繁體中文`（菜单里自然排在 `简体中文` 之后）。
+- 以 `lang/zh-CN.ini` 为底本转写，**不逐字直转**，按台湾习惯调整术语：
+  内存→記憶體、线程→執行緒、端口→連接埠、地址→位址、服务器→伺服器、客户机→用戶端、
+  协议→協定、网络→網路、局域网→區域網路、连接→連線、支持→支援、覆盖→覆寫、
+  字节→位元組、文件→檔案、文件夹→資料夾、复位→重設、重新上电→重新上電、
+  调试→偵錯、视图→檢視、精灵→精靈、手柄→手把、截图→擷圖、全屏→全螢幕、
+  存档/读档→存檔/讀檔、日志→日誌、帮助→說明、文件(菜单)→檔案。
+- 标点沿用底本风格：中文全角标点；省略号仍写 ASCII `...`（mac 渲染时替换为 `…`）。
+- 术语与数据（ROM / CHR / PRG / Mapper / OAM / DMA / CPU …）保持英文。
+- 寄存器查看器的说明列另有**繁体字面量**（`note_zh_tw`，见 §10.1 例外条款），
+  语言 ID 含 `TW` / `HK` / `Hant` 时取用。
+- 增删条目后用 `tools/i18n_check lang/zh-TW.ini` 校验（key 集、占位符、编码、换行）。
 
 ### 11.2 日语 / 法语
 
@@ -587,7 +611,9 @@ static NSSize app_fit(id control, NSString* text)
    - 列表列名：`ListView_SetColumnWidth` 按表头文本宽度。
    - 7 个调试窗口复用同一例程（纯 UI 元素，§10.1 边界）。
 5. **语言菜单**：「工具」菜单**第 2 项**（紧跟「选项…」，之前插一个 `IDM_LANGUAGE_BASE + i`），`ines_i18n_enum()` 枚举、当前语言打勾；切换后**重画所有已打开窗口**。
-6. **验收**（对齐 §13）：
+6. **寄存器查看器「说明」列补英文与繁体**：`win32/wRegister.c` 的 `s_defs[]` 增 `note_zh_tw` + `note_en` 两列（照抄 `mac/iNESRegisterView.m` 的 46 条×2，**列序必须与结构字段序 `note_zh, note_zh_tw, note_en` 一致**），`wReg_InitTexts()` 按当前语言选一套写入 `s_noteText[]`（`TW/HK/Hant` → 繁体，其它 `zh*` → 简体，其余 → 英文）；切语言时重新调用一次并重绘（win32 目前无语言切换，接入 i18n 后顺带生效）。英文说明**不得超过 26 字符**（`WREG_NOTE_COLS`，与 mac 一致）。两端表格必须逐行对齐，否则说明会张冠李戴。
+7. **语言文件**：`lang/*.ini` 已含 `en / zh-CN / zh-TW / ja / fr`；CMake 用 `file(GLOB)` 自动打包，新增语言只需丢一个 ini 进 `lang/`，无需改脚本（win32 拷到 exe 同目录 `lang\`，mac 进 `Resources/lang`）。
+7. **验收**（对齐 §13）：
    - 英/中/日/法四语下：按钮无截断、控件无重叠、窗口无裁切。
    - 系统语言 zh / ja / fr / 德语（无匹配 → 英文）四种首次启动。
    - 语言切换即时生效（含已打开的调试窗口/对话框）。
@@ -610,6 +636,10 @@ static NSSize app_fit(id control, NSString* text)
 - `mac/iNESi18n.{h,m}`：`L10N` / `L10NF` 宏 + 系统语言探测（`[NSLocale preferredLanguages]`）+ 配置读写；首次运行只记日志、不提示。
 - `mac/iNESUiLayout.{h,m}`：`INESFitLabel` / `INESFitButtons` / `INESFitWindowHeight` / `INESEnsureContentWidth`（测量—定位两趟）。
 - 主菜单/窗口标题/状态、4 个对话框（关于/网络对战/载入 ROM/局域网）、7 个调试窗口的纯 UI 元素、寄存器查看器全部接入；工具菜单第 2 项为「语言」。
+- **寄存器查看器「说明」列双语化**（2026-09-22）：`s_defs[]` 增 `note_zh` / `note_en` 两列，按语言选一套；文本缓存 `s_noteText[]` 与 `idbg_rv_init_texts()` 参考 win32 `wReg_InitTexts()`（建视图 / 切语言各转换一次，绘制热路径不转换）；视图监听 `INESLanguageDidChangeNotification` 重刷并重绘。
+  实测（探针打日志后已移除）：`lang=en → A=Accumulator / PC=Program counter`；切 zh-CN → `A=累加器 / PC=程序计数器`；切 ja → 回落英文（`A=Accumulator`），符合 §10.1「术语/硬件说明非中文语言保持英文」。
+- **繁体中文 `lang/zh-TW.ini`**（2026-09-22）：168 条，以 zh-CN 为底本按台湾用语转写（§11.1b）；系统语言 `zh-Hant-TW` 经匹配规则第 2 轮落到 `zh-TW`。寄存器说明列同步增加 `note_zh_tw` 一列（三套字面量按语言选一）。
+  实测：菜单 `檔案 / 載入 ROM…`、对话框标题 `載入 NES 檔案`、主窗口 `iNES - 90tank - 執行中`、寄存器窗口 `暫存器檢視器`；说明列 zh-TW → `累加器 / 堆疊指標（頁 1）/ 手把 2 按鍵（讀取）`，zh-CN → `累加器 / 栈指针(页 1) / 手柄 2 按键(读)`，en → `Accumulator / Stack pointer (page 1) / Joypad 2 buttons (read)`。`i18n_check` 对 4 个语言文件全部 OK。
 - `tools/gen_i18n_template.c` / `tools/i18n_check.c`；`lang/{en,zh-CN,ja,fr}.ini`。
 
 实施中修掉的两个问题（避免 win32 重踩）：
