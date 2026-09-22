@@ -906,26 +906,11 @@ static NSString* app_function_key(ines_int_t n)
 
 	// 语言: 各语言以本语言自身的名称显示(不懂当前界面语言时也认得), 当前项打勾。
 	// win32 侧同样放在"工具"菜单的"选项"之后, 两端位置一致。
+	// 条目每次打开菜单时重建(委托见 menuNeedsUpdate:), 因此运行时新增/改写的
+	// 语言文件不必重启即可出现在列表里(动态加载, 见 iNES_i18n_rescan)。
 	root = [self addSubmenuToMenu:menu title:L10N("menu.language")];
-	{
-		NSArray<NSArray<NSString*>*>*  langs = iNES_i18n_languages();
-		NSString*                      cur   = iNES_i18n_language_id();
-
-		self.languageMenu = root.submenu;
-		for (NSArray<NSString*>* lang in langs)
-		{
-			NSMenuItem*  lang_item = [self addItemToMenu:self.languageMenu
-												   title:lang[1]
-												  action:@selector(selectLanguage:)
-												keyEquiv:nil
-											   modifiers:0
-													 tag:0
-												   group:nil];
-
-			lang_item.representedObject = lang[0];    // 语言 ID(ASCII, 如 "zh-CN")
-			lang_item.state = [lang[0] isEqualToString:cur] ? NSControlStateValueOn : NSControlStateValueOff;
-		}
-	}
+	self.languageMenu          = root.submenu;
+	self.languageMenu.delegate = self;
 	[menu addItem:[NSMenuItem separatorItem]];
 	[self addItemToMenu:menu title:L10N("menu.tools.osd") action:@selector(toggleOsd:) keyEquiv:nil
 			  modifiers:0 tag:0 group:nil];
@@ -1341,6 +1326,42 @@ static NSString* app_function_key(ines_int_t n)
 	else if ((menu == self.saveStateMenu) || (menu == self.loadStateMenu))
 		[self updateStateMenu:menu label:(menu == self.saveStateMenu) ? L10N("menu.control.save_state")
 																	 : L10N("menu.control.load_state")];
+	else if (menu == self.languageMenu)
+		[self updateLanguageMenu];
+}
+
+/**
+ * 语言菜单: 打开时先重新扫描语言目录(动态加载: 运行时丢进 <数据目录>/lang 的
+ * *.ini 立即生效), 再按最新清单重建条目。
+ */
+- (void)updateLanguageMenu
+{
+	NSArray<NSArray<NSString*>*>*  langs;
+	NSString*                      cur;
+
+	if (self.languageMenu == nil)
+		return;
+
+	iNES_i18n_rescan();
+
+	[self.languageMenu removeAllItems];
+
+	langs = iNES_i18n_languages();
+	cur   = iNES_i18n_language_id();
+
+	for (NSArray<NSString*>* lang in langs)
+	{
+		NSMenuItem*  item = [self addItemToMenu:self.languageMenu
+										  title:lang[1]
+										 action:@selector(selectLanguage:)
+									   keyEquiv:nil
+									  modifiers:0
+											tag:0
+										  group:nil];
+
+		item.representedObject = lang[0];    // 语言 ID(ASCII, 如 "zh-CN")
+		item.state = [lang[0] isEqualToString:cur] ? NSControlStateValueOn : NSControlStateValueOff;
+	}
 }
 
 - (void)updateRecentFilesMenu

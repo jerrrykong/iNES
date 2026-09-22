@@ -229,6 +229,7 @@ int          ines_i18n_init(const char* preferred);   // preferred=前端探测�
 void         ines_i18n_fini(void);
 void         ines_i18n_add_lang_dir(const char* dir); // init 之前追加搜索目录(如 mac bundle 的 Resources/lang)
 int          ines_i18n_enum(ines_i18n_lang_t* langs, int max_count);  // 含内置 en
+int          ines_i18n_rescan(void);                  // 运行时重新扫描 lang 目录(动态加载, 不必重启)
 const char*  ines_i18n_match(const char* lang_tag);   // "zh-Hans-CN" -> "zh-CN" -> "zh" -> "en"
 int          ines_i18n_set_language(const char* id);
 const char*  ines_i18n_language(void);
@@ -240,6 +241,7 @@ ines_str_t   ines_i18n_text_fmt(ines_str_t buf, ines_size_t len, const char* key
 - key 缺失 → 回退内置英文 → 仍缺 → 返回 key 本身并 `LOG_WAR`。
 - 英文真源为内置编译期表 `comm/i18n_en.c`；外部 `lang/*.ini`（UTF-8 无 BOM + LF）按 key 覆盖。
 - 只在 UI 线程调用；语言切换后旧的返回指针失效，不要跨切换缓存。
+- `ines_i18n_rescan()`：运行时新增/改写/删除 `lang/*.ini` 后调用即生效（当前语言文件仍在则按新内容重载，被删则回落英文）；返回的旧指针同样失效。mac 在打开「语言」菜单时自动调用，因此丢进 `<数据目录>/lang` 的语言文件无需重启即出现在菜单里。
 - 设计见 `docs/i18n-plan.md`。
 
 ### 其它

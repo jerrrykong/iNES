@@ -849,6 +849,48 @@ int ines_i18n_enum(ines_i18n_lang_t* langs, int max_count)
 	return total;
 }
 
+static const i18n_file_t* i18n_find_file(const char* id);   /* 定义在下方 */
+
+int ines_i18n_rescan(void)
+{
+	char                cur[INES_I18N_ID_MAX];
+	const i18n_file_t*  file;
+
+	if (!s_inited)
+	{
+		return -1;
+	}
+
+	strncpy(cur, s_cur_id, sizeof(cur) - 1);
+	cur[sizeof(cur) - 1] = '\0';
+
+	i18n_scan_all();
+
+	/* 全部回到英文, 再由当前语言的文件覆盖(文件里缺的 key 自动回退英文) */
+	i18n_fill_english();
+
+	if (!i18n_id_equal(cur, "en"))
+	{
+		file = i18n_find_file(cur);
+		if (file != NULL)
+		{
+			i18n_apply_file(file->path);
+		}
+		else
+		{
+			/* 当前语言的文件被删掉了: 回落英文, 由前端决定是否重新选择 */
+			INES_LOG(LOG_WAR, MOD_SYS, ISTR("i18n: language ") I18N_FMT_S ISTR(" gone after rescan, falling back to en\n"), cur);
+			strncpy(s_cur_id, "en", sizeof(s_cur_id) - 1);
+			s_cur_id[sizeof(s_cur_id) - 1] = '\0';
+		}
+	}
+
+	INES_LOG(LOG_INF, MOD_SYS, ISTR("i18n: rescan done, ") ISTR("%d") ISTR(" language(s) available, current = ") I18N_FMT_S ISTR("\n"),
+			 s_file_count + 1, s_cur_id);
+
+	return s_file_count + 1;
+}
+
 /** 候选比较: 在已注册语言里找 id(大小写不敏感); 找不到返回 NULL */
 static const i18n_file_t* i18n_find_file(const char* id)
 {

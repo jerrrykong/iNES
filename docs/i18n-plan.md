@@ -103,6 +103,17 @@
 2. **程序目录**：win32 = exe 同目录 `lang\`（与上同目录时可合并）；mac = `iNES.app/Contents/Resources/lang/`。
 
 > mac 侧：`Contents/Resources/lang` 由 CMake 复制 `lang/*.ini` 进 bundle；用户目录优先级更高，便于翻译人员直接编辑调试。
+>
+> **目录在启动时自动创建**（`iNES_i18n_user_lang_dir()`），因此即便原本不存在，翻译人员也可以直接把新的 `*.ini` 丢进去。
+
+### 3.5 动态加载（运行时增删语言，无需重启）
+
+- 语言清单**不是**启动时一次性固定：`ines_i18n_rescan()` 会重新扫描 §3.4 的全部目录、重新登记 `[meta]`，并按当前语言的文件内容**重载文本**（缺的 key 自动回退英文；当前语言文件被删则回落 `en` 并 `LOG_WAR`）。
+- 用法：运行时新增 / 改写 / 删除 `lang/*.ini` 后调用一次。返回可用语言数（含内置 `en`）。
+- mac 侧已接入：`self.languageMenu.delegate = self`，`menuNeedsUpdate:` → `updateLanguageMenu` 先 `iNES_i18n_rescan()` 再重建条目，
+  **每次打开「语言」菜单都是最新清单**，新语言文件不必重启、也不必重新构建 bundle。
+- win32 侧待办（§16）：语言菜单同样应在 `WM_INITMENUPOPUP` 时 `ines_i18n_rescan()` + 重建 `IDM_LANGUAGE_BASE + i` 条目。
+- 注意：`rescan` 与 `set_language` 一样会让已取出的 `ines_i18n_text()` 指针失效，禁止缓存该指针。
 
 ---
 
@@ -611,6 +622,7 @@ static NSSize app_fit(id control, NSString* text)
    - 列表列名：`ListView_SetColumnWidth` 按表头文本宽度。
    - 7 个调试窗口复用同一例程（纯 UI 元素，§10.1 边界）。
 5. **语言菜单**：「工具」菜单**第 2 项**（紧跟「选项…」，之前插一个 `IDM_LANGUAGE_BASE + i`），`ines_i18n_enum()` 枚举、当前语言打勾；切换后**重画所有已打开窗口**。
+   与 mac 一样支持动态加载（§3.5）：在 `WM_INITMENUPOPUP` 里先 `ines_i18n_rescan()` 再重建条目，运行时新增的 `lang\*.ini` 不必重启。
 6. **寄存器查看器「说明」列补英文与繁体**：`win32/wRegister.c` 的 `s_defs[]` 增 `note_zh_tw` + `note_en` 两列（照抄 `mac/iNESRegisterView.m` 的 46 条×2，**列序必须与结构字段序 `note_zh, note_zh_tw, note_en` 一致**），`wReg_InitTexts()` 按当前语言选一套写入 `s_noteText[]`（`TW/HK/Hant` → 繁体，其它 `zh*` → 简体，其余 → 英文）；切语言时重新调用一次并重绘（win32 目前无语言切换，接入 i18n 后顺带生效）。英文说明**不得超过 26 字符**（`WREG_NOTE_COLS`，与 mac 一致）。两端表格必须逐行对齐，否则说明会张冠李戴。
 7. **语言文件**：`lang/*.ini` 已含 `en / zh-CN / zh-TW / ja / fr / th / ar`；CMake 用 `file(GLOB)` 自动打包，新增语言只需丢一个 ini 进 `lang/`，无需改脚本（win32 拷到 exe 同目录 `lang\`，mac 进 `Resources/lang`）。
    - **阿拉伯语只有译文、未做 RTL**：界面仍按 LTR 排版（顺序、对齐、菜单方向都不镜像）。将来要做 RTL 属于布局层工作（`mac/iNESUiLayout`、`win32` 自适应尺寸），不必改语言文件。

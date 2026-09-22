@@ -57,6 +57,15 @@ void ines_i18n_fini(void);
 int  ines_i18n_enum(ines_i18n_lang_t* langs, int max_count);
 
 /**
+ * 重新扫描语言目录(运行时动态加载): 新增/删除/改写 ini 后调用即可, 无需重启。
+ *  - 重新登记所有语言文件(<数据目录>/lang 优先, 其次前端追加的目录);
+ *  - 当前语言的文件仍在则按新内容重新载入文本, 已被删除则回落英文;
+ *  - 返回可用语言数(含内置 en); 未初始化返回 -1。
+ * 注意: 已取出的 ines_i18n_text() 指针在本调用后失效(与切换语言一样不要缓存)。
+ */
+int  ines_i18n_rescan(void);
+
+/**
  * 把系统语言标签归一到可用语言 ID: "zh-Hans-CN" -> "zh-CN" -> "zh" -> "en"。
  * 返回内部静态缓冲(ASCII), 永不返回 NULL。
  */
