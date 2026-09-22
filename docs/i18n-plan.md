@@ -472,7 +472,7 @@ static NSSize app_fit(id control, NSString* text)
 
 ---
 
-## 11. 语言文件产出（zh-CN / zh-TW / ja / fr）
+## 11. 语言文件产出（zh-CN / zh-TW / ja / fr / th / ar）
 
 ### 11.1 简体中文：沿用现有界面文案（决策 ⑥）
 
@@ -612,7 +612,8 @@ static NSSize app_fit(id control, NSString* text)
    - 7 个调试窗口复用同一例程（纯 UI 元素，§10.1 边界）。
 5. **语言菜单**：「工具」菜单**第 2 项**（紧跟「选项…」，之前插一个 `IDM_LANGUAGE_BASE + i`），`ines_i18n_enum()` 枚举、当前语言打勾；切换后**重画所有已打开窗口**。
 6. **寄存器查看器「说明」列补英文与繁体**：`win32/wRegister.c` 的 `s_defs[]` 增 `note_zh_tw` + `note_en` 两列（照抄 `mac/iNESRegisterView.m` 的 46 条×2，**列序必须与结构字段序 `note_zh, note_zh_tw, note_en` 一致**），`wReg_InitTexts()` 按当前语言选一套写入 `s_noteText[]`（`TW/HK/Hant` → 繁体，其它 `zh*` → 简体，其余 → 英文）；切语言时重新调用一次并重绘（win32 目前无语言切换，接入 i18n 后顺带生效）。英文说明**不得超过 26 字符**（`WREG_NOTE_COLS`，与 mac 一致）。两端表格必须逐行对齐，否则说明会张冠李戴。
-7. **语言文件**：`lang/*.ini` 已含 `en / zh-CN / zh-TW / ja / fr`；CMake 用 `file(GLOB)` 自动打包，新增语言只需丢一个 ini 进 `lang/`，无需改脚本（win32 拷到 exe 同目录 `lang\`，mac 进 `Resources/lang`）。
+7. **语言文件**：`lang/*.ini` 已含 `en / zh-CN / zh-TW / ja / fr / th / ar`；CMake 用 `file(GLOB)` 自动打包，新增语言只需丢一个 ini 进 `lang/`，无需改脚本（win32 拷到 exe 同目录 `lang\`，mac 进 `Resources/lang`）。
+   - **阿拉伯语只有译文、未做 RTL**：界面仍按 LTR 排版（顺序、对齐、菜单方向都不镜像）。将来要做 RTL 属于布局层工作（`mac/iNESUiLayout`、`win32` 自适应尺寸），不必改语言文件。
 7. **验收**（对齐 §13）：
    - 英/中/日/法四语下：按钮无截断、控件无重叠、窗口无裁切。
    - 系统语言 zh / ja / fr / 德语（无匹配 → 英文）四种首次启动。
