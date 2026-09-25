@@ -492,7 +492,7 @@ static ines_bool_t (*mapper_creator_func[MAX_MAPPER_CREATOR] )(ines_mapper_t* ) 
 	/* 222 */  mapper222_create,
 	/* 223 */  mapper223_create,
 	/* 224 */  mapper224_create,
-	/* 225 */  mapper225_create,
+	/* 225 */  mapper225_create, /* implemented -- ET-4310 / K-1010 多合一板 (bank 由写入地址译码: 16K/32K PRG + 8KB CHR + H-V 镜像, $5800-$5FFF 4x4bit RAM, 无 IRQ) */
 	/* 226 */  mapper226_create,
 	/* 227 */  mapper227_create,
 	/* 228 */  mapper228_create,
@@ -522,7 +522,7 @@ static ines_bool_t (*mapper_creator_func[MAX_MAPPER_CREATOR] )(ines_mapper_t* ) 
 	/* 252 */  mapper252_create,
 	/* 253 */  mapper253_create,
 	/* 254 */  mapper254_create,
-	/* 255 */  mapper255_create,
+	/* 255 */  mapper255_create, /* implemented -- 110-in-1 多合一板 (与 225 同构: bank 由写入地址译码, 16K/32K PRG + 8KB CHR + H-V 镜像, $5800-$5FFF 4x4bit RAM, 无 IRQ) */
 };
 
 

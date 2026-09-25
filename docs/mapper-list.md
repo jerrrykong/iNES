@@ -7,9 +7,9 @@
 | 项目 | 数量 |
 |---|---|
 | Mapper 文件总数 | 256（`0.c` ~ `255.c`） |
-| 注册表标注 `implemented` | 30 |
+| 注册表标注 `implemented` | 32 |
 | 另有实质代码但未标注 | 1（Mapper **163**） |
-| 占位桩（未实现） | 225 |
+| 占位桩（未实现） | 223 |
 
 > 判定依据：桩文件统一为 **39 行**，只有 `reset` / `writehigh` 两个空函数且 `create` 返回 `ines_false`；真实实现则行数显著更多、带私有数据或 IRQ，且返回 `ines_true`。
 
@@ -48,10 +48,14 @@
 | 85 | 25 | `VRC7_data_t` | ✅ | ✅ | ✅ | Konami **VRC7**：FM(YM2413) 简化内核已接入（vrc.h §5b，单声道经 APU 扩展输入槽） |
 | 163 | 178 | `MMC163` | | ✅ | ❌ | 有完整实现（含 `reset/writehigh/readlow/writelow/hsync/fini`），但注册表未标注 `implemented` |
 | 210 | 142 | —（无私有状态） | | | ✅ | **Namco 175 / Namco 340**（Namco 163 的降本版，同一个 iNES 号）：8 窗口 1KB CHR、3 槽 8KB PRG、340 可选 H/V/单屏镜像；175/340 变体不区分（详见 `core/mapper/210.c` 文件头） |
+| 225 | 248 | `K1010_data_t` | | | ✅ | **ET-4310(60pin) / K-1010(72pin) 多合一板**（52 Games、58-in-1、64-in-1 等）：bank 号由**写入地址**译码（A14 高位 + A13 镜像 + A12 页大小 + A11-A6 PRG + A5-A0 CHR），PRG 16KB/32KB 两种模式、整块 8KB CHR、`$5800-$5FFF` 4×4bit 附加 RAM；无 IRQ |
+| 255 | 250 | `BMC110_data_t` | | | ✅ | **110-in-1 多合一板**：与 225 同构（资料原文即注明"看起来是 225 的重复"），位域命名不同（B/M/Z）但换算一致；**已知实现分歧**：只有 fceumm 把 CHR 页号最低 2 位改成取写入值，本实现按 Nestopia/Mesen/puNES 取地址译码，见 `core/mapper/255.c` 文件头 |
 
 > **实机验证状态（2026-09-20）**：**19**（Namco 163）已由用户实机验证，游戏运行无问题；
 > **17**（Super Magic Card）与 **210**（Namco 175/340）暂无可用 ROM，尚未实机验证（仅通过编译与静态检查）。
 > **32**（Irem G-101）与 **33**（Taito TC0190）已由用户用 `D:\NES\任天堂FC全集` 中的 ROM 实机验证通过。
+> **225 / 255**（多合一卡带）尚未实机验证，但已用 `build/dump_frame.ps1` 无头抓帧确认菜单画面正常：
+> 225 = `52 Games (U) [p]`、`58-in-1 [p]`、`64-in-1 (J) [p]`、`72-IN-1`；255 = `110-in-1 (Unl) [p]`、`115IN1`。
 
 > **Mapper 33 / 48 混标问题**：大量 mapper **048**（Taito TC0690，比 033 多一套 IRQ、镜像处理不同）的卡带
 > 在流传的 ROM 里被错误标注为 033（`Bakushou!! Jinsei Gekijou 2/3`、`Captain Saver`、`Don Doko Don 2`、
@@ -86,7 +90,7 @@
 |---|---|
 | 扫描线 IRQ（`hsync` + `ines_cpu_IRQ`） | 4, 5, 6, 12, 16, 17, 18, 19 |
 | `hsync`（无 IRQ，用于 CHR 切换特效） | 163 |
-| PRG + CHR 全切换 | 1, 4, 5, 6, 12, 16, 17, 18, 19, 163, 210 |
+| PRG + CHR 全切换 | 1, 4, 5, 6, 12, 16, 17, 18, 19, 163, 210, 225, 255 |
 | 仅 PRG 切换 | 2, 7, 11, 15 |
 | 仅 CHR 切换 | 3, 13 |
 | 无切换 | 0 |
@@ -96,9 +100,10 @@
 | nametable 窗口指向 CHR 页（ROM nametable，`ines_set_nt_chr_bank_n`） | 19 |
 | nametable 窗口指向 pattern RAM 页（CHR-RAM nametable，`ines_set_nt_pattern_bank_n`） | 17 |
 | 自定义 SRAM（`custom_sram = 1`，含写保护） | 17, 19 |
+| `$4020-$5FFF` 附加 RAM（`readlow` / `writelow`） | 17, 225, 255 |
 | 自由镜像排布（`ines_ppu_set_mirror`，含单屏选择） | 1, 6, 7, 16, 17, 18, 19, 21-26, 210 |
 | 扩展音（APU 扩展输入槽） | 19, 24, 26, 85 |
-| 私有数据 + `fini` | 1, 4, 5, 6, 9, 10, 12, 16, 17, 18, 19, 163 |
+| 私有数据 + `fini` | 1, 4, 5, 6, 9, 10, 12, 16, 17, 18, 19, 163, 225, 255 |
 | 镜像自带 trainer（复位入口覆盖，`host.reset_entry`） | 17 |
 
 ## 4. 桩文件（占位实现）
