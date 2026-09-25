@@ -18,12 +18,9 @@
 #include <stdlib.h>
 
 
-/* 语言菜单(id / 显示名)与语言 ID 都是 ASCII + UTF-8, 在 UNICODE 日志里要用 %S 打印 */
-#ifdef UNICODE
-#define  APP_FMT_S   ISTR("%S")
-#else
-#define  APP_FMT_S   ISTR("%s")
-#endif
+/* 语言菜单(id / 显示名)与语言 ID 都是 UTF-8 的 char*, 打日志前必须先用 ines_utf8_to_ines()
+   转成 ines_char_t 再用 %s: UNICODE 下 %S 会被 CRT 按当前 locale 逐字节转宽, 中日文会乱码。
+   (非日志用途的转换仍用本文件的 i18n_ui_from_utf8) */
 
 
 /* Windows SDK 的 LOCALE_SNAME 需要 Vista 以上; 这里显式定义以免 targetver 过低时缺符号 */
@@ -146,6 +143,9 @@ void i18n_ui_init(void)
 	char         tag[INES_I18N_ID_MAX * 2];
 	char         saved[INES_I18N_ID_MAX];
 	ines_cstr_t  cfg;
+	ines_char_t  szTag[INES_I18N_ID_MAX * 2];   /* 日志用: 下列 char* 转 ines_char_t 的缓冲 */
+	ines_char_t  szSaved[INES_I18N_ID_MAX];
+	ines_char_t  szCur[INES_I18N_ID_MAX];
 
 	i18n_ui_system_language(tag, count_of(tag));
 
@@ -165,14 +165,16 @@ void i18n_ui_init(void)
 		if(ines_i18n_set_language(saved) != 0)
 		{
 			INES_LOG(LOG_WAR, MOD_SYS,
-					 ISTR("i18n: saved language ") APP_FMT_S ISTR(" unavailable, keep ") APP_FMT_S ISTR("\n"),
-					 saved, ines_i18n_language());
+					 ISTR("i18n: saved language %s unavailable, keep %s\n"),
+					 ines_utf8_to_ines(szSaved, count_of(szSaved), saved),
+					 ines_utf8_to_ines(szCur, count_of(szCur), ines_i18n_language()));
 		}
 	}
 
 	INES_LOG(LOG_INF, MOD_SYS,
-			 ISTR("i18n: system language = ") APP_FMT_S ISTR(", using ") APP_FMT_S ISTR("\n"),
-			 tag, ines_i18n_language());
+			 ISTR("i18n: system language = %s, using %s\n"),
+			 ines_utf8_to_ines(szTag, count_of(szTag), tag),
+			 ines_utf8_to_ines(szCur, count_of(szCur), ines_i18n_language()));
 }
 
 void i18n_ui_fini(void)
@@ -212,6 +214,7 @@ BOOL i18n_ui_select_language(int index)
 {
 	ines_i18n_lang_t  langs[APP_LANG_ITEM_MAX];
 	char              id[INES_I18N_ID_MAX];
+	ines_char_t       szId[INES_I18N_ID_MAX];   /* 日志用: id 转 ines_char_t 的缓冲 */
 	int               count = ines_i18n_enum(NULL, 0);
 
 	if((index < 0) || (count <= 0) || (index >= count) || (count > APP_LANG_ITEM_MAX))
@@ -227,7 +230,8 @@ BOOL i18n_ui_select_language(int index)
 
 	SetConfigStr(ISTR("ui"), ISTR("language"), langs[index].id);
 
-	INES_LOG(LOG_INF, MOD_SYS, ISTR("i18n: language switched to ") APP_FMT_S ISTR("\n"), id);
+	INES_LOG(LOG_INF, MOD_SYS, ISTR("i18n: language switched to %s\n"),
+			 ines_utf8_to_ines(szId, count_of(szId), id));
 
 	return TRUE;
 }

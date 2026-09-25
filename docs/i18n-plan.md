@@ -636,7 +636,9 @@ static NSSize app_fit(id control, NSString* text)
 
 ### 16.3 win32 实施时的注意点
 
-- UNICODE 下日志格式串：key / 语言 id 是 `char*`，必须用 `%S`（`comm/i18n.c` 已用 `I18N_FMT_S` / `I18N_FMT_KEY` 宏，照抄即可）。
+- UNICODE 下日志格式串：key / 语言 id 是 UTF-8 的 `char*`，必须先用 `ines_utf8_to_ines()` 转成 `ines_char_t` 再用 `%s`。
+  **不要用 `%S`**：CRT 会按当前 locale 逐字节转宽，UTF-8 的中日文会变乱码（实测 `日本語` 打成 `鏃ユ湰瑾`）。
+  （`comm/i18n.c` 原有的 `I18N_FMT_S` / `I18N_FMT_KEY` 宏与 `win32/i18n_ui.c` 的 `APP_FMT_S` 已因此删除。）
 - `ines_i18n_text()` 返回进程内静态串，**切换语言后旧指针失效**，不要缓存；每次用时取。
 - 语言文件省略号统一写 ASCII `...`；win32 不需要 mac 那个 `…` 替换逻辑。
 - 布局逻辑收敛成"测量—定位"两趟的独立函数（决策 ④ 同样适用于 win32），别把尺寸计算散落在创建代码里。

@@ -184,6 +184,117 @@ static ines_cstr_t ines_default_log_path(ines_char_t* szBuf, ines_size_t szLen)
 }
 
 
+/* ---------------------------------------------------------------------------
+ * 日志文件写入: 一律按 UTF-8 落盘
+ *
+ * 两个目标的字符集不同(见 CMakeLists.txt 注释), 同一份 log.c 会被编译两次:
+ *   - inescore : 多字节(MBCS), ines_char_t == char。源码以 /utf-8 编译, 字面量
+ *                在二进制里本就是 UTF-8 字节, 直接写即可, 不能按 CP_ACP 再做转换(会把中文转坏)。
+ *   - iNES     : Unicode(_UNICODE), ines_char_t == wchar_t, 字面量是 UTF-16。
+ *                此时 _fputts()/_vftprintf() 会把 UTF-16 码元按字节写进文件
+ *                (连 ASCII 都是两字节一个字符, 文本编辑器打开就是乱码),
+ *                因此必须显式 WideCharToMultiByte(CP_UTF8) 后按字节写。
+ * 这样两个目标产出的 iNES.log 编码才一致(UTF-8), 与源码/文档的编码约定也一致。
+ * --------------------------------------------------------------------------- */
+
+#define LOG_LINE_CHARS   4096   /* 单条日志的字符数上限(超出截断), 与 INES_MAX_PATH 同规格 */
+#define LOG_UTF8_CHUNK   1024   /* UTF-16 -> UTF-8 的输出缓冲(字节), 长日志分段转换 */
+
+
+#if defined(WIN32) && defined(_UNICODE)
+
+/**
+ * 把一段 UTF-16 文本转成 UTF-8 写入日志文件。
+ * @param pfLog 已打开的日志文件
+ * @param str   UTF-16 文本(可为 NULL)
+ * @note 长文本分段转换: 一个 UTF-16 码元最多展开成 3 个 UTF-8 字节, 按最坏情况取分段长度;
+ *       分段边界若落在高位代理上则回退 1 个码元, 避免把代理对拆开。
+ */
+static void log_write_utf16(FILE* pfLog, ines_cstr_t str)
+{
+	char          szUtf8[LOG_UTF8_CHUNK];
+	ines_size_t   pos;
+	ines_size_t   total;
+
+	if(pfLog == NULL || str == NULL)
+		return;
+
+	total = (ines_size_t)_tcslen(str);
+	pos = 0;
+
+	while(pos < total)
+	{
+		ines_size_t  chunk = (ines_size_t)(sizeof(szUtf8) - 1) / 3;
+		ines_int_t   n;
+
+		if(chunk > total - pos)
+			chunk = total - pos;
+
+		/* 低位代理必须紧跟在高位代理之后, 别在此处断开 */
+		if(chunk > 1 && pos + chunk < total && str[pos + chunk - 1] >= 0xD800 && str[pos + chunk - 1] <= 0xDBFF)
+			chunk--;
+
+		n = (ines_int_t)WideCharToMultiByte(CP_UTF8, 0, str + pos, (int)chunk, szUtf8, (int)(sizeof(szUtf8) - 1), NULL, NULL);
+		if(n <= 0)
+			break;   /* 转换失败(含不可映射字符)就停在这里, 已写入的部分保留 */
+
+		fwrite(szUtf8, 1, (ines_size_t)n, pfLog);
+		pos += chunk;
+	}
+}
+
+#endif
+
+
+/**
+ * 把一条"本地编码"文本按 UTF-8 写入日志文件。
+ * @param pfLog 已打开的日志文件(可为 NULL, 此时静默返回)
+ * @param str   win32 Unicode 下为 UTF-16, 其它情况本身就是 UTF-8 字节
+ */
+static void log_write_text(FILE* pfLog, ines_cstr_t str)
+{
+	if(pfLog == NULL || str == NULL)
+		return;
+
+#if defined(WIN32) && defined(_UNICODE)
+	log_write_utf16(pfLog, str);
+#else
+	_fputts(str, pfLog);
+#endif
+}
+
+
+/* ---------------------------------------------------------------------------
+ * 日志参数侧: UTF-8 窄串 -> ines_char_t
+ *
+ * 与上面的落盘转换是同一个问题的两面: 落盘要保证 UTF-8, 参数也要先变成 ines_char_t
+ * 才能用 %s 打印(详见 comm/log.h 里 ines_utf8_to_ines 的说明)。
+ * --------------------------------------------------------------------------- */
+
+ines_cstr_t ines_utf8_to_ines(ines_str_t pDst, ines_size_t nDst, const char* pUtf8)
+{
+	if((pDst == NULL) || (nDst == 0))
+		return NULL;      /* 缓冲非法: 调用方保证不为 NULL, 这里只做兜底 */
+
+	pDst[0] = 0;
+
+	if(pUtf8 == NULL)
+		return pDst;
+
+#if defined(WIN32) && defined(_UNICODE)
+	/* 源串以 '\0' 结尾(-1), 由 API 一并转换终止符; 返回 0 表示失败(含目标缓冲不足) */
+	if(MultiByteToWideChar(CP_UTF8, 0, pUtf8, -1, pDst, (int)(nDst - 1)) <= 0)
+		pDst[0] = 0;
+#else
+	ines_strncpy(pDst, pUtf8, nDst - 1);
+#endif
+
+	pDst[nDst - 1] = 0;   /* 转换/拷贝都可能刚好填满, 统一封尾 */
+
+	return pDst;
+}
+
+
 void ines_log_r(ines_log_level_t level, ines_log_module_t module, ines_cstr_t strFmt, ...)
 {
 	va_list vl;
@@ -246,11 +357,16 @@ void ines_log_r(ines_log_level_t level, ines_log_module_t module, ines_cstr_t st
 
 	if(pfLog)
 	{
+		ines_char_t   szLine[LOG_LINE_CHARS];
+
 		ines_log_perfix(szPerfix, level);
 		va_start(vl, strFmt);
-		_fputts(szPerfix, pfLog);
-		_vftprintf(pfLog, strFmt, vl);
+		ines_vsnprintf(szLine, count_of(szLine), strFmt, vl);
 		va_end(vl);
+		szLine[count_of(szLine) - 1] = 0;   /* _vsntprintf 在输出被截断时不一定补 '\0' */
+
+		log_write_text(pfLog, szPerfix);
+		log_write_text(pfLog, szLine);
 		fflush(pfLog);
 	}
 
@@ -399,7 +515,7 @@ void ines_log(ines_log_level_t level, ines_log_module_t module, ines_cstr_t strF
 
 		if(pfLog)
 		{
-			_fputts(strBuffer, pfLog);
+			log_write_text(pfLog, strBuffer);
 			fflush(pfLog);
 		}
 	}

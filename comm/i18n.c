@@ -29,15 +29,12 @@
 /*
  * 本文件被分别编译进 inescore(MBCS) 与 iNES(UNICODE) 两个目标: ines_char_t 在
  * 前者是 char、后者是 wchar_t, 不能拿 WIN32 当宽窄判据 —— 一律按 _UNICODE 分支。
- * 语言文件的字节流与 key 则永远是窄 char(UTF-8), 所以 UNICODE 下日志格式串要用 %S。
+ * 语言文件的字节流与 key 则永远是窄 char(UTF-8), 打日志前必须用 ines_utf8_to_ines()
+ * 转成 ines_char_t 再用 %s: UNICODE 下 %S 会被 CRT 按当前 locale 逐字节转宽,
+ * 中日文语言名(日本語 / 简体中文) 会变成乱码。
  */
 #ifdef _UNICODE
-#define I18N_FMT_S      ISTR("%S")
-#define I18N_FMT_KEY    ISTR("%S.%S")
 #define I18N_WIDE_TEXT  1
-#else
-#define I18N_FMT_S      ISTR("%s")
-#define I18N_FMT_KEY    ISTR("%s.%s")
 #endif
 
 /*
@@ -599,6 +596,8 @@ static void i18n_register_file(ines_cstr_t path)
 	char*       data;
 	char        id[INES_I18N_ID_MAX];
 	char        name[INES_I18N_NAME_MAX];
+	ines_char_t szId[INES_I18N_ID_MAX];      /* 日志用: id / name 转 ines_char_t 后的缓冲 */
+	ines_char_t szName[INES_I18N_NAME_MAX];
 	int         i;
 
 	if (s_file_count >= INES_I18N_LANG_MAX)
@@ -645,7 +644,9 @@ static void i18n_register_file(ines_cstr_t path)
 	s_files[s_file_count].path[INES_MAX_PATH - 1] = '\0';
 	s_file_count++;
 
-	INES_LOG(LOG_INF, MOD_SYS, ISTR("i18n: language ") I18N_FMT_S ISTR(" (" ) I18N_FMT_S ISTR(") found\n"), id, name);
+	INES_LOG(LOG_INF, MOD_SYS, ISTR("i18n: language %s (%s) found\n"),
+			 ines_utf8_to_ines(szId, count_of(szId), id),
+			 ines_utf8_to_ines(szName, count_of(szName), name));
 }
 
 static void i18n_scan_dir(ines_cstr_t dir)
@@ -757,7 +758,8 @@ void ines_i18n_add_lang_dir(const char* dir)
 
 int ines_i18n_init(const char* preferred)
 {
-	const char* id;
+	const char*  id;
+	ines_char_t  szId[INES_I18N_ID_MAX];      /* 日志用: s_cur_id 转 ines_char_t 的缓冲 */
 
 	if (s_inited)
 	{
@@ -786,7 +788,7 @@ int ines_i18n_init(const char* preferred)
 		ines_i18n_set_language(id);
 	}
 
-	INES_LOG(LOG_INF, MOD_SYS, ISTR("i18n: language = ") I18N_FMT_S ISTR("\n"), s_cur_id);
+	INES_LOG(LOG_INF, MOD_SYS, ISTR("i18n: language = %s\n"), ines_utf8_to_ines(szId, count_of(szId), s_cur_id));
 
 	return 0;
 }
@@ -871,6 +873,7 @@ int ines_i18n_rescan(void)
 {
 	char                cur[INES_I18N_ID_MAX];
 	const i18n_file_t*  file;
+	ines_char_t         szId[INES_I18N_ID_MAX];   /* 日志用: cur / s_cur_id 转 ines_char_t 的缓冲 */
 
 	if (!s_inited)
 	{
@@ -895,14 +898,16 @@ int ines_i18n_rescan(void)
 		else
 		{
 			/* 当前语言的文件被删掉了: 回落英文, 由前端决定是否重新选择 */
-			INES_LOG(LOG_WAR, MOD_SYS, ISTR("i18n: language ") I18N_FMT_S ISTR(" gone after rescan, falling back to en\n"), cur);
+			INES_LOG(LOG_WAR, MOD_SYS, ISTR("i18n: language %s gone after rescan, falling back to en\n"),
+					 ines_utf8_to_ines(szId, count_of(szId), cur));
 			strncpy(s_cur_id, "en", sizeof(s_cur_id) - 1);
 			s_cur_id[sizeof(s_cur_id) - 1] = '\0';
 		}
 	}
 
-	INES_LOG(LOG_INF, MOD_SYS, ISTR("i18n: rescan done, ") ISTR("%d") ISTR(" language(s) available, current = ") I18N_FMT_S ISTR("\n"),
-			 s_file_count + 1, s_cur_id);
+	INES_LOG(LOG_INF, MOD_SYS,
+			 ISTR("i18n: rescan done, ") ISTR("%d") ISTR(" language(s) available, current = ") ISTR("%s") ISTR("\n"),
+			 s_file_count + 1, ines_utf8_to_ines(szId, count_of(szId), s_cur_id));
 
 	return s_file_count + 1;
 }
@@ -1025,6 +1030,7 @@ const char* ines_i18n_match(const char* lang_tag)
 int ines_i18n_set_language(const char* id)
 {
 	const i18n_file_t* file;
+	ines_char_t        szId[INES_I18N_ID_MAX];   /* 日志用: id 转 ines_char_t 的缓冲 */
 
 	if (!s_inited)
 	{
@@ -1047,7 +1053,8 @@ int ines_i18n_set_language(const char* id)
 	file = i18n_find_file(id);
 	if (file == NULL)
 	{
-		INES_LOG(LOG_WAR, MOD_SYS, ISTR("i18n: unknown language ") I18N_FMT_S ISTR("\n"), id);
+		INES_LOG(LOG_WAR, MOD_SYS, ISTR("i18n: unknown language %s\n"),
+				 ines_utf8_to_ines(szId, count_of(szId), id));
 		return -1;
 	}
 
@@ -1068,7 +1075,8 @@ const char* ines_i18n_language(void)
 
 ines_cstr_t ines_i18n_text(const char* key)
 {
-	int idx;
+	ines_char_t  szKey[INES_I18N_KEY_MAX];   /* 日志用: key 转 ines_char_t 的缓冲 */
+	int          idx;
 
 	if (!s_inited)
 	{
@@ -1092,7 +1100,8 @@ ines_cstr_t ines_i18n_text(const char* key)
 			s_unknown_buf[0] = '\0';
 		}
 
-		INES_LOG(LOG_WAR, MOD_SYS, ISTR("i18n: unknown key ") I18N_FMT_S ISTR("\n"), key);
+		INES_LOG(LOG_WAR, MOD_SYS, ISTR("i18n: unknown key %s\n"),
+				 ines_utf8_to_ines(szKey, count_of(szKey), key));
 
 		return s_unknown_buf;
 	}
