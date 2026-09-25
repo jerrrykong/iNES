@@ -7,9 +7,9 @@
 | 项目 | 数量 |
 |---|---|
 | Mapper 文件总数 | 256（`0.c` ~ `255.c`） |
-| 注册表标注 `implemented` | 27 |
+| 注册表标注 `implemented` | 28 |
 | 另有实质代码但未标注 | 1（Mapper **163**） |
-| 占位桩（未实现） | 228 |
+| 占位桩（未实现） | 227 |
 
 > 判定依据：桩文件统一为 **39 行**，只有 `reset` / `writehigh` 两个空函数且 `create` 返回 `ines_false`；真实实现则行数显著更多、带私有数据或 IRQ，且返回 `ines_true`。
 
@@ -42,12 +42,15 @@
 | 24 | 28 | `VRC6_data_t` | ✅ | ✅ | ✅ | Konami **VRC6a**：3 路扩展音已由 VRC6 引擎发声（经 APU 扩展输入槽） |
 | 25 | 30 | `VRC24_data_t` | ✅ | ✅ | ✅ | Konami **VRC2c/VRC4b/d/e** |
 | 26 | 28 | `VRC6_data_t` | ✅ | ✅ | ✅ | Konami **VRC6b**：A0/A1 交换、带 8K WRAM；3 路扩展音已发声 |
+| 32 | 212 | `G101_data_t` | | | ✅ | **Irem G-101**（52-pin DIP）：8KB PRG 双窗口（$8000/$C000 由 PRG 模式位交换角色，$C000/$E000 固定倒数第二/最后一页）、8×1KB CHR（$B000-$B007，掩码 $F007）、H/V 镜像；无 IRQ、无 WRAM。《Major League》(J) 硬线单屏 + `$9000` 失效，按 `rom.crc32_p == 0xC0FED437` 走特例分支 |
 | 85 | 25 | `VRC7_data_t` | ✅ | ✅ | ✅ | Konami **VRC7**：FM(YM2413) 简化内核已接入（vrc.h §5b，单声道经 APU 扩展输入槽） |
 | 163 | 178 | `MMC163` | | ✅ | ❌ | 有完整实现（含 `reset/writehigh/readlow/writelow/hsync/fini`），但注册表未标注 `implemented` |
 | 210 | 142 | —（无私有状态） | | | ✅ | **Namco 175 / Namco 340**（Namco 163 的降本版，同一个 iNES 号）：8 窗口 1KB CHR、3 槽 8KB PRG、340 可选 H/V/单屏镜像；175/340 变体不区分（详见 `core/mapper/210.c` 文件头） |
 
 > **实机验证状态（2026-09-20）**：**19**（Namco 163）已由用户实机验证，游戏运行无问题；
-> **17**（Super Magic Card）与 **210**（Namco 175/340）暂无可用 ROM，尚未实机验证（仅通过编译与静态检查）。
+> **17**（Super Magic Card）、**32**（Irem G-101）与 **210**（Namco 175/340）暂无可用 ROM，尚未实机验证（仅通过编译与静态检查）。
+> Mapper 32 的《Major League》(J) 硬线单屏（CIRAM A10 接 +5V）且 `$9000` 寄存器失效，
+> iNES 头无法表达（NES 2.0 用 submapper 区分），实现里按 `rom.crc32_p == 0xC0FED437` 走硬线分支。
 > 详细验证项见 [mapper-19-plan.md](mapper-19-plan.md) §5。
 
 > **VRC 家族共享实现**：21/22/23/25（VRC2/VRC4）、24/26（VRC6）、85（VRC7）的核心逻辑

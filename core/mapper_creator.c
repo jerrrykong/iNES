@@ -299,7 +299,7 @@ static ines_bool_t (*mapper_creator_func[MAX_MAPPER_CREATOR] )(ines_mapper_t* ) 
 	/* 029 */  mapper29_create,
 	/* 030 */  mapper30_create,
 	/* 031 */  mapper31_create,
-	/* 032 */  mapper32_create,
+	/* 032 */  mapper32_create, /* implemented -- Irem G-101 (8KB PRG 双窗口 + $8000/$C000 模式交换 / 8x1KB CHR / H-V 镜像, 无 IRQ) */
 	/* 033 */  mapper33_create,
 	/* 034 */  mapper34_create,
 	/* 035 */  mapper35_create,
