@@ -7,9 +7,9 @@
 | 项目 | 数量 |
 |---|---|
 | Mapper 文件总数 | 256（`0.c` ~ `255.c`） |
-| 注册表标注 `implemented` | 28 |
+| 注册表标注 `implemented` | 30 |
 | 另有实质代码但未标注 | 1（Mapper **163**） |
-| 占位桩（未实现） | 227 |
+| 占位桩（未实现） | 225 |
 
 > 判定依据：桩文件统一为 **39 行**，只有 `reset` / `writehigh` 两个空函数且 `create` 返回 `ines_false`；真实实现则行数显著更多、带私有数据或 IRQ，且返回 `ines_true`。
 
@@ -43,12 +43,26 @@
 | 25 | 30 | `VRC24_data_t` | ✅ | ✅ | ✅ | Konami **VRC2c/VRC4b/d/e** |
 | 26 | 28 | `VRC6_data_t` | ✅ | ✅ | ✅ | Konami **VRC6b**：A0/A1 交换、带 8K WRAM；3 路扩展音已发声 |
 | 32 | 212 | `G101_data_t` | | | ✅ | **Irem G-101**（52-pin DIP）：8KB PRG 双窗口（$8000/$C000 由 PRG 模式位交换角色，$C000/$E000 固定倒数第二/最后一页）、8×1KB CHR（$B000-$B007，掩码 $F007）、H/V 镜像；无 IRQ、无 WRAM。《Major League》(J) 硬线单屏 + `$9000` 失效，按 `rom.crc32_p == 0xC0FED437` 走特例分支 |
+| 33 | 193 | `TC0190_data_t` | | | ✅ | **Taito TC0190**：寄存器掩码 `$A003`（A0-A1 选组内寄存器、A13 选组、A14 未解码）；PRG 8KB 双窗口（`$C000`/`$E000` 固定倒数第二/最后一页）；CHR 为 2×2KB（寄存器值以 2KB 为单位、不丢 LSB）+ 4×1KB；镜像在 `$8000` bit6；**无 IRQ** |
+| 48 | 265 | `TC0690_data_t` | ✅ | ✅ | ✅ | **Taito TC0690**（033 的超集）：寄存器掩码 `$E003`（A0-A1 选组内、A13/A14 选组）；PRG/CHR 布局同 TC0190；镜像单独在 `$E000` bit6；IRQ 与 MMC3 同构（`$C000` reload **取反 XOR $FF**、`$C001` 重载、`$C002` 使能、`$C003` 应答关闭）。**已知取舍：资料称比 MMC3 晚约 4 个 CPU 周期，当前无周期级回调，与 MMC3 同时刻置位** |
 | 85 | 25 | `VRC7_data_t` | ✅ | ✅ | ✅ | Konami **VRC7**：FM(YM2413) 简化内核已接入（vrc.h §5b，单声道经 APU 扩展输入槽） |
 | 163 | 178 | `MMC163` | | ✅ | ❌ | 有完整实现（含 `reset/writehigh/readlow/writelow/hsync/fini`），但注册表未标注 `implemented` |
 | 210 | 142 | —（无私有状态） | | | ✅ | **Namco 175 / Namco 340**（Namco 163 的降本版，同一个 iNES 号）：8 窗口 1KB CHR、3 槽 8KB PRG、340 可选 H/V/单屏镜像；175/340 变体不区分（详见 `core/mapper/210.c` 文件头） |
 
 > **实机验证状态（2026-09-20）**：**19**（Namco 163）已由用户实机验证，游戏运行无问题；
-> **17**（Super Magic Card）、**32**（Irem G-101）与 **210**（Namco 175/340）暂无可用 ROM，尚未实机验证（仅通过编译与静态检查）。
+> **17**（Super Magic Card）与 **210**（Namco 175/340）暂无可用 ROM，尚未实机验证（仅通过编译与静态检查）。
+> **32**（Irem G-101）与 **33**（Taito TC0190）已由用户用 `D:\NES\任天堂FC全集` 中的 ROM 实机验证通过。
+
+> **Mapper 33 / 48 混标问题**：大量 mapper **048**（Taito TC0690，比 033 多一套 IRQ、镜像处理不同）的卡带
+> 在流传的 ROM 里被错误标注为 033（`Bakushou!! Jinsei Gekijou 2/3`、`Captain Saver`、`Don Doko Don 2`、
+> `Flintstones - The Rescue of Dino & Hoppy` 等）。当前 33 的实现不含 IRQ，这类卡带会缺少中断。
+> **Mapper 48 已于 2026-09-25 实现**，并在 `core/rom.c` 的 ROM 加载层加了 **Mapper ID 修正表**：
+> 按 PROM CRC32 把已确认的 4 个 ROM 从 33 改为 48（`0x1394E1A2` Bakushou 3、`0x49C84B4E` Don Doko Don 2、
+> `0x202DF297` Captain Saver、`0x547E6CC1` Flintstones）。
+> 资料点名但 ROM 缺失的 `Bubble Bobble 2 (J)`、`Jetsons (J)` 待补录；其余标注为 33 的 ROM 归属未定，保持原样。
+> 注意：修正后存档头里的 `mapperid` 也随之变为 48，修正前存的档会被判为不匹配而拒绝加载。
+> `D:\NES\任天堂FC全集` 中标注为 33 的 12 个 ROM 全部命中此风险，真正的 033 游戏是
+> `Akira`、`Bakushou!! Jinsei Gekijou`、`Don Doko Don`、`Insector X`。
 > Mapper 32 的《Major League》(J) 硬线单屏（CIRAM A10 接 +5V）且 `$9000` 寄存器失效，
 > iNES 头无法表达（NES 2.0 用 submapper 区分），实现里按 `rom.crc32_p == 0xC0FED437` 走硬线分支。
 > 详细验证项见 [mapper-19-plan.md](mapper-19-plan.md) §5。

@@ -300,7 +300,7 @@ static ines_bool_t (*mapper_creator_func[MAX_MAPPER_CREATOR] )(ines_mapper_t* ) 
 	/* 030 */  mapper30_create,
 	/* 031 */  mapper31_create,
 	/* 032 */  mapper32_create, /* implemented -- Irem G-101 (8KB PRG 双窗口 + $8000/$C000 模式交换 / 8x1KB CHR / H-V 镜像, 无 IRQ) */
-	/* 033 */  mapper33_create,
+	/* 033 */  mapper33_create, /* implemented -- Taito TC0190 (掩码 $A003: 8KB PRG 双窗口 + 2x2KB/4x1KB CHR + H-V 镜像, 无 IRQ) */
 	/* 034 */  mapper34_create,
 	/* 035 */  mapper35_create,
 	/* 036 */  mapper36_create,
@@ -315,7 +315,7 @@ static ines_bool_t (*mapper_creator_func[MAX_MAPPER_CREATOR] )(ines_mapper_t* ) 
 	/* 045 */  mapper45_create,
 	/* 046 */  mapper46_create,
 	/* 047 */  mapper47_create,
-	/* 048 */  mapper48_create,
+	/* 048 */  mapper48_create, /* implemented -- Taito TC0690 (TC0190 超集: 掩码 $E003, 8KB PRG 双窗口 + 2x2KB/4x1KB CHR + $E000 镜像 + MMC3 式 IRQ(reload 取反)) */
 	/* 049 */  mapper49_create,
 	/* 050 */  mapper50_create,
 	/* 051 */  mapper51_create,

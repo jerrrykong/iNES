@@ -182,6 +182,37 @@ ines_bool_t ines_rom_load_from_file(ines_rom_t*  p_rom, ines_cstr_t strFileName)
 	p_rom->crc32_p = calc_crc32(pPROM, PROM_size);
 	INES_LOG(LOG_NTY, MOD_ROM, ISTR("Calc PROM CRC32=0x%08X\n"), p_rom->crc32_p); 
 
+	/* Mapper ID 修正表：按 PROM CRC32 修正被错误标注的 iNES mapper 号。
+	   依据：IMA 资料「INES Mapper 048」列出的必须走 48 的卡带 + 用户实机确认（2026-09-25）——
+	   这几款 Taito TC0690（48）卡带的 dump 普遍被标成 33，而 33 不含 IRQ，游戏无法正常运行。
+	   （未在游戏中缺失的 Bubble Bobble 2 (J)、Jetsons (J) 待拿到 ROM 后补录；
+	     其余标注为 33 的 ROM 归属未定，保持原样不动。） */
+	{
+		static const struct {
+			ines_dword_t  crc;     /* PROM CRC32 */
+			ines_byte_t   wrong;   /* 头里标注的错误 mapper 号 */
+			ines_byte_t   right;   /* 实际 mapper 号 */
+		} mapper_id_fix[] = {
+			{ 0x1394E1A2u, 33, 48 },  /* Bakushou!! Jinsei Gekijou 3 (J) */
+			{ 0x49C84B4Eu, 33, 48 },  /* Don Doko Don 2 (J) */
+			{ 0x202DF297u, 33, 48 },  /* Captain Saver (J) */
+			{ 0x547E6CC1u, 33, 48 },  /* Flintstones, The - The Rescue of Dino & Hoppy (J) */
+		};
+		ines_size_t  i;
+
+		for(i = 0; i < sizeof(mapper_id_fix)/sizeof(mapper_id_fix[0]); i++)
+		{
+			if(p_rom->crc32_p == mapper_id_fix[i].crc && mapper_num == mapper_id_fix[i].wrong)
+			{
+				INES_LOG(LOG_NTY, MOD_ROM, ISTR("Fix wrong mapper ID: %d -> %d (PROM CRC32=0x%08X)\n"),
+					(ines_int_t)mapper_num, (ines_int_t)mapper_id_fix[i].right, p_rom->crc32_p);
+				mapper_num = mapper_id_fix[i].right;
+				p_rom->mapper_num = mapper_num;
+				break;
+			}
+		}
+	}
+
 	// ROM  patch 
 	if(p_rom->crc32_p == 0x57970078)
 	{
