@@ -15,6 +15,8 @@
 #include "../comm/log.h"
 
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <errno.h>
 
 
 NSString* const INESLanguageDidChangeNotification = @"INESLanguageDidChangeNotification";
@@ -48,7 +50,15 @@ void iNES_i18n_init(void)
 {
 	NSString*     preferred;
 	NSString*     bundleLang;
+	NSString*     userLang   = nil;
 	ines_cstr_t   saved;
+
+	/* 先确保 <数据目录>/lang 存在(用户可往里放自定义语言文件), 再扫描 */
+	userLang = iNES_i18n_user_lang_dir();
+	if (userLang != nil)
+	{
+		INES_LOG(LOG_INF, MOD_SYS, ISTR("i18n: user language dir = ") ISTR("%s\n"), [userLang UTF8String]);
+	}
 
 	/* bundle 内的 Resources/lang(优先级低于 <数据目录>/lang) */
 	bundleLang = [[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:@"lang"];
@@ -147,6 +157,34 @@ NSArray<NSArray<NSString*>*>* iNES_i18n_languages(void)
 	free(langs);
 
 	return out;
+}
+
+NSString* iNES_i18n_user_lang_dir(void)
+{
+	ines_char_t  data_dir[INES_MAX_PATH];
+	ines_char_t  lang_dir[INES_MAX_PATH];
+
+	data_dir[0] = '\0';
+	ines_get_data_dir(data_dir, INES_MAX_PATH);
+	if (data_dir[0] == '\0')
+	{
+		return nil;
+	}
+
+	ines_snprintf(lang_dir, INES_MAX_PATH, ISTR("%s/lang"), data_dir);
+
+	/* 目录不存在就建出来: 用户往这里丢 *.ini 即可新增语言, 不必动 bundle */
+	if (mkdir(lang_dir, 0755) != 0 && errno != EEXIST)
+	{
+		return nil;
+	}
+
+	return [NSString stringWithUTF8String:lang_dir];
+}
+
+int iNES_i18n_rescan(void)
+{
+	return ines_i18n_rescan();
 }
 
 BOOL iNES_i18n_set_language(NSString* langID)

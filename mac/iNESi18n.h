@@ -33,6 +33,18 @@ NSString* iNES_i18n_text_format(const char* key, ...);
 /** 语言清单: @[ @[id, name], ... ], 第一项恒为内置英文 */
 NSArray<NSArray<NSString*>*>* iNES_i18n_languages(void);
 
+/**
+ * 重新扫描语言目录(动态加载): 运行时往 <数据目录>/lang 丢进(或改/删) *.ini 后,
+ * 无需重启, 下次打开"语言"菜单即可看到。返回可用语言数(含内置英文)。
+ */
+int iNES_i18n_rescan(void);
+
+/**
+ * 用户可放自定义语言文件的目录(<数据目录>/lang), 优先级高于 bundle 内的同名语言。
+ * 目录不存在时会被创建; 失败返回 nil。
+ */
+NSString* iNES_i18n_user_lang_dir(void);
+
 /** 切换语言(写回 config.ini 并广播 INESLanguageDidChangeNotification); 失败返回 NO */
 BOOL iNES_i18n_set_language(NSString* langID);
 

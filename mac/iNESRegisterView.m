@@ -19,6 +19,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "../comm/i18n.h"
+
 
 // ---------------------------------------------------------------------
 // 布局常量(单位: 字符列)
@@ -83,65 +85,67 @@ typedef struct _ines_rv_def_
 	ines_int_t     width;     // 8 / 16 / 64 / 0(纯文本行)
 	unsigned int   wmask;     // 可写位掩码(0 = 整行只读)
 	const char*    bits;      // 位缩写, MSB -> LSB
-	const char*    note;      // 说明
+	const char*    note_zh;   // 说明(简体中文)
+	const char*    note_zh_tw;// 说明(繁体中文)
+	const char*    note_en;   // 说明(英文, 术语类字面量, 不进语言文件)
 } ines_rv_def_t;
 
 
 static const ines_rv_def_t  s_defs[IDBG_REG_COUNT] =
 {
 	/* ---------------- CPU ---------------- */
-	{ IDBG_REG_A,          "A",         "-",      IDBG_RV_FMT_HEX,  8, 0x00FF, "76543210",         "累加器" },
-	{ IDBG_REG_X,          "X",         "-",      IDBG_RV_FMT_HEX,  8, 0x00FF, "76543210",         "变址寄存器 X" },
-	{ IDBG_REG_Y,          "Y",         "-",      IDBG_RV_FMT_HEX,  8, 0x00FF, "76543210",         "变址寄存器 Y" },
-	{ IDBG_REG_P,          "P",         "-",      IDBG_RV_FMT_HEX,  8, 0x00FF, "NVRBDIZC",         "状态 N V R B D I Z C" },
-	{ IDBG_REG_SP,         "SP",        "-",      IDBG_RV_FMT_HEX,  8, 0x00FF, "76543210",         "栈指针(页 1)" },
-	{ IDBG_REG_PC,         "PC",        "-",      IDBG_RV_FMT_HEX, 16, 0xFFFF, "FEDCBA9876543210", "程序计数器" },
-	{ IDBG_REG_IRQ_PEND,   "IRQ.PEND",  "-",      IDBG_RV_FMT_HEX,  8, 0x0007, "     AMN",         "NMI/MMC/APU 挂起" },
-	{ IDBG_REG_CYCLES,     "CYCLES",    "-",      IDBG_RV_FMT_DEC, 64, 0x0000, "",                 "累计周期(只读)" },
+	{ IDBG_REG_A,          "A",         "-",      IDBG_RV_FMT_HEX,  8, 0x00FF, "76543210",         "累加器", "累加器", "Accumulator" },
+	{ IDBG_REG_X,          "X",         "-",      IDBG_RV_FMT_HEX,  8, 0x00FF, "76543210",         "变址寄存器 X", "變址暫存器 X", "Index register X" },
+	{ IDBG_REG_Y,          "Y",         "-",      IDBG_RV_FMT_HEX,  8, 0x00FF, "76543210",         "变址寄存器 Y", "變址暫存器 Y", "Index register Y" },
+	{ IDBG_REG_P,          "P",         "-",      IDBG_RV_FMT_HEX,  8, 0x00FF, "NVRBDIZC",         "状态 N V R B D I Z C", "狀態 N V R B D I Z C", "Status N V R B D I Z C" },
+	{ IDBG_REG_SP,         "SP",        "-",      IDBG_RV_FMT_HEX,  8, 0x00FF, "76543210",         "栈指针(页 1)", "堆疊指標（頁 1）", "Stack pointer (page 1)" },
+	{ IDBG_REG_PC,         "PC",        "-",      IDBG_RV_FMT_HEX, 16, 0xFFFF, "FEDCBA9876543210", "程序计数器", "程式計數器", "Program counter" },
+	{ IDBG_REG_IRQ_PEND,   "IRQ.PEND",  "-",      IDBG_RV_FMT_HEX,  8, 0x0007, "     AMN",         "NMI/MMC/APU 挂起", "NMI/MMC/APU 擱置", "NMI/MMC/APU pending" },
+	{ IDBG_REG_CYCLES,     "CYCLES",    "-",      IDBG_RV_FMT_DEC, 64, 0x0000, "",                 "累计周期(只读)", "累計週期（唯讀）", "Total cycles (read-only)" },
 
 	/* ---------------- PPU ---------------- */
-	{ IDBG_REG_PPUCTRL,    "PPUCTRL",   "$2000",  IDBG_RV_FMT_HEX,  8, 0x00FF, "NMSBsInn",         "NMI/图样/尺寸/增量/NT" },
-	{ IDBG_REG_PPUMASK,    "PPUMASK",   "$2001",  IDBG_RV_FMT_HEX,  8, 0x00FF, "BGRsbmMg",         "色彩/BG/SPR 显示控制" },
-	{ IDBG_REG_PPUSTATUS,  "PPUSTATUS", "$2002",  IDBG_RV_FMT_HEX,  8, 0x0000, "VSO-----",         "VBlank/Spr0/溢出(只读)" },
-	{ IDBG_REG_OAMADDR,    "OAMADDR",   "$2003",  IDBG_RV_FMT_HEX,  8, 0x00FF, "76543210",         "OAM 地址" },
-	{ IDBG_REG_OAMDATA,    "OAMDATA",   "$2004",  IDBG_RV_FMT_HEX,  8, 0x00FF, "76543210",         "OAM 数据(写后地址+1)" },
-	{ IDBG_REG_PPUSCROLL,  "PPUSCROLL", "$2005",  IDBG_RV_FMT_TEXT, 0, 0x0000, "",                 "X=--- FX=- Y=--- FY=-" },
-	{ IDBG_REG_PPU_T,      "PPUADDR.T", "$2006T", IDBG_RV_FMT_HEX, 16, 0x7FFF, "0YYYNNYYYYYXXXXX", "内部 T(直改字段)" },
-	{ IDBG_REG_PPU_V,      "PPUADDR.V", "$2006V", IDBG_RV_FMT_HEX, 16, 0x7FFF, "0YYYNNYYYYYXXXXX", "当前 VRAM 地址 V" },
-	{ IDBG_REG_PPUDATA,    "PPUDATA",   "$2007",  IDBG_RV_FMT_HEX,  8, 0x00FF, "76543210",         "写: VRAM; 读: 缓冲" },
-	{ IDBG_REG_SCANLINE,   "SCANLINE",  "-",      IDBG_RV_FMT_DEC, 16, 0x0000, "FEDCBA9876543210", "当前扫描行(只读)" },
-	{ IDBG_REG_VBLANK,     "VBLANK",    "-",      IDBG_RV_FMT_HEX,  8, 0x0000, "-------V",         "VBlank 标志(只读)" },
-	{ IDBG_REG_TOGGLE,     "TOGGLE",    "-",      IDBG_RV_FMT_HEX,  8, 0x0000, "-------T",         "0=首字节 1=次字节" },
+	{ IDBG_REG_PPUCTRL,    "PPUCTRL",   "$2000",  IDBG_RV_FMT_HEX,  8, 0x00FF, "NMSBsInn",         "NMI/图样/尺寸/增量/NT", "NMI/圖樣/尺寸/增量/NT", "NMI/Pattern/Size/Incr/NT" },
+	{ IDBG_REG_PPUMASK,    "PPUMASK",   "$2001",  IDBG_RV_FMT_HEX,  8, 0x00FF, "BGRsbmMg",         "色彩/BG/SPR 显示控制", "色彩/BG/SPR 顯示控制", "Color/BG/SPR show control" },
+	{ IDBG_REG_PPUSTATUS,  "PPUSTATUS", "$2002",  IDBG_RV_FMT_HEX,  8, 0x0000, "VSO-----",         "VBlank/Spr0/溢出(只读)", "VBlank/Spr0/溢位（唯讀）", "VBlank/Spr0/Overflow (RO)" },
+	{ IDBG_REG_OAMADDR,    "OAMADDR",   "$2003",  IDBG_RV_FMT_HEX,  8, 0x00FF, "76543210",         "OAM 地址", "OAM 位址", "OAM address" },
+	{ IDBG_REG_OAMDATA,    "OAMDATA",   "$2004",  IDBG_RV_FMT_HEX,  8, 0x00FF, "76543210",         "OAM 数据(写后地址+1)", "OAM 資料（寫入後位址+1）", "OAM data (addr+1 on write)" },
+	{ IDBG_REG_PPUSCROLL,  "PPUSCROLL", "$2005",  IDBG_RV_FMT_TEXT, 0, 0x0000, "",                 "X=--- FX=- Y=--- FY=-", "X=--- FX=- Y=--- FY=-", "X=--- FX=- Y=--- FY=-" },
+	{ IDBG_REG_PPU_T,      "PPUADDR.T", "$2006T", IDBG_RV_FMT_HEX, 16, 0x7FFF, "0YYYNNYYYYYXXXXX", "内部 T(直改字段)", "內部 T（直接修改欄位）", "Internal T (direct edit)" },
+	{ IDBG_REG_PPU_V,      "PPUADDR.V", "$2006V", IDBG_RV_FMT_HEX, 16, 0x7FFF, "0YYYNNYYYYYXXXXX", "当前 VRAM 地址 V", "目前 VRAM 位址 V", "Current VRAM address V" },
+	{ IDBG_REG_PPUDATA,    "PPUDATA",   "$2007",  IDBG_RV_FMT_HEX,  8, 0x00FF, "76543210",         "写: VRAM; 读: 缓冲", "寫：VRAM；讀：緩衝", "Write: VRAM; Read: buffer" },
+	{ IDBG_REG_SCANLINE,   "SCANLINE",  "-",      IDBG_RV_FMT_DEC, 16, 0x0000, "FEDCBA9876543210", "当前扫描行(只读)", "目前掃描行（唯讀）", "Current scanline (RO)" },
+	{ IDBG_REG_VBLANK,     "VBLANK",    "-",      IDBG_RV_FMT_HEX,  8, 0x0000, "-------V",         "VBlank 标志(只读)", "VBlank 旗標（唯讀）", "VBlank flag (read-only)" },
+	{ IDBG_REG_TOGGLE,     "TOGGLE",    "-",      IDBG_RV_FMT_HEX,  8, 0x0000, "-------T",         "0=首字节 1=次字节", "0=首位元組 1=次位元組", "0=first byte 1=second" },
 
 	/* ---------------- APU ---------------- */
-	{ IDBG_REG_P1VOL,      "P1VOL",     "$4000",  IDBG_RV_FMT_HEX,  8, 0x00FF, "ddLCvvvv",         "音量/包络/占空比" },
-	{ IDBG_REG_P1SWP,      "P1SWP",     "$4001",  IDBG_RV_FMT_HEX,  8, 0x00FF, "EpppNsss",         "扫频" },
-	{ IDBG_REG_P1TLO,      "P1TLO",     "$4002",  IDBG_RV_FMT_HEX,  8, 0x00FF, "tttttttt",         "定时器低 8 位" },
-	{ IDBG_REG_P1THI,      "P1THI",     "$4003",  IDBG_RV_FMT_HEX,  8, 0x00FF, "lllllttt",         "长度/定时器高 3 位" },
-	{ IDBG_REG_P2VOL,      "P2VOL",     "$4004",  IDBG_RV_FMT_HEX,  8, 0x00FF, "ddLCvvvv",         "音量/包络/占空比" },
-	{ IDBG_REG_P2SWP,      "P2SWP",     "$4005",  IDBG_RV_FMT_HEX,  8, 0x00FF, "EpppNsss",         "扫频" },
-	{ IDBG_REG_P2TLO,      "P2TLO",     "$4006",  IDBG_RV_FMT_HEX,  8, 0x00FF, "tttttttt",         "定时器低 8 位" },
-	{ IDBG_REG_P2THI,      "P2THI",     "$4007",  IDBG_RV_FMT_HEX,  8, 0x00FF, "lllllttt",         "长度/定时器高 3 位" },
-	{ IDBG_REG_TRLIN,      "TRLIN",     "$4008",  IDBG_RV_FMT_HEX,  8, 0x00FF, "Crrrrrrr",         "线性计数器" },
-	{ IDBG_REG_TR_UNUSED,  "TR.UNUSED", "$4009",  IDBG_RV_FMT_HEX,  8, 0x0000, "--------",         "保留(未使用)" },
-	{ IDBG_REG_TRTLO,      "TRTLO",     "$400A",  IDBG_RV_FMT_HEX,  8, 0x00FF, "tttttttt",         "定时器低 8 位" },
-	{ IDBG_REG_TRTHI,      "TRTHI",     "$400B",  IDBG_RV_FMT_HEX,  8, 0x00FF, "lllllttt",         "长度/定时器高 3 位" },
-	{ IDBG_REG_NSVOL,      "NSVOL",     "$400C",  IDBG_RV_FMT_HEX,  8, 0x003F, "--LCvvvv",         "音量/包络(位 7-6 未用)" },
-	{ IDBG_REG_NS_UNUSED,  "NS.UNUSED", "$400D",  IDBG_RV_FMT_HEX,  8, 0x0000, "--------",         "保留(未使用)" },
-	{ IDBG_REG_NSFRQ,      "NSFRQ",     "$400E",  IDBG_RV_FMT_HEX,  8, 0x00FF, "Mppppppp",         "模式/周期" },
-	{ IDBG_REG_NSLEN,      "NSLEN",     "$400F",  IDBG_RV_FMT_HEX,  8, 0x00F8, "lllll---",         "长度(位 2-0 未用)" },
-	{ IDBG_REG_DMFREQ,     "DMFREQ",    "$4010",  IDBG_RV_FMT_HEX,  8, 0x00FF, "ILrrrrrr",         "IRQ/循环/速率" },
-	{ IDBG_REG_DMDAC,      "DMDAC",     "$4011",  IDBG_RV_FMT_HEX,  8, 0x007F, "-ddddddd",         "DAC 直写" },
-	{ IDBG_REG_DMADDR,     "DMADDR",    "$4012",  IDBG_RV_FMT_HEX,  8, 0x00FF, "aaaaaaaa",         "采样起始地址" },
-	{ IDBG_REG_DMLEN,      "DMLEN",     "$4013",  IDBG_RV_FMT_HEX,  8, 0x00FF, "llllllll",         "采样长度" },
-	{ IDBG_REG_APUCTRL,    "APUCTRL",   "$4015",  IDBG_RV_FMT_HEX,  8, 0x001F, "---DNT21",         "声道使能(写)" },
-	{ IDBG_REG_APUSTAT,    "APUSTAT",   "$4015R", IDBG_RV_FMT_HEX,  8, 0x0000, "FD-dNT21",         "状态(只读, 不清 IRQ)" },
-	{ IDBG_REG_FRAMECTR,   "FRAMECTR",  "$4017",  IDBG_RV_FMT_HEX,  8, 0x00C0, "MI------",         "帧计数器模式" },
+	{ IDBG_REG_P1VOL,      "P1VOL",     "$4000",  IDBG_RV_FMT_HEX,  8, 0x00FF, "ddLCvvvv",         "音量/包络/占空比", "音量/包絡/占空比", "Volume/Envelope/Duty" },
+	{ IDBG_REG_P1SWP,      "P1SWP",     "$4001",  IDBG_RV_FMT_HEX,  8, 0x00FF, "EpppNsss",         "扫频", "掃頻", "Sweep" },
+	{ IDBG_REG_P1TLO,      "P1TLO",     "$4002",  IDBG_RV_FMT_HEX,  8, 0x00FF, "tttttttt",         "定时器低 8 位", "計時器低 8 位元", "Timer low 8 bits" },
+	{ IDBG_REG_P1THI,      "P1THI",     "$4003",  IDBG_RV_FMT_HEX,  8, 0x00FF, "lllllttt",         "长度/定时器高 3 位", "長度/計時器高 3 位元", "Length/Timer high 3" },
+	{ IDBG_REG_P2VOL,      "P2VOL",     "$4004",  IDBG_RV_FMT_HEX,  8, 0x00FF, "ddLCvvvv",         "音量/包络/占空比", "音量/包絡/占空比", "Volume/Envelope/Duty" },
+	{ IDBG_REG_P2SWP,      "P2SWP",     "$4005",  IDBG_RV_FMT_HEX,  8, 0x00FF, "EpppNsss",         "扫频", "掃頻", "Sweep" },
+	{ IDBG_REG_P2TLO,      "P2TLO",     "$4006",  IDBG_RV_FMT_HEX,  8, 0x00FF, "tttttttt",         "定时器低 8 位", "計時器低 8 位元", "Timer low 8 bits" },
+	{ IDBG_REG_P2THI,      "P2THI",     "$4007",  IDBG_RV_FMT_HEX,  8, 0x00FF, "lllllttt",         "长度/定时器高 3 位", "長度/計時器高 3 位元", "Length/Timer high 3" },
+	{ IDBG_REG_TRLIN,      "TRLIN",     "$4008",  IDBG_RV_FMT_HEX,  8, 0x00FF, "Crrrrrrr",         "线性计数器", "線性計數器", "Linear counter" },
+	{ IDBG_REG_TR_UNUSED,  "TR.UNUSED", "$4009",  IDBG_RV_FMT_HEX,  8, 0x0000, "--------",         "保留(未使用)", "保留（未使用）", "Reserved (unused)" },
+	{ IDBG_REG_TRTLO,      "TRTLO",     "$400A",  IDBG_RV_FMT_HEX,  8, 0x00FF, "tttttttt",         "定时器低 8 位", "計時器低 8 位元", "Timer low 8 bits" },
+	{ IDBG_REG_TRTHI,      "TRTHI",     "$400B",  IDBG_RV_FMT_HEX,  8, 0x00FF, "lllllttt",         "长度/定时器高 3 位", "長度/計時器高 3 位元", "Length/Timer high 3" },
+	{ IDBG_REG_NSVOL,      "NSVOL",     "$400C",  IDBG_RV_FMT_HEX,  8, 0x003F, "--LCvvvv",         "音量/包络(位 7-6 未用)", "音量/包絡（位元 7-6 未用）", "Volume/Envelope (b7-6 NC)" },
+	{ IDBG_REG_NS_UNUSED,  "NS.UNUSED", "$400D",  IDBG_RV_FMT_HEX,  8, 0x0000, "--------",         "保留(未使用)", "保留（未使用）", "Reserved (unused)" },
+	{ IDBG_REG_NSFRQ,      "NSFRQ",     "$400E",  IDBG_RV_FMT_HEX,  8, 0x00FF, "Mppppppp",         "模式/周期", "模式/週期", "Mode/Period" },
+	{ IDBG_REG_NSLEN,      "NSLEN",     "$400F",  IDBG_RV_FMT_HEX,  8, 0x00F8, "lllll---",         "长度(位 2-0 未用)", "長度（位元 2-0 未用）", "Length (b2-0 unused)" },
+	{ IDBG_REG_DMFREQ,     "DMFREQ",    "$4010",  IDBG_RV_FMT_HEX,  8, 0x00FF, "ILrrrrrr",         "IRQ/循环/速率", "IRQ/循環/速率", "IRQ/Loop/Rate" },
+	{ IDBG_REG_DMDAC,      "DMDAC",     "$4011",  IDBG_RV_FMT_HEX,  8, 0x007F, "-ddddddd",         "DAC 直写", "DAC 直接寫入", "DAC direct write" },
+	{ IDBG_REG_DMADDR,     "DMADDR",    "$4012",  IDBG_RV_FMT_HEX,  8, 0x00FF, "aaaaaaaa",         "采样起始地址", "取樣起始位址", "Sample start address" },
+	{ IDBG_REG_DMLEN,      "DMLEN",     "$4013",  IDBG_RV_FMT_HEX,  8, 0x00FF, "llllllll",         "采样长度", "取樣長度", "Sample length" },
+	{ IDBG_REG_APUCTRL,    "APUCTRL",   "$4015",  IDBG_RV_FMT_HEX,  8, 0x001F, "---DNT21",         "声道使能(写)", "聲道啟用（寫入）", "Channel enable (write)" },
+	{ IDBG_REG_APUSTAT,    "APUSTAT",   "$4015R", IDBG_RV_FMT_HEX,  8, 0x0000, "FD-dNT21",         "状态(只读, 不清 IRQ)", "狀態（唯讀，不清除 IRQ）", "Status (RO, no IRQ ack)" },
+	{ IDBG_REG_FRAMECTR,   "FRAMECTR",  "$4017",  IDBG_RV_FMT_HEX,  8, 0x00C0, "MI------",         "帧计数器模式", "幀計數器模式", "Frame counter mode" },
 
 	/* ---------------- I/O ---------------- */
-	{ IDBG_REG_OAMDMA,     "OAMDMA",    "$4014",  IDBG_RV_FMT_HEX,  8, 0x00FF, "hhhhhhhh",         "写即触发 256B DMA" },
-	{ IDBG_REG_JOYPAD1,    "JOYPAD1",   "$4016",  IDBG_RV_FMT_HEX,  8, 0x0001, "-------S",         "手柄 strobe(写)" },
-	{ IDBG_REG_JOYPAD2,    "JOYPAD2",   "$4017R", IDBG_RV_FMT_HEX,  8, 0x0000, "RLDUSsBA",         "手柄 2 按键(读)" },
+	{ IDBG_REG_OAMDMA,     "OAMDMA",    "$4014",  IDBG_RV_FMT_HEX,  8, 0x00FF, "hhhhhhhh",         "写即触发 256B DMA", "寫入即觸發 256B DMA", "Write triggers 256B DMA" },
+	{ IDBG_REG_JOYPAD1,    "JOYPAD1",   "$4016",  IDBG_RV_FMT_HEX,  8, 0x0001, "-------S",         "手柄 strobe(写)", "手把 strobe（寫入）", "Joypad strobe (write)" },
+	{ IDBG_REG_JOYPAD2,    "JOYPAD2",   "$4017R", IDBG_RV_FMT_HEX,  8, 0x0000, "RLDUSsBA",         "手柄 2 按键(读)", "手把 2 按鍵（讀取）", "Joypad 2 buttons (read)" },
 };
 
 
@@ -160,6 +164,43 @@ static const struct _ines_rv_group_
 	{ "APU", 20, 23 },
 	{ "I/O", 43,  3 },
 };
+
+
+// ---------------------------------------------------------------------
+// 说明文本缓存
+// 与 win32/wRegister.c 的 wReg_InitTexts() 同构: 定义表是 UTF-8 常量,
+// 建视图与切换语言时各转换一次, 绘制热路径(50ms tick)不再做编码转换。
+// 说明属"术语类描述", 按方案 §10.1 不进语言文件: 简体中文用 note_zh,
+// 繁体中文(TW/HK/Hant)用 note_zh_tw, 其余语言一律用 note_en(英文)。
+// ---------------------------------------------------------------------
+static NSString*  s_noteText[IDBG_REG_COUNT] = { NULL };
+
+static void idbg_rv_init_texts(void)
+{
+	ines_int_t   i;
+	const char*  lang = ines_i18n_language();
+	ines_int_t   zh   = ((lang != NULL) && (lang[0] == 'z') && (lang[1] == 'h'));
+	ines_int_t   tw   = ((zh != 0) &&
+						 ((strstr(lang, "TW") != NULL) || (strstr(lang, "HK") != NULL) ||
+						  (strstr(lang, "Hant") != NULL)));
+
+	for (i = 0; i < IDBG_REG_COUNT; i++)
+	{
+		const char*  s;
+
+		if (tw != 0)
+			s = s_defs[i].note_zh_tw;
+		else if (zh != 0)
+			s = s_defs[i].note_zh;
+		else
+			s = s_defs[i].note_en;
+
+		if ((s == NULL) || (s[0] == '\0'))
+			s = s_defs[i].note_en;                  // 兜底: 缺中文说明时用英文
+
+		s_noteText[i] = ((s != NULL) && (s[0] != '\0')) ? [NSString stringWithUTF8String:s] : @"";
+	}
+}
 
 
 // ---------------------------------------------------------------------
@@ -403,6 +444,8 @@ static NSFont* idbg_rv_bold_font(void)
 	if (self == nil)
 		return nil;
 
+	idbg_rv_init_texts();
+
 	_startLine = 0;
 	_curLine   = 1;                 // 默认选中 CPU 组的第一个寄存器(A)
 	_cursorCol = IDBG_RV_CUR_VALUE;
@@ -443,12 +486,29 @@ static NSFont* idbg_rv_bold_font(void)
 	[self layoutScrollers];
 	[self updateScrollers];
 
+	// 切换界面语言后刷新说明列(名称/地址/值/位格是术语, 不翻译)
+	[[NSNotificationCenter defaultCenter] addObserver:self
+											 selector:@selector(ines_languageDidChange:)
+												 name:INESLanguageDidChangeNotification
+											   object:nil];
+
 	return self;
 }
 
 - (instancetype)init
 {
 	return [self initWithFrame:NSZeroRect];
+}
+
+- (void)dealloc
+{
+	[[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (void)ines_languageDidChange:(NSNotification*)note
+{
+	idbg_rv_init_texts();
+	[self setNeedsDisplayAll];
 }
 
 + (NSSize)suggestedContentSize
@@ -1531,7 +1591,7 @@ static void idbg_rv_stroke_focus(NSRect rc)
 				if (pDef->reg_id == IDBG_REG_PPUSCROLL)
 					note = idbg_rv_scroll_text(pRegs);
 				else
-					note = idbg_rv_str(pDef->note);
+					note = (s_noteText[reg] != nil) ? s_noteText[reg] : idbg_rv_str(pDef->note_en);
 
 				[note drawAtPoint:NSMakePoint(px + IDBG_RV_COL_NOTE * _charW, y)
 				   withAttributes:_attrsNote];
