@@ -70,7 +70,7 @@ struct _ines_rom_ {
 	ines_byte_t        has_sram;
 	ines_byte_t        has_trainer;
 	ines_byte_t        PROM_block_num;
-	ines_byte_t        VROM_block_num;
+	ines_byte_t        VROM_block_num;   /* 8KB 块数；文件实际 CHR 大于头声明时按文件修正 */
 	ines_byte_t        trainer_data[INES_TRAINER_BLOCK_SIZE];
 	ines_byte_t*       pPROMs;
 	ines_byte_t*       pVROMs;

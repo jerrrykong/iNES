@@ -193,10 +193,11 @@ void ines_log_r(ines_log_level_t level, ines_log_module_t module, ines_cstr_t st
 
 	static FILE* pfLog = NULL;
 	static int lines = 0;
+	static ines_bool_t  path_failed = ines_false;  /* 所有候选路径都打不开时置位, 避免每次写日志都重试 */
 
 	ines_char_t   szPerfix[128];
 
-	if(pfLog == NULL)
+	if(pfLog == NULL && !path_failed)
 	{
 		if(szLogFileName[0] == 0)
 		{
@@ -211,6 +212,20 @@ void ines_log_r(ines_log_level_t level, ines_log_module_t module, ines_cstr_t st
 			}
 		}
 		pfLog = _tfopen(szLogFileName, ISTR("a+"));
+		if(pfLog == NULL)
+		{
+			/* exe 所在目录不可写(如进程运行在系统目录): 回退到临时目录 */
+			ines_size_t  n = (ines_size_t)GetTempPath((DWORD)count_of(szLogFileName), szLogFileName);
+			if(n > 0 && n + 8 < count_of(szLogFileName))
+			{
+				ines_strcpy(szLogFileName + n, ISTR("iNES.log"));
+				pfLog = _tfopen(szLogFileName, ISTR("a+"));
+			}
+			if(pfLog == NULL)
+			{
+				path_failed = ines_true;
+			}
+		}
 	}
 
 	lines++;

@@ -10,7 +10,8 @@
 #   cmake -S . -B build                          # 配置, 生成 build/ 构建树
 #   cmake --build build --config Release         # Release -> bin/iNES.exe
 #   cmake --build build --config Debug           # Debug   -> bin/iNES_d.exe
-#   构建产物统一输出到仓库 bin/ 目录(与原 VC 工程一致)
+#   构建产物统一输出到仓库 bin/ 目录(与原 VC 工程一致);
+#   64 位构建的产物统一追加 "64" 后缀(见下方"位数后缀"), 避免覆盖 32 位产物。
 #
 # Windows 上默认生成器为 "Visual Studio 17 2022"(多配置: Debug/Release/MinSizeRel/RelWithDebInfo),
 # 构建类型由 --config 决定: **不带 --config 时默认构建 Debug**。因此"只看到 Debug 产物刷新、
@@ -21,7 +22,7 @@
 #
 # x64(已评估安全):
 #   cmake -S . -B build-x64 -A x64
-#   cmake --build build-x64 --config Release
+#   cmake --build build-x64 --config Release     # -> bin/iNES64.exe, bin/inescore64.dll
 #
 # 注意事项:
 #   1) 与原始 VC 工程一致: iNES.exe 按 Unicode 字符集编译, inescore 按
@@ -29,6 +30,8 @@
 #   2) 所有配置都输出到同一个 bin/: iNES 用 DEBUG_POSTFIX="_d" 区分(iNES.exe / iNES_d.exe),
 #      而 inescore 的输出名不带配置后缀, Debug/Release 的 inescore.dll 会互相覆盖
 #      (详见下面的 ines_set_output_dirs)。
+#   3) 32 位与 64 位用 INES_BITS_SUFFIX 区分: 64 位为 "64"(iNES64.exe / inescore64.dll),
+#      32 位为空(iNES.exe / inescore.dll), 两者互不覆盖。
 #   3) 本脚本以 Windows/MSVC 为主要目标; UNIX 上仅构建 inescore 共享库
 #      (对应 Android/jni/Android.mk 的做法, 为尽力支持而未经过充分验证)。
 # =====================================================================
@@ -67,6 +70,25 @@ project(iNES
 # 必须在 project() 之后调用。
 if(APPLE)
     enable_language(OBJC)
+endif()
+
+# ---------------------------------------------------------------------
+# 位数后缀: 64 位构建的产物名统一追加 "64"
+#
+# Win32 与 x64 都输出到同一个 bin/, 若产物同名, 后构建的会覆盖先构建的
+# (典型故障: x64 的 inescore.dll 覆盖掉 Win32 版本后, bin/iNES.exe 因架构
+#  不匹配而无法启动)。因此给 64 位产物加后缀区分:
+#   iNES:      iNES.exe / iNES_d.exe       -> iNES64.exe / iNES64_d.exe
+#   inescore:  inescore.dll / inescore.lib -> inescore64.dll / inescore64.lib
+#             (导入库/exp/pdb 随 OUTPUT_NAME 一起改名)
+#
+# 判定用 CMAKE_SIZEOF_VOID_P(必须有 project() 之后才可用): 8 = 64 位,
+# 对 Visual Studio(-A x64) 与 Ninja(取决于命令行环境) 都成立。
+# 只在 Windows 生效: 非 Windows 平台保持原有命名, 不改变既有产物名。
+# ---------------------------------------------------------------------
+set(INES_BITS_SUFFIX "")
+if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 8)
+    set(INES_BITS_SUFFIX "64")
 endif()
 
 # ---------------------------------------------------------------------
@@ -220,6 +242,7 @@ endif()
 #   iNES:     用 DEBUG_POSTFIX="_d" 区分(iNES.exe / iNES_d.exe)
 #   inescore: 无后缀, Debug 与 Release 都是 inescore.dll(含 .lib/.exp/.pdb),
 #             两者互相覆盖, bin/ 下始终只保留最后构建的那一份, 这是有意沿用原工程行为。
+# 位数之间则由 INES_BITS_SUFFIX 区分(64 位为 "64"), 32/64 位产物不再互相覆盖。
 # ---------------------------------------------------------------------
 function(ines_set_output_dirs TGT)
     set_target_properties(${TGT} PROPERTIES
@@ -259,9 +282,9 @@ if(INES_BUILD_CORE)
             $<$<CONFIG:Debug>:_DEBUG>)
         # 对应 VCLinkerTool AdditionalDependencies="ws2_32.lib"
         target_link_libraries(inescore PRIVATE ws2_32)
-        # 输出 inescore.dll / inescore.lib(不添加 lib 前缀)
+        # 输出 inescore.dll / inescore.lib(不添加 lib 前缀); 64 位为 inescore64.dll / inescore64.lib
         set_target_properties(inescore PROPERTIES
-            OUTPUT_NAME "inescore"
+            OUTPUT_NAME "inescore${INES_BITS_SUFFIX}"
             PREFIX "")
     else()
         # UNIX/Android/macOS 风格: comm/net.c、thread.c 走 POSIX 分支
@@ -273,7 +296,8 @@ if(INES_BUILD_CORE)
             # macOS 的 libSystem 已包含 libm, 显式链接 -lm 在部分 SDK 上会告警
             target_link_libraries(inescore PRIVATE m)
         endif()
-        set_target_properties(inescore PROPERTIES OUTPUT_NAME "inescore")
+        # 非 Windows 上 INES_BITS_SUFFIX 恒为空, 命名与原来一致
+        set_target_properties(inescore PROPERTIES OUTPUT_NAME "inescore${INES_BITS_SUFFIX}")
     endif()
 
     ines_set_output_dirs(inescore)
@@ -329,8 +353,9 @@ if(INES_BUILD_GUI)
             shell32)
 
         # 输出命名对齐原工程: Release=iNES.exe, Debug=iNES_d.exe
+        # 64 位追加 "64": Release=iNES64.exe, Debug=iNES64_d.exe
         set_target_properties(iNES PROPERTIES
-            OUTPUT_NAME "iNES"
+            OUTPUT_NAME "iNES${INES_BITS_SUFFIX}"
             DEBUG_POSTFIX "_d")
 
         ines_set_output_dirs(iNES)
@@ -411,6 +436,7 @@ else()
 endif()
 message(STATUS "iNES: Release 优化标志 = ${CMAKE_C_FLAGS_RELEASE}")
 message(STATUS "iNES: 目标平台/生成器  = ${CMAKE_GENERATOR_PLATFORM} / ${CMAKE_GENERATOR}")
+message(STATUS "iNES: 位数后缀         = '${INES_BITS_SUFFIX}' (64 位构建产物追加该后缀)")
 message(STATUS "iNES: 核心库(inescore) = ${INES_BUILD_CORE}")
 message(STATUS "iNES: GUI  (iNES)      = ${INES_BUILD_GUI}")
 message(STATUS "iNES: GUI  (macOS)     = ${INES_BUILD_MAC_GUI}")

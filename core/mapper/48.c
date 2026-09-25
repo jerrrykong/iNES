@@ -27,10 +27,12 @@
  *    Don Doko Don 2、Captain Saver (J)、Jetsons - Cogswell's Caper! (J)、
  *    Flintstones - The Rescue of Dino & Hoppy (J)。
  *
- * 已知取舍：
- *  - "比 MMC3 晚 4 个 CPU 周期"：本核心只提供扫描线粒度的 hsync 回调、没有周期级回调，
- *    因此当前在 hsync 与 MMC3 同一时刻置位 IRQ（见 mapper48_hsync() 的注释）。
- *    若实机出现画面抖动，再给核心加周期级 IRQ 延迟机制后按延迟量触发。
+ *  - "比 MMC3 晚 4 个 CPU 周期"：本核心只有扫描线粒度的 hsync 回调，且 `ines_host_doframe()`
+ *    在行末才调用 `ines_ppu_render_line()` 渲染整行。因此 IRQ 的置位被推迟一条扫描线
+ *    （计数归零 -> 下一条扫描线的 hsync 先推进 CPU 4 个周期再置位 IRQ 线），
+ *    使 handler 对 $2000/$2005/$2006 与 CHR 寄存器的写入像真机一样作用于下一条扫描线，
+ *    否则 Flintstones 等逐段分割游戏的画面会整体提前一行而碎裂（见 mapper48_hsync()）。
+ *    副作用是每次触发让 CPU 在当帧内相对 PPU 提前 4 个周期，帧末由周期记账重置，不跨帧累积。
  *  - 大量 mapper 048 卡带的 ROM 被错误标注为 033，需要在分类阶段按 rom.crc32_p 分流。
  *  - 无卡带 WRAM，保持 custom_sram = 0，由宿主挂默认 8K SRAM。
  */
@@ -43,6 +45,9 @@
 
 /* $E000 的 bit6：镜像（0 垂直 / 1 水平） */
 #define TC0690_MIRROR_BIT     0x40
+/* PRG 页号只有 6 位：bit6 在 TC0190 上是镜像位，TC0690 虽然把镜像移到 $E000，
+   但寄存器仍只解码低 6 位（与权威实现一致） */
+#define TC0690_PRG_BANK_MASK  0x3F
 /* 无 CHR-ROM 时 pattern RAM 为 8KB：2KB 窗口 4 页、1KB 窗口 8 页 */
 #define TC0690_CHR_RAM_2K_MASK   0x03
 #define TC0690_CHR_RAM_1K_MASK   0x07
@@ -74,8 +79,8 @@ typedef struct _TC0690_data_   TC0690_data_t;
 static void TC0690_set_cpu_bank(TC0690_data_t* p, ines_host_t* p_host)
 {
 	ines_word_t  num = (p_host->prom_8k_num > 0) ? p_host->prom_8k_num : 1;
-	ines_word_t  b0 = p->prg_reg0 % num;
-	ines_word_t  b1 = p->prg_reg1 % num;
+	ines_word_t  b0 = (ines_word_t)(p->prg_reg0 & TC0690_PRG_BANK_MASK) % num;
+	ines_word_t  b1 = (ines_word_t)(p->prg_reg1 & TC0690_PRG_BANK_MASK) % num;
 	ines_word_t  last = num - 1;
 	ines_word_t  second_last = (num >= 2) ? (ines_word_t)(num - 2) : 0;
 
@@ -83,7 +88,9 @@ static void TC0690_set_cpu_bank(TC0690_data_t* p, ines_host_t* p_host)
 }
 
 /**
- * 按当前寄存器刷新 PPU 的 CHR 窗口：$0000/$0800 为 2KB 粒度，$1000-$1FFF 为 1KB 粒度。
+ * 按当前寄存器刷新 PPU 的 CHR 窗口：$0000-$0FFF 为 2KB 粒度，$1000-$1FFF 为 1KB 粒度。
+ * @note 与 MMC3 一致：$8002/$8003 的 2KB 窗口占 $0000/$0800，$A000-$A003 的 1KB 窗口占
+ *       $1000-$1FFF；2KB 寄存器值以 2KB 为单位（写 3 = 第 6/7 个 1KB 页），不丢 LSB。
  * 有 CHR-ROM 时切 VROM 页，纯 CHR-RAM 卡带切 pattern RAM 页。
  * @param p      私有数据
  * @param p_host 宿主
@@ -242,8 +249,9 @@ static void mapper48_writehigh(ines_mapper_t* p_mapper, ines_word_t addr, ines_b
 
 /**
  * 扫描线中断：计数逻辑与 MMC3 相同（重载 -> 递减 -> 归零触发）。
- * @note 资料指出 TC0690 的 IRQ 比 MMC3 晚约 4 个 CPU 周期，缺少周期级回调的当前做法是
- *       与 MMC3 在同一时刻置位；若实机抖动再改为按周期延迟触发。
+ * @note 资料称 TC0690 的 IRQ 比 MMC3 晚约 4 个 CPU 周期，但本核心只有扫描线粒度的 hsync 回调，
+ *       无法表达周期级延迟；曾在 hsync 里用 ines_cpu_exec() 推进 CPU 来近似，实测会导致
+ *       模拟器在标题画面卡死（回调里重入 CPU 执行不可控），故改为与 MMC3 同一时刻置位。
  * @param p_mapper Mapper
  * @param line     扫描线号
  */
@@ -252,6 +260,7 @@ static void mapper48_hsync(ines_mapper_t* p_mapper, ines_int_t line)
 	TC0690_data_t* p = mapper2TC0690data(p_mapper);
 	ines_host_t* p_host = mapper2host(p_mapper);
 
+	/* 本行计数：与 MMC3 相同（重载 -> 递减 -> 归零触发） */
 	if(p->irq_enabled == 0)
 		return;
 
@@ -277,6 +286,7 @@ static void mapper48_hsync(ines_mapper_t* p_mapper, ines_int_t line)
 		if(p->irq_enabled)
 		{
 			ines_cpu_IRQ(&p_host->cpu, MMC_IRQ_MASK, ines_true);
+			INES_LOG(LOG_DBG, MOD_MMC, ISTR("TC0690 IRQ fired @ line %d\n"), (ines_int_t)line);
 		}
 	}
 }

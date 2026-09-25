@@ -27,10 +27,13 @@
 
 统一输出到 `<仓库>/bin`（可用 `-DINES_OUTPUT_DIR` 修改）：
 
-| 配置 | 产物 |
-|---|---|
-| Release | `iNES.exe`、`inescore.dll` |
-| Debug | `iNES_d.exe`、`inescore.dll`（同名，会覆盖 Release 的 dll） |
+| 配置 | 32 位（Win32）产物 | 64 位（x64）产物 |
+|---|---|---|
+| Release | `iNES.exe`、`inescore.dll` | `iNES64.exe`、`inescore64.dll` |
+| Debug | `iNES_d.exe`、`inescore.dll`（同名，会覆盖 Release 的 dll） | `iNES64_d.exe`、`inescore64.dll`（同名，会覆盖 Release 的 dll） |
+
+64 位产物名由 `CMakeLists.txt` 的 `INES_BITS_SUFFIX`（`CMAKE_SIZEOF_VOID_P == 8` 时为 `64`）决定，
+追加在 `OUTPUT_NAME` 之后、`DEBUG_POSTFIX` 之前，因此 32/64 位产物不会再互相覆盖（仅 Windows 生效）。
 
 ## 4. 编码与换行的工程约定
 

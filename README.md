@@ -61,7 +61,7 @@ cmake --build build --config Debug
 cmake --build build --config Release --target iNES
 cmake --build build --config Release --target inescore
 
-# x64 构建（评估为安全，见「Win64 支持」）
+# x64 构建（评估为安全，见「Win64 支持」；产物带 64 后缀：iNES64.exe / inescore64.dll）
 cmake -S . -B build-x64 -A x64
 cmake --build build-x64 --config Release
 
@@ -100,12 +100,15 @@ cmake --build build --config Release
 
 ### 构建产物
 
-| 配置 | 产物 |
-|---|---|
-| Release | `bin/iNES.exe`、`bin/inescore.dll` |
-| Debug | `bin/iNES_d.exe`、`bin/inescore.dll` |
+| 配置 | 32 位（Win32）产物 | 64 位（x64）产物 |
+|---|---|---|
+| Release | `bin/iNES.exe`、`bin/inescore.dll` | `bin/iNES64.exe`、`bin/inescore64.dll` |
+| Debug | `bin/iNES_d.exe`、`bin/inescore.dll` | `bin/iNES64_d.exe`、`bin/inescore64.dll` |
 
-> 注意：Debug 与 Release 的 `inescore.dll` **同名，会互相覆盖**（沿用原工程行为）；`iNES` 通过 `DEBUG_POSTFIX=_d` 区分。
+> 注意：
+> - Debug 与 Release 的 `inescore.dll` **同名，会互相覆盖**（沿用原工程行为）；`iNES` 通过 `DEBUG_POSTFIX=_d` 区分。
+> - 64 位构建的产物统一追加 `64` 后缀（由 `CMakeLists.txt` 的 `INES_BITS_SUFFIX` 决定，依据 `CMAKE_SIZEOF_VOID_P` 判定），
+>   32 位与 64 位产物因此不再互相覆盖。仅 Windows 生效，其它平台命名不变。
 
 ---
 

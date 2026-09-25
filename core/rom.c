@@ -137,6 +137,41 @@ ines_bool_t ines_rom_load_from_file(ines_rom_t*  p_rom, ines_cstr_t strFileName)
 	PROM_size = (ines_size_t)header.PROM_block_num * INES_PROM_BLOCK_SIZE;
 	VROM_size = (ines_size_t)header.VROM_block_num * INES_VROM_BLOCK_SIZE;
 
+	/* 部分 dump 的 iNES 头把 VROM 块数写小了，但文件里带着完整(更大的)CHR 数据。
+	 * 这种情况必须按文件实际容量加载：mapper 普遍按 VROM 大小对 CHR 页号取模，
+	 * 大小算小了会把高页号折回低位而取到错误的图形。
+	 * 例：Flintstones - The Rescue of Dino & Hoppy (J) 头声明 128K、文件实际 256K，
+	 *     CHR 窗口值 $70 应落在 0x38000，按 128K 取模后落到 0x18000，标题 logo 因此错乱。
+	 * 仅在"多余部分是整块 CHR 且恰为头声明大小的 2 的幂倍"时才放大，避免误判尾部填充。 */
+	if(header.VROM_block_num > 0)
+	{
+		long  pos = ftell(pfnes);
+		long  end = -1;
+
+		if(pos >= 0 && 0 == fseek(pfnes, 0, SEEK_END))
+		{
+			end = ftell(pfnes);
+			fseek(pfnes, pos, SEEK_SET);
+		}
+
+		if(end > pos && (ines_size_t)(end - pos) > PROM_size)
+		{
+			ines_size_t  vrom_file = (ines_size_t)(end - pos) - PROM_size;
+			ines_size_t  ratio;
+
+			if(vrom_file > VROM_size && VROM_size > 0 && vrom_file % INES_VROM_BLOCK_SIZE == 0 && vrom_file % VROM_size == 0)
+			{
+				ratio = vrom_file / VROM_size;
+				if((ratio & (ratio - 1)) == 0)
+				{
+					INES_LOG(LOG_NTY, MOD_ROM, ISTR("Fix VROM size by file: header %")ISTR(PRI64)ISTR("dK -> file %")ISTR(PRI64)ISTR("dK\n"),
+						(ines_int64_t)(VROM_size / 1024), (ines_int64_t)(vrom_file / 1024));
+					VROM_size = vrom_file;
+				}
+			}
+		}
+	}
+
 	INES_LOG(LOG_NTY, MOD_ROM, ISTR("Calc PROM Size: %")ISTR(PRI64)ISTR("dK, VROM Size %")ISTR(PRI64)ISTR("dK, Mapper: %d\n"),
 		(ines_int64_t)(PROM_size/1024), (ines_int64_t)(VROM_size/1024), mapper_num);
 
@@ -175,7 +210,9 @@ ines_bool_t ines_rom_load_from_file(ines_rom_t*  p_rom, ines_cstr_t strFileName)
 	}
 	p_rom->mapper_num = mapper_num;
 	p_rom->PROM_block_num = header.PROM_block_num;
-	p_rom->VROM_block_num = header.VROM_block_num;
+	/* 用实际加载的 CHR 容量换算块数（可能已按文件修正过），
+	   否则上层按 VROM_block_num 算出的页数仍是头里偏小的值，CHR 页号会被错误取模 */
+	p_rom->VROM_block_num = (ines_byte_t)(VROM_size / INES_VROM_BLOCK_SIZE);
 	p_rom->pPROMs = pPROM;
 	p_rom->pVROMs = pVROM;
 
