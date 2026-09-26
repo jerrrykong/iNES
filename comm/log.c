@@ -325,13 +325,31 @@ void ines_log_r(ines_log_level_t level, ines_log_module_t module, ines_cstr_t st
 		pfLog = _tfopen(szLogFileName, ISTR("a+"));
 		if(pfLog == NULL)
 		{
-			/* exe 所在目录不可写(如进程运行在系统目录): 回退到临时目录 */
-			ines_size_t  n = (ines_size_t)GetTempPath((DWORD)count_of(szLogFileName), szLogFileName);
-			if(n > 0 && n + 8 < count_of(szLogFileName))
+			/* 程序目录不可写(如进程运行在系统目录/只读挂载): 回退到系统临时目录 */
+			#ifdef WIN32
 			{
-				ines_strcpy(szLogFileName + n, ISTR("iNES.log"));
+				DWORD  n = GetTempPath((DWORD)count_of(szLogFileName), szLogFileName);
+
+				if(n > 0 && n + 8 < (DWORD)count_of(szLogFileName))
+				{
+					ines_strcpy(szLogFileName + n, ISTR("iNES.log"));
+					pfLog = _tfopen(szLogFileName, ISTR("a+"));
+				}
+			}
+			#else
+			{
+				/* POSIX: $TMPDIR 优先(Apple 的 NSTemporaryDirectory 也走它), 再回落 /tmp */
+				const char*  tmp = getenv("TMPDIR");
+
+				if(tmp == NULL || tmp[0] == '\0')
+				{
+					tmp = "/tmp";
+				}
+
+				ines_snprintf(szLogFileName, count_of(szLogFileName), ISTR("%s/iNES.log"), tmp);
 				pfLog = _tfopen(szLogFileName, ISTR("a+"));
 			}
+			#endif
 			if(pfLog == NULL)
 			{
 				path_failed = ines_true;
