@@ -301,7 +301,7 @@ static ines_bool_t (*mapper_creator_func[MAX_MAPPER_CREATOR] )(ines_mapper_t* ) 
 	/* 031 */  mapper31_create,
 	/* 032 */  mapper32_create, /* implemented -- Irem G-101 (8KB PRG 双窗口 + $8000/$C000 模式交换 / 8x1KB CHR / H-V 镜像, 无 IRQ) */
 	/* 033 */  mapper33_create, /* implemented -- Taito TC0190 (掩码 $A003: 8KB PRG 双窗口 + 2x2KB/4x1KB CHR + H-V 镜像, 无 IRQ) */
-	/* 034 */  mapper34_create,
+	/* 034 */  mapper34_create, /* implemented -- BNROM(CHR<=8KB, 32KB PRG bank + AND 型总线冲突) / NINA-001、002(CHR>8KB, $7FFD-$7FFF 寄存器叠在 8K PRG-RAM 上 + 2x4KB CHR, 无 IRQ) */
 	/* 035 */  mapper35_create,
 	/* 036 */  mapper36_create,
 	/* 037 */  mapper37_create,
