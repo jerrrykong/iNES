@@ -9,8 +9,10 @@
  *     - CPU $8000-$FFFF：32KB 窗口，写入值的 bit0-1 = PRG A16..A15（最多 4 个 32KB bank）
  *     - PPU $0000-$1FFF：8KB CHR，不分页（CHR-ROM 或 CHR-RAM 皆可）
  *     - 无 PRG-RAM、无 IRQ、无扩展音；镜像由 PCB 焊盘固定，Mapper 不改写（沿用卡带头）
- *     - **必然发生 AND 型总线冲突**：真正锁进寄存器的是"写入值 AND 当前 PRG-ROM 在该
- *       地址的字节"，《Mashou》/《Deadly Towers》即依赖该行为，不能省
+ *     - **真实板上发生 AND 型总线冲突**：真正锁进寄存器的是"写入值 AND 当前 PRG-ROM
+ *       在该地址的字节"，《Mashou》/《Deadly Towers》即依赖该行为，不能省。该冲突只在
+ *       BNROM 规格（PRG ≤ 128KB）内成立；更大容量的卡带并非 BNROM 板（只是借用 34 号的
+ *       大容量盗版板），$8000+ 的写入直接锁存完整 bank 号
  *
  *  2) NINA-001 / NINA-002（American Video Entertainment）—— CHR-ROM > 8KB 时按此处理
  *     - CPU $6000-$7FFF：8KB PRG-RAM；三个寄存器"叠"在这片 RAM 的末尾（完全解码，
@@ -22,8 +24,10 @@
  *     - CPU $8000-$FFFF：32KB 窗口（64KB PRG），**不响应** $8000+ 的写入
  *     - 无总线冲突、无 IRQ、无扩展音；镜像固定 H/V（沿用卡带头）
  *
- * 上电值在两种板的真实硬件上都未定义（游戏必须在每个 PRG bank 里都放复位向量），
- * 这里一律取 0。
+ * 上电值在两种板的真实硬件上都未定义（游戏必须在每个 PRG bank 里都放复位向量）。
+ * BNROM 侧按 VirtuaNES 的取值：$8000-$BFFF = 0 号 32KB bank 的低 16KB，
+ * $C000-$FFFF = PRG 的最后 16KB —— 游戏入口通常在 PRG 末端，1024KB 的《泰坦尼克号》
+ * 靠这条才能在复位后的 JMP 里落进真正的初始化代码；NINA 侧取 0。
  */
 
 #include "../../comm/idef.h"
@@ -46,10 +50,17 @@
 /* 判定为 NINA 的 CHR 容量门槛：CHR-ROM 超过 8KB（8 个 1KB 页） */
 #define NINA34_CHR_8K_PAGES  8
 
+/* 真实 BNROM / I-IM 板的 PRG 上限是 128KB（16 个 8KB 页）。超出该容量的卡带必然
+   不是 BNROM 板，而是借 mapper 34 编号的盗版大容量板：它的 $8000+ 写入直接锁存
+   完整 bank 号，没有 BNROM 的 AND 型总线冲突（1024KB 的《泰坦尼克号》写 $8085=#$02、
+   $8088=#$05 想切 bank 2/5，走冲突会被 $4C 截成 0/4，读到完全错误的窗口而黑屏）。 */
+#define NINA34_BNROM_MAX_8K_PAGES  16
+
 
 struct _NINA34_data_
 {
 	ines_bool_t   is_nina;      /* ines_true = NINA-001/NINA-002；ines_false = BNROM */
+	ines_bool_t   bus_conflict; /* BNROM 是否走 AND 型总线冲突（仅真实 BNROM 容量内成立） */
 	ines_byte_t   prg_bank;     /* 32KB PRG bank（NINA 只用 bit0，BNROM 用 bit0-1） */
 	ines_byte_t   chr_4k[2];    /* NINA 两个 4KB CHR 窗口的页号（bit0-3） */
 };
@@ -137,6 +148,9 @@ static void mapper34_reset(ines_mapper_t* p_mapper)
 	/* 没有 submapper 信息时按 CHR-ROM 容量区分：超过 8KB 才是 NINA */
 	p->is_nina = (p_host->vrom_1k_num > NINA34_CHR_8K_PAGES) ? ines_true : ines_false;
 
+	/* 超出真实 BNROM 容量的卡带没有 AND 型总线冲突，直接锁存写入值 */
+	p->bus_conflict = (p_host->prom_8k_num <= NINA34_BNROM_MAX_8K_PAGES) ? ines_true : ines_false;
+
 	p->prg_bank  = 0;
 	p->chr_4k[0] = 0;
 	p->chr_4k[1] = 0;
@@ -157,7 +171,25 @@ static void mapper34_reset(ines_mapper_t* p_mapper)
 	   指针编码、读档校验失败（同 mapper 210 的取舍）。 */
 
 
-	NINA34_set_cpu_bank(p, p_host);
+	if(!p->is_nina)
+	{
+		/* BNROM 上电 bank 在真实硬件上未定义，这里按 VirtuaNES 的取值：
+		   $8000-$BFFF = 0 号 32KB bank 的低 16KB，$C000-$FFFF = PRG 的最后 16KB。
+		   理由是游戏的初始化代码几乎总放在 PRG 末端，1024KB 的《泰坦尼克号》复位后
+		   从 $8000 的 JMP 跳到 $C000+ 时，只有落到最后 16KB 才是真正的入口程序；
+		   若整个 32KB 都取 bank 0，跳过去的是另一段内容，游戏直接黑屏。
+		   之后的 $8000+ 写入仍走 NINA34_set_cpu_bank 做 32KB 整块切换。 */
+		ines_word_t  num = (p_host->prom_8k_num > 0) ? p_host->prom_8k_num : 1;
+
+		ines_set_prom_bank_4(p_host, 0, 1,
+							 (ines_word_t)((num > 2) ? (num - 2) : 0),
+							 (ines_word_t)((num > 2) ? (num - 1) : 1));
+	}
+	else
+	{
+		NINA34_set_cpu_bank(p, p_host);
+	}
+
 	NINA34_set_ppu_bank(p, p_host);
 
 	/* 两种板的镜像都由硬件固定（焊盘 / 卡带头），Mapper 不改写 */
@@ -221,10 +253,12 @@ static void mapper34_writehigh(ines_mapper_t* p_mapper, ines_word_t addr, ines_b
 	if(p->is_nina)
 		return;
 
-	val = (ines_byte_t)(val & p_host->cpu.mem_bank[addr >> 13][addr & 0x1FFF]);
+	/* 只有真实 BNROM 容量的卡带才复现 AND 型总线冲突 */
+	if(p->bus_conflict)
+		val = (ines_byte_t)(val & p_host->cpu.mem_bank[addr >> 13][addr & 0x1FFF]);
 
 	INES_LOG(LOG_DBG, MOD_MMC, ISTR("BNROM: write $%04X = #$%02X (bank %d)\n"),
-			 addr, val, (int)(val & 0x03));
+			 addr, val, (int)val);
 
 	p->prg_bank = val;
 	NINA34_set_cpu_bank(p, p_host);
