@@ -7,9 +7,9 @@
 | 项目 | 数量 |
 |---|---|
 | Mapper 文件总数 | 256（`0.c` ~ `255.c`） |
-| 注册表标注 `implemented` | 33 |
+| 注册表标注 `implemented` | 34 |
 | 另有实质代码但未标注 | 1（Mapper **163**） |
-| 占位桩（未实现） | 222 |
+| 占位桩（未实现） | 221 |
 
 > 判定依据：桩文件统一为 **39 行**，只有 `reset` / `writehigh` 两个空函数且 `create` 返回 `ines_false`；真实实现则行数显著更多、带私有数据或 IRQ，且返回 `ines_true`。
 
@@ -45,6 +45,7 @@
 | 32 | 212 | `G101_data_t` | | | ✅ | **Irem G-101**（52-pin DIP）：8KB PRG 双窗口（$8000/$C000 由 PRG 模式位交换角色，$C000/$E000 固定倒数第二/最后一页）、8×1KB CHR（$B000-$B007，掩码 $F007）、H/V 镜像；无 IRQ、无 WRAM。《Major League》(J) 硬线单屏 + `$9000` 失效，按 `rom.crc32_p == 0xC0FED437` 走特例分支 |
 | 33 | 193 | `TC0190_data_t` | | | ✅ | **Taito TC0190**：寄存器掩码 `$A003`（A0-A1 选组内寄存器、A13 选组、A14 未解码）；PRG 8KB 双窗口（`$C000`/`$E000` 固定倒数第二/最后一页）；CHR 为 2×2KB（寄存器值以 2KB 为单位、不丢 LSB）+ 4×1KB；镜像在 `$8000` bit6；**无 IRQ** |
 | 34 | 250 | `NINA34_data_t` | | | ✅ | **BNROM / NINA-001、NINA-002**（两块板共用一个编号，按 CHR 容量区分）：`vrom_1k_num <= 8` → **BNROM**（上电 $8000-$BFFF = 0 号 32KB bank 的低 16KB、$C000-$FFFF = PRG 最后 16KB，之后 `$8000+` 写入 = 32KB PRG bank，8KB CHR 不分页；**仅 PRG ≤ 128KB 复现 AND 型总线冲突**，超出该容量的大容量板（1024KB《泰坦尼克号》）直接锁存写入值）；`> 8` → **NINA**（`$7FFD` = PRG bank、`$7FFE`/`$7FFF` = 两个 4KB CHR 窗口，寄存器**叠在 8KB PRG-RAM 上**：写既进寄存器也进 RAM、读回 RAM 值）。两者均无 IRQ、无扩展音，镜像由硬件固定（沿用卡带头） |
+| 41 | 212 | `CALTRON41_data_t` | | | ✅ | **Caltron 6-in-1**（离散逻辑多合一卡带，容纳 4 个未改动的 CNROM / NROM 游戏）：外层寄存器在 `$6000-$67FF`，**bank 号取自写入地址而非数据线**（A5 = 镜像 0V/1H、A4-A3 = 外层 32KB CHR、A2-A0 = 32KB PRG bank @ `$8000-$FFFF`）；内层 8KB CHR 写 `$8000+`（取数据线 bit1-0，**仅 PRG bank 为 4..7 时有效** —— bit2 兼作该使能），该写落在 PRG-ROM 区故复现 AND 型总线冲突。CHR 为两级：外层 32KB × 内层 8KB（共 128KB）；**无 PRG-RAM**（`$6000` 是寄存器，置 `custom_sram = 1` 不挂默认 RAM）、无 IRQ、无扩展音；上电与按住 reset 时两个寄存器清零 |
 | 48 | 265 | `TC0690_data_t` | ✅ | ✅ | ✅ | **Taito TC0690**（033 的超集）：寄存器掩码 `$E003`（A0-A1 选组内、A13/A14 选组）；PRG/CHR 布局同 TC0190；镜像单独在 `$E000` bit6；IRQ 与 MMC3 同构（`$C000` reload **取反 XOR $FF**、`$C001` 重载、`$C002` 使能、`$C003` 应答关闭）。**已知取舍：资料称比 MMC3 晚约 4 个 CPU 周期，当前无周期级回调，与 MMC3 同时刻置位** |
 | 85 | 25 | `VRC7_data_t` | ✅ | ✅ | ✅ | Konami **VRC7**：FM(YM2413) 简化内核已接入（vrc.h §5b，单声道经 APU 扩展输入槽） |
 | 163 | 178 | `MMC163` | | ✅ | ❌ | 有完整实现（含 `reset/writehigh/readlow/writelow/hsync/fini`），但注册表未标注 `implemented` |
