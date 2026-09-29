@@ -311,7 +311,7 @@ static ines_bool_t (*mapper_creator_func[MAX_MAPPER_CREATOR] )(ines_mapper_t* ) 
 	/* 041 */  mapper41_create, /* implemented -- Caltron 6-in-1 多合一板 (外层 $6000-$67FF 由写入**地址**译码: 32KB PRG + 外层32KB/内层8KB 两级 CHR + H-V 镜像; 内层 CHR 写 $8000+ 且仅 PRG bank 4..7 时有效, 无 PRG-RAM, 无 IRQ) */
 	/* 042 */  mapper42_create,
 	/* 043 */  mapper43_create,
-	/* 044 */  mapper44_create,
+	/* 044 */  mapper44_create, /* implemented -- Super Big 7-in-1：MMC3 多合一，$A001 低 3 位选块（选 7 等同 6），MMC3 页号（含两个固定页）经 AND/OR 映射到块内；块 0-5 各 128KB、块 6/7 各 256KB PRG+CHR，整卡 1MB+1MB；上电选块 0 */
 	/* 045 */  mapper45_create,
 	/* 046 */  mapper46_create,
 	/* 047 */  mapper47_create,
