@@ -310,7 +310,7 @@ static ines_bool_t (*mapper_creator_func[MAX_MAPPER_CREATOR] )(ines_mapper_t* ) 
 	/* 040 */  mapper40_create,
 	/* 041 */  mapper41_create, /* implemented -- Caltron 6-in-1 多合一板 (外层 $6000-$67FF 由写入**地址**译码: 32KB PRG + 外层32KB/内层8KB 两级 CHR + H-V 镜像; 内层 CHR 写 $8000+ 且仅 PRG bank 4..7 时有效, 无 PRG-RAM, 无 IRQ) */
 	/* 042 */  mapper42_create,
-	/* 043 */  mapper43_create,
+	/* 043 */  mapper43_create, /* implemented -- TONY-I / YS-612（SMB2J 的 FDS->ROM 转卡带，两者只差 IRQ 寄存器地址 $4122 / $8122）：PRG 80KB = 两块 32KB + 2KB 芯片重复四遍 + 8KB 芯片；$6000/$8000/$A000 固定 #2/#1/#0、$C000 可切（$4022 bit2-0 经译码表 4,3,4,4,4,7,5,6）、$E000 是 8KB 芯片；$5000-$5FFF 是 2KB 芯片重复一次（宿主 bank2 无 PRG 接口，由 readlow 提供）；CHR 8KB 不分页；IRQ 为 12 位 M2 周期计数器溢出触发（hsync 里按 cpu.total_cycles 增量推进）；$6000 是 PRG 故 custom_sram=1 */
 	/* 044 */  mapper44_create, /* implemented -- Super Big 7-in-1：MMC3 多合一，$A001 低 3 位选块（选 7 等同 6），MMC3 页号（含两个固定页）经 AND/OR 映射到块内；块 0-5 各 128KB、块 6/7 各 256KB PRG+CHR，整卡 1MB+1MB；上电选块 0 */
 	/* 045 */  mapper45_create, /* implemented -- GA23C 多合一：MMC3 内核 + $6000 四个外层 bank 寄存器（按写入次序轮流填 #0-#3，写 $6001 清零并解锁，#3.bit6 锁定后 $6000 写入失效）；MMC3 选出的页号（含两个固定页 0x3E/0x3F）经 AND/OR 映射到外层窗口；外层寄存器叠在 WRAM 上且不受 MMC3 的 WRAM 位控制 */
 	/* 046 */  mapper46_create, /* implemented -- Rumble Station 15-in-1：外层 $6000-$7FFF 写入值 [CCCC PPPP] 选 64KB CHR / 64KB PRG bank，内层 $8000-$FFFF 写入值 [.CCC ...P]（Color Dreams 的缩减子集）选 bank 内的 8KB CHR 与低/高 32KB PRG；合成后 32KB PRG bank = (外层 PPPP << 1) | 内层 P、8KB CHR bank = (外层 CCCC << 3) | 内层 CCC，各最多 1MB；$6000-$7FFF 是寄存器故无 PRG-RAM（custom_sram = 1），无 IRQ、不控镜像；上电外层为 0 */
