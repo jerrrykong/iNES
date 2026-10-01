@@ -325,7 +325,7 @@ static ines_bool_t (*mapper_creator_func[MAX_MAPPER_CREATOR] )(ines_mapper_t* ) 
 	/* 055 */  mapper55_create,
 	/* 056 */  mapper56_create,
 	/* 057 */  mapper57_create, /* implemented -- GK 47-in-1 / SuperGK 6-in-1：寄存器掩码 $8800（只按 A11 分组）。$8000 = [CH.. ..AA]（C = CHR Mode 0=CNROM/1=NROM，H = CHR A16，AA = CNROM 模式下的 CHR A13-14）；$8800 = [PPPO MBbb]（PPP = PRG Reg，O = PRG Mode，M = 镜像 0 垂直/1 水平，B = CHR A15，bb = NROM 模式下的 CHR A13-14）。CHR 是整块 8KB 一起切：bank = (H<<3)|(B<<2)|(C ? bb : AA)。PRG：PPP 在两种模式下都是 16KB 页号 —— Mode 0 = 16KB bank（= PPP）同时镜像到 $8000 与 $C000 两个窗口，Mode 1 = 整个 32KB 窗口 = 32KB bank #(PPP >> 1)。无 IRQ、无 PRG-RAM。SuperGK 第 4 项（Mode 1，PPP = 6）实测确认右移 */
-	/* 058 */  mapper58_create,
+	/* 058 */  mapper58_create, /* implemented -- 简单 NROM/CNROM 型多合一（GK-192 118-in-1 / HKX5268 68-in-1 等）：**Address Latch**，bank 号由写入地址译码、写入数据只用来选镜像（与 41/225/255 同族）。$8000-$FFFF 写：A6 = PRG Mode（0 = NROM-256，32KB bank #((A2..A1)>>1)；1 = NROM-128，16KB bank #(A2..A0) 镜像到 $8000 与 $C000），A5..A3 = 8KB CHR bank，数据 D1 = 镜像（1 垂直 / 0 水平）。CHR 整块 8KB 一起切。无 IRQ、无 PRG-RAM、无状态寄存器，上电 = 16KB bank 0 镜像。iNES Mapper 213 是本编号的重复。实现参照 VirtuaNES 0.97 Mapper058.cpp */
 	/* 059 */  mapper59_create,
 	/* 060 */  mapper60_create,
 	/* 061 */  mapper61_create,
