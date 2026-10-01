@@ -324,7 +324,7 @@ static ines_bool_t (*mapper_creator_func[MAX_MAPPER_CREATOR] )(ines_mapper_t* ) 
 	/* 054 */  mapper54_create,
 	/* 055 */  mapper55_create,
 	/* 056 */  mapper56_create,
-	/* 057 */  mapper57_create,
+	/* 057 */  mapper57_create, /* implemented -- GK 47-in-1 / SuperGK 6-in-1：寄存器掩码 $8800（只按 A11 分组）。$8000 = [CH.. ..AA]（C = CHR Mode 0=CNROM/1=NROM，H = CHR A16，AA = CNROM 模式下的 CHR A13-14）；$8800 = [PPPO MBbb]（PPP = PRG Reg，O = PRG Mode，M = 镜像 0 垂直/1 水平，B = CHR A15，bb = NROM 模式下的 CHR A13-14）。CHR 是整块 8KB 一起切：bank = (H<<3)|(B<<2)|(C ? bb : AA)。PRG：Mode 0 = 16KB bank（= PPP）同时镜像到 $8000 与 $C000 两个窗口，Mode 1 = 整个 32KB 窗口 = 32KB bank #PPP（Mode 1 无实测 ROM 覆盖）。无 IRQ、无 PRG-RAM */
 	/* 058 */  mapper58_create,
 	/* 059 */  mapper59_create,
 	/* 060 */  mapper60_create,

@@ -7,9 +7,9 @@
 | 项目 | 数量 |
 |---|---|
 | Mapper 文件总数 | 256（`0.c` ~ `255.c`） |
-| 注册表标注 `implemented` | 38 |
+| 注册表标注 `implemented` | 39 |
 | 另有实质代码但未标注 | 1（Mapper **163**） |
-| 占位桩（未实现） | 217 |
+| 占位桩（未实现） | 216 |
 
 > 判定依据：桩文件统一为 **39 行**，只有 `reset` / `writehigh` 两个空函数且 `create` 返回 `ines_false`；真实实现则行数显著更多、带私有数据或 IRQ，且返回 `ines_true`。
 
@@ -51,6 +51,7 @@
 | 45 | 485 | `GA23C_data_t` | ✅ | ✅ | ✅ | **GA23C 多合一**（MMC3 内核 + 外层 bank 寄存器）：MMC3 部分与 MMC3 完全一致（`$8000-$FFFF`，掩码 `$E001`，含扫描线计数器 IRQ；`$A001` 就是普通的 PRG-RAM 保护，不像 44 那样承载块选择）；外层是 `$6000` 上的四个 bank 寄存器，**按写入次序轮流填入**（第 1 次写 -> #0、第 2 次 -> #1 … 第 5 次又回到 #0），写 `$6001` 则四个寄存器清零并解除锁定（#3.bit6 置 1 后 `$6000` 写入失效直到解锁）。MMC3 选出的页号一律过 `((页号 AND and) OR or)`：PRG 以 8KB 页计（`and = (~#3) & 0x3F`、`or = #1 | ((#2 & $C0) << 2)`），CHR 以 1KB 页计（`and = (1 << ((#2 & $0F) - 7)) - 1`、`or = #0 | ((#2 & $F0) << 4)`）；**两个固定页同样是 MMC3 原始输出 A13-A18 = 111110/111111（0x3E/0x3F）再过这道变换**，而不是"整卡的最后两页"。外层寄存器**叠在 WRAM 上**且不受 MMC3 的 WRAM 位控制：写同时进 RAM 与寄存器，读回 RAM 值 |
 | 46 | 200 | `RUMBLE46_data_t` | | | ✅ | **Rumble Station 15-in-1**（NES-on-a-Chip 多合一，收录一批已授权的 Color Dreams 游戏）：**两级选页**。外层 `$6000-$7FFF` 锁存写入值 `[CCCC PPPP]` —— bit7-4 选 64KB CHR bank、bit3-0 选 64KB PRG bank，上电为 0；内层 `$8000-$FFFF` 锁存写入值 `[.CCC ...P]` —— 是 Color Dreams（11）的**缩减子集**，bit6-4 选 64KB bank 内的 8KB CHR、bit0 选 64KB bank 内的低 / 高 32KB PRG。合成后 **32KB PRG bank = (外层 PPPP << 1) \| 内层 P**（最多 32 个 = 1MB）、**8KB CHR bank = (外层 CCCC << 3) \| 内层 CCC**（最多 128 个 = 1MB）。`$6000-$7FFF` 是寄存器因此**没有 PRG-RAM**（`custom_sram = 1`）；无 IRQ、不控制镜像。**不做** AND 型总线冲突 —— 它是 NES-on-a-Chip 而非真 ROM 芯片，同门类的 11 也不做，做错会把 bank 号按 ROM 内容截掉而黑屏 |
 | 48 | 265 | `TC0690_data_t` | ✅ | ✅ | ✅ | **Taito TC0690**（033 的超集）：寄存器掩码 `$E003`（A0-A1 选组内、A13/A14 选组）；PRG/CHR 布局同 TC0190；镜像单独在 `$E000` bit6；IRQ 与 MMC3 同构（`$C000` reload **取反 XOR $FF**、`$C001` 重载、`$C002` 使能、`$C003` 应答关闭）。**已知取舍：资料称比 MMC3 晚约 4 个 CPU 周期，当前无周期级回调，与 MMC3 同时刻置位** |
+| 57 | 203 | `GK57_data_t` | | | ✅ | **GK 47-in-1 / SuperGK 6-in-1**（多合一卡，128KB PRG + 128KB CHR）：寄存器掩码 `$8800`（只按 A11 分成 `$8000` / `$8800` 两组）。`$8000` = `[CH.. ..AA]` —— C = CHR Mode（0 = CNROM 模式 / 1 = NROM 模式）、H = CHR A16、AA = **CNROM 模式**下的 CHR A13-A14；`$8800` = `[PPPO MBbb]` —— PPP = PRG Reg、O = PRG Mode、M = 镜像（0 垂直 / 1 水平）、B = CHR A15、bb = **NROM 模式**下的 CHR A13-A14。CHR 是**整块 8KB 一起切换**：bank = `(H<<3) \| (B<<2) \| (C ? bb : AA)`。PRG 两种模式：**Mode 0** = 16KB bank（= PPP）同时出现在 `$8000` 与 `$C000` 两个窗口（16KB 游戏靠这个镜像跑起来）；**Mode 1** = 整个 32KB 窗口 = 32KB bank #PPP。无 IRQ、无 PRG-RAM。实测 `6in1_SuperGK-L02A.nes` / `6in1.nes` / `54in1.nes` 三个 ROM 的菜单与所选游戏均正常，其中 SuperGK 进游戏时写 `$8800 = #$22`，确认了 Mode 0 的解读；**Mode 1 未被任何手头 ROM 触发**，其「32KB bank = PPP」是照记法推断 |
 | 85 | 25 | `VRC7_data_t` | ✅ | ✅ | ✅ | Konami **VRC7**：FM(YM2413) 简化内核已接入（vrc.h §5b，单声道经 APU 扩展输入槽） |
 | 163 | 178 | `MMC163` | | ✅ | ❌ | 有完整实现（含 `reset/writehigh/readlow/writelow/hsync/fini`），但注册表未标注 `implemented` |
 | 210 | 142 | —（无私有状态） | | | ✅ | **Namco 175 / Namco 340**（Namco 163 的降本版，同一个 iNES 号）：8 窗口 1KB CHR、3 槽 8KB PRG、340 可选 H/V/单屏镜像；175/340 变体不区分（详见 `core/mapper/210.c` 文件头） |
