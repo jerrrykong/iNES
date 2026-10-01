@@ -21,19 +21,19 @@
  *  - PRG：
  *      Mode 0（O=0）：两个 16KB 窗口都用 PRG Reg，即 16KB bank 同时出现在
  *                     $8000-$BFFF 与 $C000-$FFFF（16KB 游戏靠这个镜像跑起来）。
- *      Mode 1（O=1）：整个 32KB 窗口 = 32KB bank #PRG Reg。
+ *      Mode 1（O=1）：整个 32KB 窗口 = 32KB bank #(PRG Reg >> 1)。
  *  - 无 IRQ，无 PRG-RAM。
  *
- * 关于 PRG Mode 0 / 1 的粒度：Disch 原注把 Mode 0 画成两个 16KB 格、都标 $8800，
- * Mode 1 画成单独一个 32KB 格、标 <$8800>，故 Mode 0 实现为"16KB bank 同时出现
- * 在两个窗口"、Mode 1 实现为"32KB bank = PRG Reg"。
+ * 关于 PRG Mode 0 / 1 的粒度：**PRG Reg 在两种模式下都是 16KB 页号**。
+ * Disch 原注把 Mode 0 画成两个 16KB 格（都标 $8800）、Mode 1 画成单个 32KB 格
+ * 且标 <$8800>，尖括号的意思就是"该值仍以 16KB 为单位，选 32KB bank 时右移一位"。
  *
  * 实测（6in1_SuperGK-L02A.nes / 6in1.nes / 54in1.nes，均为 128KB PRG + 128KB CHR）：
- * 三个 ROM 的菜单都完全正常，SuperGK 进游戏时写入 $8800 = #$22（PRG Reg = 1、
- * Mode 0），随后游戏正常运行 —— Mode 0 的解读由此得到确认。
- * 注意：手头三个 ROM 都只用到 Mode 0，**Mode 1（32KB）未被任何实测 ROM 触发**，
- * 它的"32KB bank = PRG Reg"是按记法推断的；若日后遇到走 Mode 1 的卡带黑屏，
- * 优先怀疑这里应改为 (PRG Reg >> 1)。
+ * 三个 ROM 的菜单都完全正常。SuperGK 第 1 项进游戏写 $8800 = #$22（PRG Reg = 1、
+ * Mode 0）后游戏正常运行，确认了 Mode 0；第 4 项（INT'L LEAGUE）走的是 Mode 1，
+ * 依次写 $8800 = #$D4（PRG Reg = 6、Mode 1）与 $FE00 = #$72（PRG Reg = 3、Mode 1）
+ * —— 128KB 只有 4 个 32KB bank，PRG Reg = 6 只有当作 16KB 页号才合法，
+ * 故 Mode 1 的 32KB bank = (PRG Reg >> 1)；按此实现后花屏消失。
  */
 
 #include "../../comm/idef.h"
@@ -80,7 +80,11 @@ static void GK57_set_cpu_bank(GK57_data_t* p, ines_host_t* p_host)
 
 	if((p->prg_reg & GK57_PRG_MODE_BIT) != 0)
 	{
-		/* Mode 1：32KB 窗口 = 32KB bank #PRG Reg（一个 32KB bank = 4 个 8KB 页） */
+		/* Mode 1：整个 32KB 窗口 = 32KB bank #(PRG Reg >> 1)（一个 32KB bank = 4 个 8KB 页）。
+		 * PRG Reg 始终是 16KB 页号，此处只需它的高 2 位；
+		 * 实测 PRG Reg 会取到 6（128KB 仅 4 个 32KB bank），若直接当 32KB 号就越界了。 */
+		reg = (ines_word_t)(reg >> 1);
+
 		b0 = (ines_word_t)((reg * 4 + 0) % num);
 		b1 = (ines_word_t)((reg * 4 + 1) % num);
 		b2 = (ines_word_t)((reg * 4 + 2) % num);
