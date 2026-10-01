@@ -313,7 +313,7 @@ static ines_bool_t (*mapper_creator_func[MAX_MAPPER_CREATOR] )(ines_mapper_t* ) 
 	/* 043 */  mapper43_create,
 	/* 044 */  mapper44_create, /* implemented -- Super Big 7-in-1：MMC3 多合一，$A001 低 3 位选块（选 7 等同 6），MMC3 页号（含两个固定页）经 AND/OR 映射到块内；块 0-5 各 128KB、块 6/7 各 256KB PRG+CHR，整卡 1MB+1MB；上电选块 0 */
 	/* 045 */  mapper45_create, /* implemented -- GA23C 多合一：MMC3 内核 + $6000 四个外层 bank 寄存器（按写入次序轮流填 #0-#3，写 $6001 清零并解锁，#3.bit6 锁定后 $6000 写入失效）；MMC3 选出的页号（含两个固定页 0x3E/0x3F）经 AND/OR 映射到外层窗口；外层寄存器叠在 WRAM 上且不受 MMC3 的 WRAM 位控制 */
-	/* 046 */  mapper46_create,
+	/* 046 */  mapper46_create, /* implemented -- Rumble Station 15-in-1：外层 $6000-$7FFF 写入值 [CCCC PPPP] 选 64KB CHR / 64KB PRG bank，内层 $8000-$FFFF 写入值 [.CCC ...P]（Color Dreams 的缩减子集）选 bank 内的 8KB CHR 与低/高 32KB PRG；合成后 32KB PRG bank = (外层 PPPP << 1) | 内层 P、8KB CHR bank = (外层 CCCC << 3) | 内层 CCC，各最多 1MB；$6000-$7FFF 是寄存器故无 PRG-RAM（custom_sram = 1），无 IRQ、不控镜像；上电外层为 0 */
 	/* 047 */  mapper47_create,
 	/* 048 */  mapper48_create, /* implemented -- Taito TC0690 (TC0190 超集: 掩码 $E003, 8KB PRG 双窗口 + 2x2KB/4x1KB CHR + $E000 镜像 + MMC3 式 IRQ(reload 取反)) */
 	/* 049 */  mapper49_create,

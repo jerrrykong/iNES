@@ -7,9 +7,9 @@
 | 项目 | 数量 |
 |---|---|
 | Mapper 文件总数 | 256（`0.c` ~ `255.c`） |
-| 注册表标注 `implemented` | 36 |
+| 注册表标注 `implemented` | 37 |
 | 另有实质代码但未标注 | 1（Mapper **163**） |
-| 占位桩（未实现） | 219 |
+| 占位桩（未实现） | 218 |
 
 > 判定依据：桩文件统一为 **39 行**，只有 `reset` / `writehigh` 两个空函数且 `create` 返回 `ines_false`；真实实现则行数显著更多、带私有数据或 IRQ，且返回 `ines_true`。
 
@@ -48,6 +48,7 @@
 | 41 | 212 | `CALTRON41_data_t` | | | ✅ | **Caltron 6-in-1**（离散逻辑多合一卡带，容纳 4 个未改动的 CNROM / NROM 游戏）：外层寄存器在 `$6000-$67FF`，**bank 号取自写入地址而非数据线**（A5 = 镜像 0V/1H、A4-A3 = 外层 32KB CHR、A2-A0 = 32KB PRG bank @ `$8000-$FFFF`）；内层 8KB CHR 写 `$8000+`（取数据线 bit1-0，**仅 PRG bank 为 4..7 时有效** —— bit2 兼作该使能），该写落在 PRG-ROM 区故复现 AND 型总线冲突。CHR 为两级：外层 32KB × 内层 8KB（共 128KB）；**无 PRG-RAM**（`$6000` 是寄存器，置 `custom_sram = 1` 不挂默认 RAM）、无 IRQ、无扩展音；上电与按住 reset 时两个寄存器清零 |
 | 44 | 407 | `SB7_data_t` | ✅ | ✅ | ✅ | **Super Big 7-in-1**（以 MMC3 为基础的多合一卡）：寄存器窗口与行为**完全等同 MMC3**（`$8000-$FFFF`，掩码 `$E001`，含扫描线计数器 IRQ），唯一区别在 `$A001` —— bit7 使能 / bit6 写保护同 MMC3，**bit2-0 = 块选择（选 7 等同选 6）**。块 0-5 各 128KB PRG+CHR，块 6/7 各 256KB（整卡 1MB+1MB）；**MMC3 选出的所有页（含两个固定页）都要过 `(页号 AND and) OR or` 映射到当前块内**（PRG 以 8KB 页、CHR 以 1KB 页计，所以块 6 的固定页是 126/127、块 0 的是 14/15）；上电与复位选中块 0 |
 | 45 | 485 | `GA23C_data_t` | ✅ | ✅ | ✅ | **GA23C 多合一**（MMC3 内核 + 外层 bank 寄存器）：MMC3 部分与 MMC3 完全一致（`$8000-$FFFF`，掩码 `$E001`，含扫描线计数器 IRQ；`$A001` 就是普通的 PRG-RAM 保护，不像 44 那样承载块选择）；外层是 `$6000` 上的四个 bank 寄存器，**按写入次序轮流填入**（第 1 次写 -> #0、第 2 次 -> #1 … 第 5 次又回到 #0），写 `$6001` 则四个寄存器清零并解除锁定（#3.bit6 置 1 后 `$6000` 写入失效直到解锁）。MMC3 选出的页号一律过 `((页号 AND and) OR or)`：PRG 以 8KB 页计（`and = (~#3) & 0x3F`、`or = #1 | ((#2 & $C0) << 2)`），CHR 以 1KB 页计（`and = (1 << ((#2 & $0F) - 7)) - 1`、`or = #0 | ((#2 & $F0) << 4)`）；**两个固定页同样是 MMC3 原始输出 A13-A18 = 111110/111111（0x3E/0x3F）再过这道变换**，而不是"整卡的最后两页"。外层寄存器**叠在 WRAM 上**且不受 MMC3 的 WRAM 位控制：写同时进 RAM 与寄存器，读回 RAM 值 |
+| 46 | 200 | `RUMBLE46_data_t` | | | ✅ | **Rumble Station 15-in-1**（NES-on-a-Chip 多合一，收录一批已授权的 Color Dreams 游戏）：**两级选页**。外层 `$6000-$7FFF` 锁存写入值 `[CCCC PPPP]` —— bit7-4 选 64KB CHR bank、bit3-0 选 64KB PRG bank，上电为 0；内层 `$8000-$FFFF` 锁存写入值 `[.CCC ...P]` —— 是 Color Dreams（11）的**缩减子集**，bit6-4 选 64KB bank 内的 8KB CHR、bit0 选 64KB bank 内的低 / 高 32KB PRG。合成后 **32KB PRG bank = (外层 PPPP << 1) \| 内层 P**（最多 32 个 = 1MB）、**8KB CHR bank = (外层 CCCC << 3) \| 内层 CCC**（最多 128 个 = 1MB）。`$6000-$7FFF` 是寄存器因此**没有 PRG-RAM**（`custom_sram = 1`）；无 IRQ、不控制镜像。**不做** AND 型总线冲突 —— 它是 NES-on-a-Chip 而非真 ROM 芯片，同门类的 11 也不做，做错会把 bank 号按 ROM 内容截掉而黑屏 |
 | 48 | 265 | `TC0690_data_t` | ✅ | ✅ | ✅ | **Taito TC0690**（033 的超集）：寄存器掩码 `$E003`（A0-A1 选组内、A13/A14 选组）；PRG/CHR 布局同 TC0190；镜像单独在 `$E000` bit6；IRQ 与 MMC3 同构（`$C000` reload **取反 XOR $FF**、`$C001` 重载、`$C002` 使能、`$C003` 应答关闭）。**已知取舍：资料称比 MMC3 晚约 4 个 CPU 周期，当前无周期级回调，与 MMC3 同时刻置位** |
 | 85 | 25 | `VRC7_data_t` | ✅ | ✅ | ✅ | Konami **VRC7**：FM(YM2413) 简化内核已接入（vrc.h §5b，单声道经 APU 扩展输入槽） |
 | 163 | 178 | `MMC163` | | ✅ | ❌ | 有完整实现（含 `reset/writehigh/readlow/writelow/hsync/fini`），但注册表未标注 `implemented` |
