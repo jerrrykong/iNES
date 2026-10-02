@@ -331,7 +331,7 @@ static ines_bool_t (*mapper_creator_func[MAX_MAPPER_CREATOR] )(ines_mapper_t* ) 
 	/* 061 */  mapper61_create,
 	/* 062 */  mapper62_create,
 	/* 063 */  mapper63_create,
-	/* 064 */  mapper64_create,
+	/* 064 */  mapper64_create, /* implemented -- Tengen RAMBO-1（MMC3 的 Tengen 版，40-pin ASIC）：PRG 三个 8KB 可切页 + $E000 固定最后一页；CHR 支持 2×2KB+4×1KB 与 4×1KB+4×1KB 两种切法（K 位），并可与高区整体互换（C 位）。$8000-$9FFE even = Bank select [CPKx RRRR]（C=CHR A12 反相、P=PRG 页序、K=1 启用 R8/R9、RRRR=0-5 CHR / 6,7,F PRG / 8,9 额外 CHR），$8001 odd = Bank data，$A000 even = 镜像（1 水平），$A001 odd 未实现（无 PRG-RAM）；IRQ 有扫描线与 CPU 周期两种模式（$C001 bit0），计数器规则：写过 $C001 或归零则重载 latch（非 0 时再 OR 1），否则递减，归零且允许时触发（CPU 周期模式每 4 个 CPU 周期一步，在 hsync 里按 cpu.total_cycles 增量批处理）。Mapper 158 是同一芯片的 TLSROM 镜像变体，实现在 core/mapper/64.c（tlsrom 标志），158.c 只做转发 */
 	/* 065 */  mapper65_create,
 	/* 066 */  mapper66_create,
 	/* 067 */  mapper67_create,
@@ -425,7 +425,7 @@ static ines_bool_t (*mapper_creator_func[MAX_MAPPER_CREATOR] )(ines_mapper_t* ) 
 	/* 155 */  mapper155_create,
 	/* 156 */  mapper156_create,
 	/* 157 */  mapper157_create,
-	/* 158 */  mapper158_create,
+	/* 158 */  mapper158_create, /* implemented（= 064 的镜像变体）-- RAMBO-1 的 TLSROM 接法：CIRAM A10 接 CHR A17，映射到 PPU $0000-$0FFF 的每个 CHR 页的 bit7 决定对应 nametable 用 CIRAM 哪一页（资料点名 Alien Syndrome）。bank 切换与 IRQ 与 64 完全一致，故 core/mapper/158.c 以 tlsrom = 1 转发到 64 的实现，不另写一套。本编号无实测 ROM（清单里没有标 158 的卡带） */
 	/* 159 */  mapper159_create,
 	/* 160 */  mapper160_create,
 	/* 161 */  mapper161_create,
