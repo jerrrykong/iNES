@@ -480,7 +480,7 @@ static ines_bool_t (*mapper_creator_func[MAX_MAPPER_CREATOR] )(ines_mapper_t* ) 
 	/* 210 */  mapper210_create, /* implemented -- Namco 175/340 (同 iNES 号, 340 可选镜像, 变体不区分) */
 	/* 211 */  mapper211_create,
 	/* 212 */  mapper212_create,
-	/* 213 */  mapper213_create,
+	/* 213 */  mapper213_create, /* implemented（= 058 的同名/重复编号）-- NESDev 原文 "iNES Mapper 213 is a duplicate of INES Mapper 058"（9999999-in-1、168-in-1 等），并注明这些 ROM "run well as mapper 58"，故 core/mapper/213.c 直接复用 58 的实现而不另写一套。注意 BMC-411120-C 板是 NES 2.0 Mapper 287（MMC3 变体），与本编号无关 */
 	/* 214 */  mapper214_create,
 	/* 215 */  mapper215_create,
 	/* 216 */  mapper216_create,
