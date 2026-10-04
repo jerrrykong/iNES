@@ -407,7 +407,7 @@ static ines_bool_t (*mapper_creator_func[MAX_MAPPER_CREATOR] )(ines_mapper_t* ) 
 	/* 137 */  mapper137_create,
 	/* 138 */  mapper138_create,
 	/* 139 */  mapper139_create,
-	/* 140 */  mapper140_create,
+	/* 140 */  mapper140_create, /* implemented -- Jaleco JF-11 / JF-14：与 GxROM(66) 同族，但可写端口下移到 **$6000-$7FFF**（低位不译码），$8000-$FFFF 的写入不再锁存，卡带无 SRAM；一次写入同时切 PRG 一个 **32KB** 窗口（$8000-$FFFF）与 CHR 一个 **8KB** 窗口（$0000-$1FFF），写入值 [..PP CCCC]：bit4-5 = 32KB PRG 页、bit0-3 = 8KB CHR 页（与 66 一致按整个高 nibble 取值再按实际页数回卷）；无 IRQ；镜像由焊盘固定，沿用 ROM 头。上电锁存器为 0 → PRG 页 0 + CHR 页 0。代表游戏 Bio Senshi Dan */
 	/* 141 */  mapper141_create,
 	/* 142 */  mapper142_create,
 	/* 143 */  mapper143_create,
