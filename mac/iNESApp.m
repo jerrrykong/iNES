@@ -26,6 +26,7 @@
 #import "iNESRegisterView.h"
 #import "iNESNetPlayDialog.h"
 #import "iNESLanLobby.h"
+#import "iNESRomLibrary.h"
 #import "iNESi18n.h"
 
 #import "../comm/log.h"
@@ -399,6 +400,9 @@ static int nes_proc(void* ud);
 
 @property (nonatomic, strong) id              keyEventMonitor;   // 无修饰键快捷键监听(等价 win32 加速键表)
 
+// ROM 库窗口(非模态, 首次点击菜单时创建, 之后保留实例以记忆位置/排序/选中项)
+@property (nonatomic, strong) iNESRomLibrary*  romLibrary;
+
 @property (nonatomic, strong) NSMenu*         recentFilesMenu;
 @property (nonatomic, strong) NSMenu*         saveStateMenu;
 @property (nonatomic, strong) NSMenu*         loadStateMenu;
@@ -587,6 +591,10 @@ static NSString* app_function_key(ines_int_t n)
 	}
 
 	[[iNESDebugManager sharedManager] closeAll];
+
+	// ROM 库窗口: 落盘最后一次状态后关闭
+	[self.romLibrary closeLibrary];
+	self.romLibrary = nil;
 
 	ines_host_free(&host);
 	np_fini();
@@ -791,6 +799,9 @@ static NSString* app_function_key(ines_int_t n)
 	menu = root.submenu;
 	[self addItemToMenu:menu title:L10N("menu.file.open") action:@selector(openROM:) keyEquiv:@"o"
 			  modifiers:NSEventModifierFlagCommand tag:0 group:nil];
+	// ROM 库(非模态窗口): 与"载入ROM..."相邻, 两端位置一致
+	[self addItemToMenu:menu title:L10N("menu.file.rom_library") action:@selector(showRomLibrary:)
+			  keyEquiv:nil modifiers:0 tag:0 group:nil];
 	[self addItemToMenu:menu title:L10N("menu.file.close") action:@selector(closeROM:) keyEquiv:@"u"
 			  modifiers:NSEventModifierFlagCommand tag:0 group:nil];
 	[self addItemToMenu:menu title:L10N("menu.file.net_play") action:@selector(startNetPlay:) keyEquiv:nil
@@ -1521,6 +1532,47 @@ static NSString* app_function_key(ines_int_t n)
 		[self requestQuitNetPlay];
 		[self requestLoadROM:path];
 	}
+}
+
+// ROM 库: 非模态窗口, 保留实例于是能记忆位置/排序/选中项; 载入请求复用
+// "载入ROM..."的分支(联网时先确认, 再由模拟线程通知对端一次)。
+- (IBAction)showRomLibrary:(id)sender
+{
+	iNESRomLibrary*  library = self.romLibrary;
+
+	if (library == nil)
+	{
+		__weak iNESAppController*  weak_self = self;
+
+		library = [[iNESRomLibrary alloc] init];
+		if (library == nil)
+			return;
+
+		library.loadRomHandler = ^BOOL (NSString* path)
+		{
+			iNESAppController*  strong_self = weak_self;
+
+			if (strong_self == nil)
+				return NO;
+
+			if (![strong_self confirmStopNetPlay])
+				return NO;
+
+			[strong_self requestQuitNetPlay];
+			[strong_self requestLoadROM:path];
+
+			// 载入后把键盘焦点交回主窗口: ROM 库窗口保持打开, 只让出焦点,
+			// 这样紧接着就能用键盘操作游戏(主窗口第一响应者固定是视频视图)
+			[strong_self.window makeKeyAndOrderFront:nil];
+			[strong_self.window makeFirstResponder:strong_self.videoView];
+
+			return YES;
+		};
+
+		self.romLibrary = library;
+	}
+
+	[library showLibraryRelativeTo:self.window];
 }
 
 // 载入对话框的初始目录: 上次使用的文件夹 -> 最近打开的 ROM 所在目录;

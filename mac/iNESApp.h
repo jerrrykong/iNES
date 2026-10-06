@@ -48,6 +48,7 @@ extern ines_int_t      nes_cpu_trace_ops;
 
 // 菜单动作
 - (IBAction)openROM:(id)sender;
+- (IBAction)showRomLibrary:(id)sender;
 - (IBAction)closeROM:(id)sender;
 - (IBAction)hardReset:(id)sender;
 - (IBAction)softReset:(id)sender;

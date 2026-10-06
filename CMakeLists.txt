@@ -187,6 +187,8 @@ set(INES_MAC_OBJC_SOURCES
     "${INES_DIR}/mac/iNESi18n.m"
     "${INES_DIR}/mac/iNESUiLayout.m"
     "${INES_DIR}/mac/iNESOpenRomDialog.m"
+    "${INES_DIR}/mac/iNESRomLibrary.m"
+    "${INES_DIR}/mac/iNESRomLibraryPaths.m"
     "${INES_DIR}/mac/iNESVideo.m"
     "${INES_DIR}/mac/iNESAudio.m"
     "${INES_DIR}/mac/iNESDebug.m"
