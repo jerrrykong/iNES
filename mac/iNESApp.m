@@ -22,7 +22,6 @@
 #import "iNESPalette.h"
 #import "iNESConfig.h"
 #import "iNESDebug.h"
-#import "iNESOpenRomDialog.h"
 #import "iNESRegisterView.h"
 #import "iNESNetPlayDialog.h"
 #import "iNESLanLobby.h"
@@ -434,6 +433,7 @@ static int nes_proc(void* ud);
 - (NSPoint)windowOriginForSize:(NSSize)size;
 - (void)requestLoadROM:(NSString*)path;
 - (NSString*)romInitialDir;
+- (void)rememberOpenDir:(NSString*)dir;
 - (void)updateRecentFilesMenu;
 - (void)updateStateMenu:(NSMenu*)menu label:(NSString*)label;
 - (void)loadHistories;
@@ -1511,27 +1511,60 @@ static NSString* app_function_key(ines_int_t n)
 
 - (IBAction)openROM:(id)sender
 {
-	NSString*  last_dir = nil;
-	NSString*  path;
+	NSOpenPanel*  panel = [NSOpenPanel openPanel];
+	NSString*     dir;
+	NSString*     path;
 
-	// 文件加载管理器: 先选文件夹, 再列出其中的 NES 文件及其属性, 最后加载选中的文件
-	path = [iNESOpenRomDialog runModalWithInitialDir:[self romInitialDir]
-											   owner:self.window
-											 lastDir:&last_dir];
+	if (panel == nil)
+		return;
 
-	// 记住对话框关闭时所在的文件夹(点"加载"或"取消"都算), 下次打开时默认定位到这里
-	if (last_dir.length > 0)
-		SetConfigStr(ISTR("rom"), ISTR("last_dir"), [last_dir fileSystemRepresentation]);
+	// 系统文件浏览对话框: 只允许挑 .nes 文件(扩展名不区分大小写), 单选
+	panel.title                   = L10N("dialog.openrom.select_file_title");
+	panel.canChooseFiles          = YES;
+	panel.canChooseDirectories    = NO;
+	panel.allowsMultipleSelection = NO;
+	panel.canCreateDirectories    = NO;
+	// allowedFileTypes 自 macOS 12 起被标记弃用, 但为兼容 11.0 仍是唯一选择
+	// (构建已屏蔽 -Wdeprecated-declarations)
+	panel.allowedFileTypes        = @[ @"nes" ];
+
+	// 默认定位到上次使用(或最近打开过)的文件夹
+	dir = [self romInitialDir];
+	if (dir.length > 0)
+		panel.directoryURL = [NSURL fileURLWithPath:dir];
+
+	if ([panel runModal] != NSModalResponseOK)
+	{
+		// 取消也记住面板当前所在的文件夹(与旧对话框"点加载或取消都算"一致)
+		[self rememberOpenDir:panel.directoryURL.path];
+		return;
+	}
+
+	if (panel.URL == nil)
+		return;
+
+	path = panel.URL.path;
+	if (path.length == 0)
+		return;
+
+	// 记住本次所在文件夹, 下次打开时默认定位到这里
+	[self rememberOpenDir:path.stringByDeletingLastPathComponent];
 
 	// 联网对战中换 ROM 等于结束当前对局, 先确认; 确认后由模拟线程通知对端一次
-	if (path.length > 0)
-	{
-		if (![self confirmStopNetPlay])
-			return;
+	if (![self confirmStopNetPlay])
+		return;
 
-		[self requestQuitNetPlay];
-		[self requestLoadROM:path];
-	}
+	[self requestQuitNetPlay];
+	[self requestLoadROM:path];
+}
+
+// 记录"上次打开 ROM 的文件夹"(config.ini 的 [rom] last_dir), 空路径忽略
+- (void)rememberOpenDir:(NSString*)dir
+{
+	if (dir.length == 0)
+		return;
+
+	SetConfigStr(ISTR("rom"), ISTR("last_dir"), [dir fileSystemRepresentation]);
 }
 
 // ROM 库: 非模态窗口, 保留实例于是能记忆位置/排序/选中项; 载入请求复用
@@ -1575,8 +1608,8 @@ static NSString* app_function_key(ines_int_t n)
 	[library showLibraryRelativeTo:self.window];
 }
 
-// 载入对话框的初始目录: 上次使用的文件夹 -> 最近打开的 ROM 所在目录;
-// 都没有时返回 nil, 由对话框自行退化为用户主目录
+// 文件浏览面板的初始目录: 上次使用的文件夹 -> 最近打开的 ROM 所在目录;
+// 都没有时返回 nil, 由系统面板自行退化为默认位置
 - (NSString*)romInitialDir
 {
 	NSString*    dir = nil;
@@ -1613,7 +1646,7 @@ static NSString* app_function_key(ines_int_t n)
 		}
 	}
 
-	INES_LOG(LOG_DBG, MOD_SYS, ISTR("open rom dialog initial dir: `%s`\n"),
+	INES_LOG(LOG_DBG, MOD_SYS, ISTR("open rom panel initial dir: `%s`\n"),
 		(dir != nil) ? [dir fileSystemRepresentation] : "");
 
 	return dir;

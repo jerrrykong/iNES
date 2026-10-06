@@ -1,7 +1,7 @@
 # ROM 库（ROM Library）设计与双端实现规格
 
 > 需求：把"打开 ROM"从"每次浏览文件夹"扩展为"可维护的 ROM 库"——配置一组路径，自动汇总其中的 ROM，支持搜索、排序、一键载入。
-> **打开 ROM 的原有对话框逻辑保持不变**（两端都继续用 `dlgOpenRom` / `iNESOpenRomDialog`），ROM 库是**新增的独立窗口**。
+> **配套改动（2026-10-06，用户拍板）**：「文件 → 载入ROM...」**不再弹自定义列表对话框**，改为直接调用**系统文件浏览面板**挑 `.nes`；原 `dlgOpenRom.c` / `iNESOpenRomDialog.{h,m}` **两端都删除**，文件属性列表的能力由本 ROM 库承接（§3 的 8 列迁到 ROM 库，列标题 key 继续复用 `dialog.openrom.col_*`）。
 > 状态：**mac 侧已实现并冒烟通过**（§11）；**win32 侧待实现**，本文 §1~§10 即为其实现规格，两端行为必须一致。
 
 ---
@@ -16,6 +16,8 @@
 | 窗口形态 | **非模态**独立窗口，可与主窗口同时存在；重复点菜单只是把已有窗口前置 |
 | 载入行为 | 点「载入」后主窗口运行该 ROM，**ROM 库窗口不关闭** |
 | 关闭 | 窗口标题栏的关闭按钮；关闭时把视图状态落盘 |
+
+| 姊妹菜单 | 「Load ROM...」(`menu.file.open`) 现在**只**调系统文件浏览面板挑 `.nes`（mac: `NSOpenPanel` + `allowedFileTypes=@[@"nes"]`；win32: `IFileDialog` + `*.nes` 过滤）。它记住的目录仍是 `[rom] last_dir`，**"取消"也会记住面板当前所在目录**（沿用旧对话框的行为）。拖放 / 命令行 / Finder 打开方式三条载入路径不变。 |
 
 mac 对应类：`mac/iNESRomLibrary.m`（`iNESRomLibrary : NSWindowController`）。
 win32 建议：`win32/dlgRomLib.c` 里的对话框过程 + 一个非模态窗口包装（`IDD_ROMLIB`）。
@@ -57,7 +59,7 @@ mac 侧按钮宽度按译文自适应（`INESFitButtons`），但**顺序恒为 
 
 ## 3. 列表列定义
 
-与「载入 NES 文件」对话框（`dlgOpenRom` / `iNESOpenRomDialog`）**完全一致的 8 列**，列序、宽度、右对齐、译文 key 全部相同：
+这 8 列原本属于已删除的「载入 NES 文件」对话框（`dlgOpenRom` / `iNESOpenRomDialog`），现由 ROM 库**独占**，列序、宽度、右对齐、译文 key 一律沿用旧表，保证与旧版界面观感一致：
 
 | # | 列 | i18n key | 设计宽 | 对齐 |
 |---|---|---|---|---|
@@ -72,7 +74,7 @@ mac 侧按钮宽度按译文自适应（`INESFitButtons`），但**顺序恒为 
 
 - **复用 `dialog.openrom.*` 的列标题 key，不要另建 key**：两张表的列语义完全相同，复用可保证两端与各语言译文天然一致。
 - 列宽下限 40；宽度按译文表头测量后取 `max(设计宽, 测量宽 + 14)`，因此窄语言下不必加宽窗口（列表可横向滚动）。
-- 属性列的取值规则与 `dlgOpenRom` 一致（见 §4.4）。
+- 属性列的取值规则与原 `dlgOpenRom` 一致（见 §4.4）。
 
 ## 4. 数据来源与扫描规则
 
@@ -87,7 +89,7 @@ mac 侧按钮宽度按译文自适应（`INESFitButtons`），但**顺序恒为 
 
 ### 4.2 扫描的具体规则
 
-1. 遍历配置里的路径列表，**逐个目录枚举，不递归子目录**（与 `dlgOpenRom` 的单目录语义一致；见 §8 取舍 1）。
+1. 遍历配置里的路径列表，**逐个目录枚举，不递归子目录**（沿用原 `dlgOpenRom` 的单目录语义；见 §8 取舍 1）。
 2. 只收扩展名 `.nes`（**不区分大小写**）。
 3. 多个路径可能重叠（父目录 + 子目录）→ 按**规范化后的完整路径去重**，同一文件只出现一次。
 4. 目录不存在 / 不可访问 → 记一条警告日志并跳过该目录，不影响其它目录。
@@ -98,13 +100,13 @@ mac 侧按钮宽度按译文自适应（`INESFitButtons`），但**顺序恒为 
 
 - 阶段 1（同步、很快）：枚举目录条目，**不打开文件**，填入完整路径、文件名、文件大小；此时属性列显示为空。
 - 阶段 2（定时器分片）：逐个打开文件读 **16 字节 iNES 文件头**，补齐 Mapper / 镜像 / 电池 / Trainer / PRG / CHR。
-  - 分片参数（与 `dlgOpenRom` 一致）：定时器间隔 **10ms**，单片时长预算 **20ms**，单片最多 **32** 个文件。
+  - 分片参数（沿用原 `dlgOpenRom`）：定时器间隔 **10ms**，单片时长预算 **20ms**，单片最多 **32** 个文件。
   - 解析失败（非 iNES 文件、读不出 16 字节）→ **从列表移除**该行。
 - 解析完成后再应用排序并回写缓存（属性未齐时排序不可信；此时点表头只更新箭头，排序推迟到解析结束）。
 
 ### 4.4 文件头解析规则
 
-与 `core/rom.c` 的 `ines_rom_load_from_file()`、`dlgOpenRom` 的解析函数**逐条一致**：
+与 `core/rom.c` 的 `ines_rom_load_from_file()`、原 `dlgOpenRom` 的解析函数**逐条一致**（win32 侧删掉 `dlgOpenRom.c` 后，这套解析代码迁到 `dlgRomLib.c`）：
 
 ```
 tag != "NES\x1a"            -> 非法
@@ -117,7 +119,7 @@ prg_kb      = PROM_block_num * 16
 chr_kb      = VROM_block_num * 8
 ```
 
-文件大小取自目录条目（文件头里没有这一项）。体积格式化：`<1KB` → `B`、`<1MB` → `KB`、否则 `MB`（两位小数），与 `dlgOpenRom` 相同。
+文件大小取自目录条目（文件头里没有这一项）。体积格式化：`<1KB` → `B`、`<1MB` → `KB`、否则 `MB`（两位小数），与原 `dlgOpenRom` 相同。
 
 ## 5. 缓存文件（`romlib.dat`）
 
@@ -217,6 +219,7 @@ ROMLIB1
 5. **选中项存完整路径而不是行号**：排序/过滤都会改变行号，存路径才不会错位。
 6. **缓存是纯文本**：便于跨平台共用同一份文件、便于手工排查；代价是体积（1788 个 ROM ≈ 170KB）。
 7. **单次扫描上限 8192**：防止把整个机械硬盘目录树塞进界面。
+8. **「载入ROM...」改用系统文件浏览面板**（2026-10-06）：浏览、类型筛选、路径输入、取消/重做全部交给操作系统；代价是**丢掉了"选文件夹 + 看文件属性"的列表视图**——那部分能力由 ROM 库（§2、§3）承接，两者互补：临时挑一个 ROM 用系统面板，管理 ROM 库用 ROM 库窗口。
 
 ## 9. i18n
 
@@ -248,6 +251,8 @@ ROMLIB1
 - 省略号在语言文件里统一写 ASCII `...`，mac 渲染时替换成 `…`（沿用 `comm/i18n` 既有规则）。
 - 译文状态：`en`（模板）/ `zh-CN` / `zh-TW` / `ja` / `fr` **已补齐**；`ar` / `th` 暂缺 → 运行时自动回退英文。
 - 列表的 8 个列标题**复用 `dialog.openrom.*`**，不新增。
+- `dialog.openrom.select_file_title` = `Select the NES file to load`：**新增**，用于系统文件面板的标题。
+- `dialog.openrom.*` 里其余 key（`title` / `load` / `cancel` / `folder` / `no_folder` / `no_nes_file` / `parsing_*` / `total_format` / `select_dir_title` / `dir_invalid` / `file_missing`）随旧对话框一起**不再被任何代码引用**，但**仍保留在内置表与语言文件里**：i18n 的规则是"key 只增不改"，删除会让各语言文件出现"多余 key"报错。**仍在用的**只有 8 个列标题 + `yes` / `no` + 4 个镜像名。
 - win32 侧新增的菜单项要按既有约定在 `win32/i18n_ui.c` 的 ID→key 表里补映射。
 
 ## 10. win32 实现指引
@@ -257,11 +262,13 @@ ROMLIB1
 | `iNESRomLibrary`（`NSWindowController`） | `win32/dlgRomLib.c`：`IDD_ROMLIB` 模板 + **非模态**窗口（`CreateWindow` + `ShowWindow(SW_SHOW)`，不要 `DialogBox`）；载入成功后 `SetForegroundWindow(hMainWnd)` + `SetFocus(hMainWnd)` 把焦点交回主窗口 |
 | `iNESRomLibraryPaths` | `win32/dlgRomLibPaths.c`：`IDD_ROMLIBPATHS`，**模态**（`DialogBox`）；底部按钮 = `删除` `添加` 靠左 + `关闭`（`IDCANCEL`，Esc 生效）靠右 |
 | `NSOpenPanel` | `IFileDialog`（FOS_PICKFOLDERS）或 `SHBrowseForFolder`（`BIF_RETURNONLYFSDIRS \| BIF_NEWFOLDERSTYLE`）；`BROWSEINFO.lpszTitle` 用 `dialog.romlib.select_dir_title`；短路径要用 `GetLongPathName` 还原后再比较/保存 |
-| `NSTableView` + `sortDescriptorPrototype` | `LVM_SORTITEMS` + `LVS_SORTASCENDING/LVS_SORTDESCENDING`；**注意本工程无 manifest → comctl32 v5，`HDF_SORTUP/HDF_SORTDOWN` 不会画箭头**（与 `dlgOpenRom` 同样的既有限制，需自行处理） |
+| `NSTableView` + `sortDescriptorPrototype` | `LVM_SORTITEMS` + `LVS_SORTASCENDING/LVS_SORTDESCENDING`；**注意本工程无 manifest → comctl32 v5，`HDF_SORTUP/HDF_SORTDOWN` 不会画箭头**（与原 `dlgOpenRom` 同样的既有限制，需自行处理） |
 | `NSScrollView` 文档坐标 | `LVM_GETTOPINDEX` / `LVM_ENSUREVISIBLE` |
 | `config.ini` | `GetPrivateProfileInt/String` + `WritePrivateProfileString`，**键名与 §6 完全一致** |
 | `romlib.dat` | 同一份格式（§5）；以二进制方式写，路径含非 ASCII 时注意 UTF-8 转换 |
 | 菜单 | 在 `win32/iNES.rc` 的「文件」菜单加一项，ID 建议 `IDM_ROM_LIBRARY`，位置在 `IDM_OPEN` 之后 |
+| **删除** `win32/dlgOpenRom.c` | 用户已拍板：`IDM_OPEN`（Load ROM...）不再弹它，改用系统文件浏览；`dlgOpenRom.c` 及其在 `CMakeLists.txt` 的条目、`iNES.rc` 里的 `IDD_OPENROM` 资源一并删除。§4.4 的文件头解析代码**迁到 `dlgRomLib.c`** 复用 |
+| `IDM_OPEN` 的新实现 | `IFileDialog`（`FOS_FILEMUSTEXIST \| FOS_PATHMUSTEXIST \| FOS_FORCEFILESYSTEM`），文件类型过滤 `"*.nes"`（大小写不敏感由系统保证），`FILEOK` 结果取 `IShellItem::GetDisplayName(SIGDN_FILESYSPATH)`；标题用 `dialog.openrom.select_file_title`。目录仍写 `[rom] last_dir`（**取消时也写**当前目录）。拖放 / 命令行 / `ShellExecute` 三条路径不受影响 |
 
 实现完成后请在本节打勾并补充与 mac 的差异点。
 
@@ -279,6 +286,10 @@ ROMLIB1
 | `mac/iNESRomLibraryPaths.h/.m` | 路径设置对话框（`iNESRomLibraryPathsDialog`） |
 
 改动文件：`CMakeLists.txt`（`INES_MAC_OBJC_SOURCES` 增 2 个 `.m`）、`mac/iNESApp.h/.m`（菜单项 + `showRomLibrary:` + 退出时关闭）、`comm/i18n_en.c`、`lang/{en,zh-CN,zh-TW,ja,fr}.ini`。
+
+同日第二轮优化：载入成功后 `makeKeyAndOrderFront` + 第一响应者复位为视频视图（焦点回主窗口）；路径对话框加 `dialog.romlib.close`（靠右 + Esc）。
+
+同日第三轮：「载入ROM...」改用 `NSOpenPanel`（`canChooseFiles=YES` / `canChooseDirectories=NO` / 单选 / `allowedFileTypes=@[@"nes"]` / 标题 `dialog.openrom.select_file_title` / `directoryURL` 取 `romInitialDir`），新增 `-rememberOpenDir:` 统一写 `[rom] last_dir`（取消也写），**删除 `mac/iNESOpenRomDialog.h/.m`** 与 CMake 条目、`iNESApp.m` 的 import，文档 §3 的 8 列说明改为"由 ROM 库独占"。冒烟：面板标题正确显示「请选择要载入的 NES 文件」，方向键+回车选中 `ZZZ_UNK_Super Contra 7.nes` 后主窗口进入"运行中"，`[rom] last_dir` 记录为 `bin/ROM`。
 
 冒烟结果（`~/Downloads/NES/任天堂FC全集`，1788 个 ROM，日志与界面双向确认）：
 

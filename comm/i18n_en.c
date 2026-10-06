@@ -146,6 +146,7 @@ const ines_i18n_entry_t g_ines_i18n_en[] =
 	{ "dialog.openrom.parsing_format",      "Parsing %ld/%ld ..." },
 	{ "dialog.openrom.parsing_zero_format", "Parsing 0/%lu ..." },
 	{ "dialog.openrom.select_dir_title",    "Select the folder containing NES files" },
+	{ "dialog.openrom.select_file_title",   "Select the NES file to load" },
 	{ "dialog.openrom.title",               "Load NES File" },
 	{ "dialog.openrom.total_format",        "%lu supported NES file(s)" },
 	{ "dialog.openrom.yes",                 "Yes" },

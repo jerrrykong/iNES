@@ -91,7 +91,7 @@
 | `mac/iNESPalette.h/.c` | `rgbQuard` | 64 色调色板 + BGRA 查表 |
 | `mac/iNESOsd.h/.c` | `code_ascii_5x7` + `DrawTextToBitmap` | OSD 文字写入索引色缓冲 |
 | `mac/iNESConfig.h/.c` | `Get/SetPrivateProfile*` | INI 读写（保留同名接口） |
-| `mac/iNESOpenRomDialog.h/.m` | `dlgOpenRom.c` | "载入 NES 文件"管理器：选择文件夹 + 文件属性列表 + 懒加载解析 + 表头排序 |
+| `mac/iNESOpenRomDialog.h/.m` | `dlgOpenRom.c` | "载入 NES 文件"管理器：已删除（2026-10-06）：「载入ROM...」改用系统文件浏览面板；文件属性列表能力移交给 iNESRomLibrary，见 rom-library-plan.md |
 | `mac/Info.plist` | `iNES.rc` 资源段 | bundle 元信息 |
 
 ### 4.2 视频
@@ -286,9 +286,9 @@ cmake -S . -B build && cmake --build build                            # Release
 
 验证：构建零警告；带 ROM 启动运行 60fps 稳定、无崩溃。6 个窗口的实际显示与交互需人工点击菜单确认。
 
-### 8.6 M2：载入 NES 文件管理器
+### 8.6 M2：载入 NES 文件管理器（已于 2026-10-06 废弃并删除）
 
-对应 `win32/dlgOpenRom.c`。新增 `mac/iNESOpenRomDialog.h/.m`（已加入 `CMakeLists.txt` 的 `INES_MAC_OBJC_SOURCES`），入口是 `iNESApp.m` 的 `openROM:`；拖放、命令行参数、Finder 打开方式三条载入路径不受影响。
+对应 `win32/dlgOpenRom.c`。新增 `mac/iNESOpenRomDialog.h/.m`（已加入 `CMakeLists.txt` 的 `INES_MAC_OBJC_SOURCES`），入口是 `iNESApp.m` 的 `openROM:`；拖放、命令行参数、Finder 打开方式三条载入路径不受影响。**2026-10-06 起本节内容作废**：「载入ROM...」已改为系统文件浏览面板（NSOpenPanel，只接受 .nes），mac/iNESOpenRomDialog.h/.m 与 win32/dlgOpenRom.c 一并删除，文件属性列表能力移交给 ROM 库（见 rom-library-plan.md）。
 
 界面为"上中下"三段，尺寸与 win32 的布局宏逐一对应：
 
